@@ -13,6 +13,7 @@
 #include "bsp.h"
 #include "usb_fs.h"
 #include "console.h"
+#include "boot_screen.h"
 #include "boot_handshake.h"
 #include "app_launch.h"
 #include "flash_faci.h"
@@ -194,6 +195,11 @@ void usb_flash_service(void)
     console_init(boot_cmds, sizeof(boot_cmds) / sizeof(boot_cmds[0]));
 
     console_write("\r\nelectra-mini-fw bootloader ready\r\n> ");
+
+    /* Last, deliberately. A device held in the bootloader used to show a black screen, which
+     * looks exactly like a dead one -- see boot_screen.c. Drawn only once the console is
+     * answering, so that a panel which fails to come up costs a caption and not the recovery. */
+    boot_screen_show(g_boot_reason);
 
     for (;;) {
         usb_poll();

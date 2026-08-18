@@ -74,7 +74,14 @@ add_executable(bootloader
     src/boot/main.c
     src/boot/app_launch.c
     src/boot/usb_service.c
+    src/boot/boot_screen.c
     src/boot/flash_faci.c
+    # The panel, so a device held here says so instead of showing black. Drawn only after USB is
+    # answering -- see boot_screen.c. --gc-sections drops the font faces this does not use.
+    src/hal/spi.c
+    src/hal/ra8876.c
+    src/app/text.c
+    src/app/font_data.c
     src/common/persist.c
     src/hal/usb_fs.c
     # CDC, and it stays CDC. The bootloader is reachable only over USB and replaceable only from
