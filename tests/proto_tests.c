@@ -313,6 +313,142 @@ static int test_seq_gap_counted(void)
     return ok;
 }
 
+/* THE INTERLEAVE REGRESSION — docs/protocol.md 7.4 calls this "the test that would have caught
+ * the original bug", and it did not exist.
+ *
+ * Rule F3: a single-fragment message MAY arrive at any time, INCLUDING between fragments of a
+ * multi-fragment one. That is not a permission the protocol grants grudgingly, it is the reason
+ * the heartbeat lives on a channel that cannot be split -- a device transferring a descriptor
+ * must still be able to say it is alive, and a host must still be able to ping it.
+ *
+ * The receiver rejected exactly that pattern as FRAGMENT_UNEXPECTED. So the one interleaving the
+ * specification requires was the one interleaving refused, and because nothing here exercised
+ * it, both the code and its comment claimed compliance.
+ *
+ * Scaled from the 40 KB in the document to fit this device's advertised max_message_rx; the
+ * shape -- inject after every 7th fragment, assert the blob is byte-identical and every
+ * injection arrives in order -- is the document's. */
+static int test_interleaved_single_fragments(void)
+{
+    int ok = 1;
+    static uint8_t payload[4000];
+    static uint8_t out[8192];
+    static emp_reasm_t r;                  /* static: an emp_reasm_t is 8 KB of stack otherwise */
+    fill(payload, sizeof(payload), 0x31);
+
+    emp_writer_t w;
+    emp_writer_init(&w, out, sizeof(out), EMP_MTU_HID);
+    CHECK(emp_write_message(&w, EMP_CH_SURFACE, EMP_OP_DESC_FIELD,
+                            payload, sizeof(payload)) == EMP_OK);
+
+    emp_reasm_init(&r);
+
+    unsigned injected = 0, injections_seen = 0, blobs_seen = 0;
+    unsigned frag_index = 0;
+    uint32_t off = 0;
+
+    while (off < w.used) {
+        const uint8_t *msg = 0;
+        uint32_t mlen = 0, consumed = 0;
+        emp_header_t h;
+
+        int rc = emp_reasm_fragment(&r, out + off, w.used - off, &consumed, &h, &msg, &mlen);
+        CHECK(rc >= 0);
+        if (rc == 1) {
+            blobs_seen++;
+            CHECK(mlen == sizeof(payload));
+            CHECK(msg && memcmp(msg, payload, sizeof(payload)) == 0);
+        }
+        off += consumed;
+        frag_index++;
+
+        if ((frag_index % 7u) == 0 && off < w.used) {
+            /* A complete PING, mid-transfer. Its payload carries the injection number, so
+             * "arrived in order" is checked rather than merely "arrived". */
+            uint8_t ping[12];
+            uint8_t pbuf[64];
+            fill(ping, sizeof(ping), (uint8_t)injected);
+
+            emp_writer_t pw;
+            emp_writer_init(&pw, pbuf, sizeof(pbuf), EMP_MTU_HID);
+            CHECK(emp_write_message(&pw, EMP_CH_CONTROL, EMP_OP_PING,
+                                    ping, sizeof(ping)) == EMP_OK);
+
+            const uint8_t *pmsg = 0;
+            uint32_t plen = 0, pconsumed = 0;
+            emp_header_t ph;
+            int prc = emp_reasm_fragment(&r, pbuf, pw.used, &pconsumed, &ph, &pmsg, &plen);
+
+            CHECK(prc == 1);                       /* delivered, not refused */
+            CHECK(ph.opcode == EMP_OP_PING);
+            CHECK(plen == sizeof(ping));
+            CHECK(pmsg && memcmp(pmsg, ping, sizeof(ping)) == 0);
+            injections_seen++;
+            injected++;
+        }
+    }
+
+    CHECK(blobs_seen == 1);                        /* the blob survived, intact, once */
+    CHECK(injections_seen == injected);
+    CHECK(injections_seen > 3);                    /* the test actually interleaved something */
+
+    /* No assertion on rx_seq_gaps: the injections come from a second writer with its own
+     * counter, whereas a real sender interleaves both streams through one per-direction
+     * sequence. Asserting here would be testing the fixture, not the receiver. */
+    return ok;
+}
+
+/* A lost LAST fragment must not wedge the receiver.
+ *
+ * Before emp_reasm_abort() existed there was no way out of this state at all: in_progress
+ * stayed set forever, so every later message was either an F2 violation or a continuation of a
+ * transfer whose sender had long since given up. One lost fragment cost the link permanently,
+ * and the only recovery was a device reset. */
+static int test_reassembly_can_be_abandoned(void)
+{
+    int ok = 1;
+    static uint8_t payload[300], out[1024];
+    static emp_reasm_t r;
+    fill(payload, sizeof(payload), 0x62);
+
+    emp_writer_t w;
+    emp_writer_init(&w, out, sizeof(out), EMP_MTU_HID);
+    CHECK(emp_write_message(&w, EMP_CH_SURFACE, EMP_OP_VALUES, payload, sizeof(payload)) == EMP_OK);
+
+    emp_reasm_init(&r);
+
+    /* Everything except the final fragment, which is where the transfer stops. */
+    uint32_t off = 0, last_start = 0;
+    while (off < w.used) {
+        emp_header_t h;
+        CHECK(emp_header_read(out + off, w.used - off, &h) == EMP_OK);
+        if (h.flags & EMP_FLAG_LAST) { last_start = off; break; }
+
+        const uint8_t *msg = 0; uint32_t mlen = 0, consumed = 0;
+        CHECK(emp_reasm_fragment(&r, out + off, w.used - off, &consumed, &h, &msg, &mlen) == 0);
+        off += consumed;
+    }
+    CHECK(last_start != 0);
+    CHECK(r.in_progress == 1);
+
+    uint32_t errors_before = r.rx_decode_errors;
+    emp_reasm_abort(&r);
+    CHECK(r.in_progress == 0);
+    CHECK(r.rx_decode_errors == errors_before + 1);   /* counted, never silent */
+
+    /* And the receiver is usable again: a complete message straight afterwards must arrive. */
+    emp_writer_t w2;
+    emp_writer_init(&w2, out, sizeof(out), EMP_MTU_HID);
+    CHECK(emp_write_message(&w2, EMP_CH_SURFACE, EMP_OP_VALUES, payload, sizeof(payload)) == EMP_OK);
+
+    const uint8_t *msg = 0; uint32_t mlen = 0; int complete = 0;
+    CHECK(feed_all(&r, out, w2.used, &msg, &mlen, &complete) == EMP_OK);
+    CHECK(complete == 1);
+    CHECK(mlen == sizeof(payload));
+    CHECK(msg && memcmp(msg, payload, sizeof(payload)) == 0);
+    return ok;
+}
+
 /* ------------------------------------------------------------------ entry */
 
 int emp_run_selftests(emp_report_fn report)
@@ -330,5 +466,7 @@ int emp_run_selftests(emp_report_fn report)
     run("truncation safe",     test_truncation_is_an_error_not_a_crash(), report, &failures);
     run("padding",             test_padding(),                          report, &failures);
     run("seq gap counted",     test_seq_gap_counted(),                  report, &failures);
+    run("interleaved singles", test_interleaved_single_fragments(),       report, &failures);
+    run("reasm abandonable",   test_reassembly_can_be_abandoned(),      report, &failures);
     return failures;
 }

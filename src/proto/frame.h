@@ -83,6 +83,10 @@ typedef struct {
 
 void emp_reasm_init(emp_reasm_t *r);
 
+/* Abandon a reassembly that has stopped arriving, counting it as a decode error. The caller
+ * decides when, because this file has no clock -- see the note on the implementation. */
+void emp_reasm_abort(emp_reasm_t *r);
+
 /* Feed one fragment.
  *
  * Returns 1 when a complete message is available (`*msg` / `*msg_len` point into `r->buf`, or

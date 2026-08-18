@@ -38,6 +38,12 @@
  * uselessness -- so the floor is a refusal to co-operate with nonsense, not a preference. */
 #define SESSION_MIN_MTU    EMP_MTU_HID
 
+/* How long a reassembly may go without gaining a byte before it is abandoned. Generous on
+ * purpose: an 8 KB message at the measured throughput takes about 30 ms, so two seconds is
+ * never reached by a transfer that is merely slow, and is reached immediately by one whose
+ * final fragment was lost. */
+#define REASM_IDLE_MS      2000u
+
 #define HEARTBEAT_MS       1000u
 #define READY_REPEAT_MS    1000u
 #define READY_BACKOFF_MS   5000u
@@ -75,6 +81,10 @@ static uint32_t      last_now_ms;
 /* Worst repaint seen, in microseconds, reported in HEARTBEAT. Set from the render loop rather
  * than measured here: this file has no idea when a frame starts. */
 static uint32_t      render_us_max;
+
+/* Progress watch for the reassembly timeout above. */
+static uint32_t      reasm_last_len;
+static uint32_t      reasm_idle_ms;
 
 /* Inbound fragment assembly from a byte stream.
  *
@@ -404,6 +414,8 @@ void emp_session_init(uint32_t session_id)
     tx_mtu = SESSION_MTU;
     peer_minor = EMP_VERSION_MINOR;
     render_us_max = 0;
+    reasm_last_len = 0;
+    reasm_idle_ms = 0;
     next_ready_ms = 0;
     next_heartbeat_ms = 0;
 }
@@ -431,6 +443,31 @@ void emp_session_poll(uint32_t now_ms)
     if (muted) return;
 
     last_now_ms = now_ms;
+
+    /* A reassembly that has stopped arriving must not wedge the receiver.
+     *
+     * Judged by PROGRESS, not by age: a large descriptor at a small MTU legitimately takes a
+     * while, and a deadline started when the message began would kill exactly the transfers
+     * that need the time. So the test is "no new bytes for REASM_IDLE_MS", which a transfer
+     * that is merely slow never trips and a transfer whose LAST fragment was lost always does.
+     *
+     * Before this, a single lost LAST left in_progress set forever: every subsequent FIRST was
+     * then an F2 violation and every continuation belonged to a message whose sender had long
+     * since given up -- one lost fragment cost the link permanently. */
+    if (reasm.in_progress) {
+        if (reasm.len != reasm_last_len) {
+            reasm_last_len = reasm.len;
+            reasm_idle_ms  = now_ms;
+        } else if ((uint32_t)(now_ms - reasm_idle_ms) >= REASM_IDLE_MS) {
+            emp_reasm_abort(&reasm);
+            emp_diag(EMP_SEV_WARN, EMP_DIAG_REASSEMBLY_TIMEOUT, reasm_last_len,
+                     "reassembly abandoned: no fragments arriving");
+            reasm_last_len = 0;
+        }
+    } else {
+        reasm_last_len = 0;
+        reasm_idle_ms  = now_ms;
+    }
 
     /* Flush diagnostics here rather than where they are raised: this is the one place that is
      * outside every decoder AND already knows not to talk during a raw pixel stream. Flushing

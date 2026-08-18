@@ -200,6 +200,21 @@ static int fail(emp_reasm_t *r, int err)
     return err;
 }
 
+/* Abandon a reassembly that stopped arriving.
+ *
+ * Without this a lost LAST fragment wedges the receiver permanently: in_progress stays set, and
+ * from then on every FIRST is an F2 violation and every continuation belongs to a message whose
+ * sender gave up long ago. The decision of WHEN belongs to the caller, which is the only side
+ * with a clock -- this file deliberately has none, so that it can run under a sanitiser on a
+ * workstation with no MCU headers (docs/protocol.md 7). */
+void emp_reasm_abort(emp_reasm_t *r)
+{
+    if (!r->in_progress) return;
+    r->rx_decode_errors++;
+    r->in_progress = 0;
+    r->len = 0;
+}
+
 int emp_reasm_fragment(emp_reasm_t *r, const uint8_t *frag, uint32_t avail,
                        uint32_t *consumed, emp_header_t *hdr_out,
                        const uint8_t **msg, uint32_t *msg_len)
@@ -231,9 +246,18 @@ int emp_reasm_fragment(emp_reasm_t *r, const uint8_t *frag, uint32_t avail,
     uint32_t blen = h.payload_len;
 
     /* Single fragment: delivered in place, no copy and no CRC. Most messages on this device
-     * take this path, and it is deliberately the cheapest one. */
+     * take this path, and it is deliberately the cheapest one.
+     *
+     * IT IS DELIVERED EVEN WHILE A MULTI-FRAGMENT MESSAGE IS IN PROGRESS. Rule F3 does not
+     * merely permit that, it is the reason the heartbeat is on a channel that cannot be split:
+     * a device transferring a 20 KB descriptor must still be able to say it is alive, and a
+     * host must still be able to PING it. This used to be rejected as FRAGMENT_UNEXPECTED --
+     * the one interleaving pattern the protocol requires was the one pattern refused, and
+     * section 7.4 names the test for it as "the test that would have caught the original bug".
+     *
+     * Nothing about the reassembly is touched here: the message is delivered from the caller's
+     * own fragment buffer, and r->buf is not read or written on this path. */
     if ((h.flags & EMP_FLAG_FIRST) && (h.flags & EMP_FLAG_LAST)) {
-        if (r->in_progress) return fail(r, EMP_ERR_FRAGMENT_UNEXPECTED);
         if (msg) *msg = body;
         if (msg_len) *msg_len = blen;
         return 1;
@@ -242,6 +266,12 @@ int emp_reasm_fragment(emp_reasm_t *r, const uint8_t *frag, uint32_t avail,
     if (h.flags & EMP_FLAG_FIRST) {
         if (h.channel == EMP_CH_CONTROL) return fail(r, EMP_ERR_BAD_CHANNEL);
         if (blen < EMP_PREFIX_BYTES)     return fail(r, EMP_ERR_SHORT);
+
+        /* F2: at most one multi-fragment message in flight per direction. The one already in
+         * progress is lost either way -- its sender has moved on -- so this is counted and the
+         * new message is adopted. Refusing the new one as well would turn one lost message into
+         * a cascade, since all of its continuations would then be unexpected too. */
+        if (r->in_progress) r->rx_decode_errors++;
 
         uint32_t total = get_u32(body);
         if (total > EMP_MAX_MESSAGE_RX) return fail(r, EMP_ERR_TOO_LONG);
