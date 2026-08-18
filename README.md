@@ -77,10 +77,24 @@ Nothing else in this repository is derived from third-party material.
 ## Status
 
 M0-M5 complete and verified on hardware: our own image boots, drives the panel, reads every
-input, speaks EMP/1 over USB, recovers itself from crashes, and runs a native control-surface UI.
+input, speaks EMP/1 over USB, recovers itself from crashes, runs a native control-surface UI,
+and starts on its own from a wall socket with no computer attached.
 
-Outstanding: standalone boot without a host (the health flag lives in SRAM), the host-side
-provider crate in `av-frameworks`, and the protocol conformance gaps recorded in
-`docs/protocol.md`.
+**The two images do not enumerate the same way, and that is deliberate.**
 
-Pre-M0. Nothing has been flashed. See the project plan for milestones and gates.
+| | Transport | Reached with |
+|---|---|---|
+| Application | vendor bulk, bound to WinUSB by MS OS 2.0 descriptors — no INF, no Zadig | `tools\deploy\winusb.py` |
+| Bootloader | CDC-ACM, a COM port | `tools\deploy\rawcom.py` |
+
+The bootloader is replaceable only through the SD-card route, so its transport must not depend
+on anything still being changed — putting it behind the change being recovered from would be
+exactly backwards. `flash_usb.py` spans both, so flashing is still one command.
+
+Leaving usbser.sys behind is worth about two orders of magnitude on the small round trips this
+protocol is made of: a PING went from 15-30 ms to 0.1-0.2 ms, and a descriptor acknowledgement
+from 14-29 ms to 0.2 ms, measured with `tools\deploy\emp.py` before and after.
+
+Outstanding: the host-side provider crate in `av-frameworks`, which is what closes the M5 gate;
+bulk throughput above about 512 bytes, which is bounded by the device's TX buffer rather than by
+the link; and the remaining protocol gaps recorded in `docs/protocol.md`.
