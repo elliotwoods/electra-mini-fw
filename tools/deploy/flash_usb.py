@@ -366,7 +366,9 @@ def main():
     port = args[port_idx + 1] if port_idx >= 0 else None
 
     if "--reboot" in args:
-        reboot_to_bootloader(find_port(port))
+        # Deliberately NOT find_port() here: that asserts a COM port exists, and the running
+        # application is on WinUSB. Resolving the transport is reboot_to_bootloader's job.
+        reboot_to_bootloader(port)
         return
     if "--console" in args:
         console(find_port(port))
