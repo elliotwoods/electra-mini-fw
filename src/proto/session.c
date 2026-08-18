@@ -27,9 +27,16 @@
 #include "surface.h"
 #include "diag.h"
 
-/* Bulk endpoints, so the bulk MTU. Both are 64-byte endpoints on this full-speed port; the MTU
- * is the payload we are willing to put in one fragment, not the packet size. */
+/* What this device can RECEIVE in one fragment. Bulk endpoints, so the bulk MTU; both are
+ * 64-byte endpoints on this full-speed port, and the MTU is the payload we are willing to put
+ * in one fragment, not the packet size. rx_frag is sized from this, so it is also a hard limit
+ * rather than a preference, and it is what READY advertises. */
 #define SESSION_MTU        EMP_MTU_BULK
+
+/* The floor for a negotiated transmit MTU. A host that asks for less than one HID report's
+ * worth is either confused or broken, and honouring it would fragment every message into
+ * uselessness -- so the floor is a refusal to co-operate with nonsense, not a preference. */
+#define SESSION_MIN_MTU    EMP_MTU_HID
 
 #define HEARTBEAT_MS       1000u
 #define READY_REPEAT_MS    1000u
@@ -37,6 +44,12 @@
 
 /* Identity. Kept short: every byte is on the wire in READY. */
 #define FW_VERSION         0x00000100u        /* 0.1.0 */
+
+/* A build number, in the fixed prefix so a host can compare two devices without parsing a
+ * string. Zero until something generates one: the honest value for "this build is not
+ * numbered" is not a fabricated number, and BUILD_ID below carries the real information in a
+ * form a human can read. */
+#define FW_BUILD           0u
 static const char MODEL[]    = "Electra One Mini";
 static const char SERIAL[]   = "EMB-0001";
 static const char BUILD_ID[] = __DATE__ " " __TIME__;
@@ -46,6 +59,22 @@ static emp_reasm_t   reasm;
 static uint32_t      next_heartbeat_ms;
 static uint32_t      next_ready_ms;
 static uint32_t      boot_ms;
+
+/* Negotiated in HELLO, which is the whole point of HELLO. docs/protocol.md 0 calls the MTU
+ * "negotiated, never assumed", and it was assumed: this used to be the SESSION_MTU constant at
+ * every use, so a host with a smaller window was simply talked over. */
+static uint16_t      tx_mtu = SESSION_MTU;
+static uint8_t       peer_minor;           /* min(host, device), per the minor-version rule */
+
+/* The last time the service loop reported. emp_session_feed() is reached through a
+ * function-pointer sink whose signature carries no clock, and PONG has to answer with a device
+ * timestamp -- it used to answer with a literal zero, which made every round-trip measurement
+ * on the host meaningless. One service period of staleness is far better than that. */
+static uint32_t      last_now_ms;
+
+/* Worst repaint seen, in microseconds, reported in HEARTBEAT. Set from the render loop rather
+ * than measured here: this file has no idea when a frame starts. */
+static uint32_t      render_us_max;
 
 /* Inbound fragment assembly from a byte stream.
  *
@@ -110,7 +139,7 @@ void emp_send(uint8_t channel, uint8_t opcode, const uint8_t *payload, uint32_t 
 static void send_message(uint8_t channel, uint8_t opcode, const uint8_t *payload, uint32_t len)
 {
     emp_writer_t w;
-    emp_writer_init(&w, tx_buf, sizeof(tx_buf), SESSION_MTU);
+    emp_writer_init(&w, tx_buf, sizeof(tx_buf), tx_mtu);
     w.seq = tx_seq;
 
     if (emp_write_message(&w, channel, opcode, payload, len) != EMP_OK) {
@@ -130,16 +159,27 @@ static void send_ready(void)
     enc_t e;
     enc_init(&e, buf, sizeof(buf));
 
-    put8(&e, EMP_VERSION_MAJOR);
-    put8(&e, 0);                               /* minor */
-    put16(&e, SESSION_MTU);
-    put32(&e, stats.session_id);
-    put32(&e, 0);                              /* capability flags; none yet */
-    put32(&e, EMP_MAX_MESSAGE_RX);
-    put16(&e, SURF_MAX_FIELDS);
-    put16(&e, SURF_POTS);                      /* eight knobs, so eight fields at once */
-    put64(&e, surf_applied_revision());
-    put32(&e, FW_VERSION);
+    /* The FIXED 44-BYTE PREFIX. docs/protocol.md 6 promises these bytes stable across major
+     * versions -- it is the one back-compatibility guarantee in the protocol, and it is what
+     * lets a host that cannot talk to this device still report WHICH device it cannot talk to.
+     * It was 32 bytes and missing max_descriptor_bytes entirely, which shifted every field
+     * after it against a decoder written from the document. */
+    put8(&e, EMP_VERSION_MAJOR);               /*  0 */
+    put8(&e, peer_minor);                      /*  1  negotiated, so the host sees what we agreed */
+    put16(&e, SESSION_MTU);                    /*  2  what we can RECEIVE, not what we send with */
+    put32(&e, stats.session_id);               /*  4 */
+    put32(&e, 0);                              /*  8  capability flags; none yet */
+    put32(&e, EMP_MAX_MESSAGE_RX);             /* 12 */
+    put32(&e, EMP_MAX_DESCRIPTOR_BYTES);       /* 16 */
+    put16(&e, SURF_MAX_FIELDS);                /* 20 */
+    put16(&e, SURF_POTS);                      /* 22  eight knobs, so eight fields at once */
+    put64(&e, surf_applied_revision());        /* 24 */
+    put32(&e, FW_VERSION);                     /* 32 */
+    put32(&e, FW_BUILD);                       /* 36 */
+    put32(&e, 0);                              /* 40  reserved, zero: room for one more
+                                                *     capability word without spending the
+                                                *     stability promise to get it */
+    /* 44 bytes to here. Everything below is variable-length and NOT covered by the promise. */
     put_str(&e, MODEL);
     put_str(&e, SERIAL);
     put_str(&e, BUILD_ID);
@@ -168,7 +208,7 @@ static void send_heartbeat(uint32_t now_ms)
     put32(&e, reasm.rx_decode_errors);
     put32(&e, reasm.rx_seq_gaps);
     put32(&e, stats.tx_dropped);
-    put32(&e, 0);                              /* render_us_max, once there is rendering */
+    put32(&e, render_us_max);
 
     send_message(EMP_CH_CONTROL, EMP_OP_HEARTBEAT, buf, e.len);
 }
@@ -190,16 +230,61 @@ static void send_pong(const uint8_t *payload, uint32_t len, uint32_t now_ms)
     send_message(EMP_CH_CONTROL, EMP_OP_PONG, buf, e.len);
 }
 
+/* HELLO: version u8+u8, host_mtu u16, host_epoch_ms u64, rx_window u32, host_id String.
+ *
+ * This was not parsed at all -- the device answered READY and threw the message away, which
+ * made "negotiated, never assumed" a claim about a negotiation that did not happen.
+ *
+ * Nothing here can fail the link. A version we do not like still gets a READY, because READY
+ * carries the build_id the host needs in order to say WHICH firmware it cannot talk to; that
+ * decision is the host's to make and it cannot make it from silence. */
+static void handle_hello(const uint8_t *msg, uint32_t len)
+{
+    if (len < 2) return;
+
+    uint8_t major = msg[0];
+    uint8_t minor = msg[1];
+
+    if (major != EMP_VERSION_MAJOR) {
+        emp_diag(EMP_SEV_ERROR, EMP_DIAG_VERSION_MISMATCH, major,
+                 "major version differs; this link cannot be trusted");
+        /* Deliberately still answers, below. */
+    }
+
+    /* Minor is min(host, device): a minor version may only ADD things, so agreeing to the lower
+     * of the two means neither side sends the other something it has never heard of. */
+    peer_minor = EMP_VERSION_MINOR;
+    if (minor < peer_minor) peer_minor = minor;
+
+    if (len >= 4) {
+        uint16_t host_mtu = (uint16_t)(msg[2] | (msg[3] << 8));
+        uint16_t want = host_mtu;
+
+        if (want > SESSION_MTU)     want = SESSION_MTU;
+        if (want < SESSION_MIN_MTU) want = SESSION_MIN_MTU;
+
+        if (host_mtu && host_mtu < SESSION_MIN_MTU) {
+            emp_diag(EMP_SEV_WARN, EMP_DIAG_MTU_REFUSED, host_mtu,
+                     "host asked for an MTU below the floor");
+        }
+        if (host_mtu) tx_mtu = want;
+    }
+
+    /* host_epoch_ms and rx_window are read but not yet acted on: the first is for the host's own
+     * correlation, and the second belongs to the credit scheme, which is deliberately deferred
+     * until HEARTBEAT.render_us_max gives us something real to size it against. */
+}
+
 /* ------------------------------------------------------------------ dispatch */
 
-static void handle(const emp_header_t *h, const uint8_t *msg, uint32_t len, uint32_t now_ms)
+static void handle_control(const emp_header_t *h, const uint8_t *msg, uint32_t len,
+                           uint32_t now_ms)
 {
-    stats.rx_messages++;
-
     switch (h->opcode) {
     case EMP_OP_HELLO:
         stats.hellos++;
         stats.host_seen = 1;
+        handle_hello(msg, len);
         /* Answered idempotently: a host that missed the first READY, or that restarted, gets
          * another without the device needing to track which host it is talking to. */
         send_ready();
@@ -219,13 +304,50 @@ static void handle(const emp_header_t *h, const uint8_t *msg, uint32_t len, uint
         stats.host_seen = 0;
         break;
 
+    case EMP_OP_DIAG:
+        /* The host is allowed to send these too. Nothing to do with one, but saying so beats
+         * having it counted as an unknown opcode. */
+        break;
+
     default:
-        if (h->channel == EMP_CH_SURFACE) {
-            stats.host_seen = 1;
-            surf_handle(h->opcode, msg, len);
-        }
-        /* Anything else is ignored, not an error. A newer host may send things a v1 device has
-         * never heard of, and refusing to talk to it would be worse than skipping the message. */
+        emp_diag(EMP_SEV_INFO, EMP_DIAG_UNKNOWN_OPCODE,
+                 (uint32_t)(EMP_CH_CONTROL << 8) | h->opcode, "unknown control opcode");
+        break;
+    }
+}
+
+/* Dispatch on CHANNEL FIRST, then opcode.
+ *
+ * It used to be the other way round, with the channel consulted only in the default arm. So a
+ * SURFACE message that happened to carry opcode 0x01 was answered with a full READY, and every
+ * surface opcode that collided with a control one was routed to the wrong handler entirely.
+ * The channel is what says which namespace the opcode is drawn from; reading the opcode first
+ * is reading a word before knowing its language. */
+static void handle(const emp_header_t *h, const uint8_t *msg, uint32_t len, uint32_t now_ms)
+{
+    stats.rx_messages++;
+
+    switch (h->channel) {
+    case EMP_CH_CONTROL:
+        handle_control(h, msg, len, now_ms);
+        break;
+
+    case EMP_CH_SURFACE:
+        stats.host_seen = 1;
+        surf_handle(h->opcode, msg, len);
+        break;
+
+    case EMP_CH_INPUT:
+        /* Device to host only. A host sending one is confused about which end it is, and that
+         * is worth saying rather than ignoring -- it is the kind of mistake that otherwise
+         * presents as "the device ignores my messages". */
+        emp_diag(EMP_SEV_WARN, EMP_DIAG_UNKNOWN_OPCODE,
+                 (uint32_t)(EMP_CH_INPUT << 8) | h->opcode,
+                 "INPUT is device to host; nothing to receive here");
+        break;
+
+    default:
+        emp_diag(EMP_SEV_INFO, EMP_DIAG_UNKNOWN_CHANNEL, h->channel, "unknown channel");
         break;
     }
 }
@@ -261,7 +383,7 @@ int emp_session_feed(uint8_t b)
         uint32_t msg_len = 0, consumed = 0;
 
         int rc = emp_reasm_fragment(&reasm, rx_frag, rx_have, &consumed, &h, &msg, &msg_len);
-        if (rc == 1) handle(&h, msg, msg_len, 0);
+        if (rc == 1) handle(&h, msg, msg_len, last_now_ms);
         rx_have = 0;
     }
     return 1;
@@ -279,6 +401,9 @@ void emp_session_init(uint32_t session_id)
     rx_have = 0;
     tx_seq = 0;
     boot_ms = 0;
+    tx_mtu = SESSION_MTU;
+    peer_minor = EMP_VERSION_MINOR;
+    render_us_max = 0;
     next_ready_ms = 0;
     next_heartbeat_ms = 0;
 }
@@ -294,9 +419,18 @@ static int muted;
 
 void emp_session_mute(int on) { muted = on ? 1 : 0; }
 
+void emp_session_note_render_us(uint32_t us)
+{
+    if (us > render_us_max) render_us_max = us;
+}
+
+uint16_t emp_session_tx_mtu(void) { return tx_mtu; }
+
 void emp_session_poll(uint32_t now_ms)
 {
     if (muted) return;
+
+    last_now_ms = now_ms;
 
     /* Flush diagnostics here rather than where they are raised: this is the one place that is
      * outside every decoder AND already knows not to talk during a raw pixel stream. Flushing

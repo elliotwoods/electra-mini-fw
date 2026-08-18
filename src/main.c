@@ -69,7 +69,25 @@ static uint32_t bsp_millis(void) { return g_systick_ms; }
 
 /* Mirrors of what the UI is fed, for `uistate`. Diagnostics only. */
 static uint16_t g_touch_filtered, g_moved_mask;
-static uint32_t g_render_ms_max;      /* worst UI repaint seen; a view switch is the worst case */
+static uint32_t g_render_us_max;      /* worst UI repaint seen; a view switch is the worst case */
+
+/* Microseconds, from the Cortex-M4 cycle counter.
+ *
+ * bsp_millis() is too coarse for what this measures. HEARTBEAT reports render_us_max in
+ * microseconds, and at millisecond resolution a 900 us repaint and a 1400 us repaint are the
+ * same number -- which is exactly the difference the measurement exists to show. The counter
+ * wraps every ~18 s at 240 MHz; only DIFFERENCES are used, and no repaint comes close, so the
+ * wrap is harmless as long as nothing tries to read an absolute time from it. */
+#define CYCLES_PER_US    240u
+#define DWT_CYCCNT       0xE0001004UL
+
+static void cycles_start(void)
+{
+    REG32(0xE000EDFCUL) = REG32(0xE000EDFCUL) | (1UL << 24);   /* DEMCR.TRCENA */
+    REG32(0xE0001000UL) = REG32(0xE0001000UL) | 1UL;           /* DWT_CTRL.CYCCNTENA */
+}
+
+static uint32_t cycles_now(void) { return REG32(DWT_CYCCNT); }
 
 /* ------------------------------------------------------------------ breadcrumbs */
 
@@ -224,6 +242,12 @@ static void clock_start(void)
     REG32(SYST_CVR) = 0;
     g_clock_armed = 1;
     REG32(SYST_CSR) = 0x07u;             /* core clock, interrupt, enable */
+
+    /* The cycle counter comes up with the same call. It costs nothing to run and it is the only
+     * time source fine enough for a repaint, so there is no reason for it to be conditional --
+     * it used to be enabled lazily by one console command, which meant the measurement was
+     * available exactly when somebody had already gone looking for it by hand. */
+    cycles_start();
 }
 
 static void watchdog_arm(void)
@@ -357,7 +381,7 @@ static void cmd_id(const char *a)
     console_hex("qt2120_init_rc", (uint32_t)g_qt_init_rc);
     console_hex("usb_tx_dropped", g_usb_tx_dropped);
     console_hex("service_hz", g_service_hz);
-    console_hex("render_ms_max", g_render_ms_max);
+    console_hex("render_us_max", g_render_us_max);
     console_hex("nmi_count", g_nmi_count);
     if (g_nmi_count) {
         console_hex("  nmi msp", g_nmi_msp);
@@ -2253,10 +2277,11 @@ int main(void)
                  * symptom -- the input taking time to be believed, or the panel taking time to
                  * redraw -- and they need opposite fixes. A view switch repaints everything, so
                  * it is the expensive case by far. */
-                uint32_t t0 = bsp_millis();
+                uint32_t c0 = cycles_now();
                 ui_render();
-                uint32_t dt = bsp_millis() - t0;
-                if (dt > g_render_ms_max) g_render_ms_max = dt;
+                uint32_t us = (cycles_now() - c0) / CYCLES_PER_US;
+                if (us > g_render_us_max) g_render_us_max = us;
+                emp_session_note_render_us(us);
             }
         }
     no_service:;

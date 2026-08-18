@@ -17,6 +17,11 @@
 
 #define EMP_MAGIC            0xE1u
 #define EMP_VERSION_MAJOR    1u
+
+/* Minor may only ADD: opcodes, flag bits, trailing members inside field_len, or 0x80+ value
+ * tags (docs/protocol.md 6). Both ends agree on min(host, device), so neither can send the
+ * other something it has never heard of. */
+#define EMP_VERSION_MINOR    0u
 #define EMP_HEADER_BYTES     8u
 #define EMP_PREFIX_BYTES     8u          /* total_len u32 + crc32c u32, on FIRST && !LAST */
 
@@ -24,6 +29,12 @@
 #define EMP_MTU_BULK         1016u
 #define EMP_MAX_MESSAGE      65536u      /* protocol ceiling */
 #define EMP_MAX_MESSAGE_RX   8192u       /* what THIS device advertises it will accept */
+
+/* The whole descriptor, summed across its per-field messages. Advertised in READY so a host can
+ * decide to send a smaller page BEFORE spending a transfer, rather than discovering the limit
+ * from a refusal halfway through. Derived from what the arenas can actually hold: 64 fields of
+ * fixed prefix plus the string pool, rounded up. */
+#define EMP_MAX_DESCRIPTOR_BYTES 16384u
 #define EMP_MAX_STRING_BYTES 512u
 
 /* Fragment flags. */

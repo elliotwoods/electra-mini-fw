@@ -147,9 +147,47 @@ firmware version and build, then `model` / `serial` / `build_id` strings — whi
 onto `SurfacePluginSnapshot::{model, serial, firmware}`. `max_fields` and `fields_per_page`
 feed `SurfaceCapabilities`, which the current provider hardcodes to 64/4.
 
+**`READY` prefix**, the 44 bytes §6 promises stable:
+
+| off | size | field |
+|---|---|---|
+| 0 | u8 | protocol major |
+| 1 | u8 | protocol minor, **negotiated** — `min(host, device)`, so the host reads back what was agreed |
+| 2 | u16 | mtu the device can **receive**; not what it transmits with |
+| 4 | u32 | `session_id` |
+| 8 | u32 | capability flags |
+| 12 | u32 | `max_message_rx` |
+| 16 | u32 | `max_descriptor_bytes` |
+| 20 | u16 | `max_fields` |
+| 22 | u16 | `fields_per_page` |
+| 24 | u64 | `applied_revision` |
+| 32 | u32 | firmware version |
+| 36 | u32 | firmware build |
+| 40 | u32 | reserved, zero |
+
+Then `model`, `serial`, `build_id` Strings, which are **not** covered by the promise. The
+reserved word is there so one more capability can be added without spending the guarantee to
+get it.
+
+**`HELLO`**: `major` u8, `minor` u8, `host_mtu` u16, `host_epoch_ms` u64, `rx_window` u32,
+`host_id` String.
+
 The device sends `READY` unsolicited on boot and once per second until it has seen a `HELLO`,
 and answers every `HELLO` idempotently. So a host attaching to a running device learns
 identity without asking, and a host that starts first is not left waiting.
+
+**A major-version mismatch still gets a `READY`.** §6 makes the mismatch terminal, but that
+decision is the host's, and the host cannot report *which* firmware it refused without the
+`build_id` that only `READY` carries. Refusing to answer would make an incompatible device
+indistinguishable from a dead one.
+
+**The transmit MTU is `min(host_mtu, device_mtu)`**, floored at `EMP_MTU_HID`. A host asking for
+less than one HID report's worth is refused with `DIAG{E_MTU_REFUSED}` and the floor is used:
+honouring it would fragment every message into uselessness.
+
+**Dispatch is by channel first, then opcode.** The channel says which namespace the opcode is
+drawn from, so reading the opcode first is reading a word before knowing its language — a
+`SURFACE` message carrying opcode `0x01` is `DESC_*`-adjacent traffic, not a `HELLO`.
 
 **`PONG` echoes the host's own timestamp**, so round-trip needs no clock agreement.
 
@@ -195,6 +233,9 @@ string: the field index for a truncated label, the tag for an unknown value tag,
 | `13` | `E_TX_DROPPED` |
 | `14` | `E_GLYPH_MISSING` |
 | `15` | `E_DIAG_OVERFLOW` — diagnostics lost because every slot was in use. Reported rather than dropped silently, since dropping silently is the failure this whole message exists to end. |
+| `16` | `E_UNKNOWN_CHANNEL` |
+| `17` | `E_VERSION_MISMATCH` |
+| `18` | `E_MTU_REFUSED` |
 
 A device MUST NOT send `DIAG` from inside a decoder. Framing an outbound message part-way
 through an inbound one means building it from state the inbound parse is still walking, and on

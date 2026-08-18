@@ -31,6 +31,16 @@ void emp_session_poll(uint32_t now_ms);
  * indistinguishable from payload once they are mixed in. */
 void emp_session_mute(int on);
 
+/* Report a completed repaint, in microseconds. Feeds HEARTBEAT.render_us_max, which exists so
+ * the full-repaint cost stays continuously checkable from the host rather than quoted from a
+ * document. Microseconds, not milliseconds: a 900 us repaint and a 1400 us one are the same
+ * number in ms, and telling them apart is the entire purpose of the measurement. */
+void emp_session_note_render_us(uint32_t us);
+
+/* The MTU actually in use for transmission, after HELLO. Never larger than what this device
+ * advertises it can receive, and never smaller than one HID report's worth. */
+uint16_t emp_session_tx_mtu(void);
+
 /* Counters, reported in HEARTBEAT and by the console's `emp` command. */
 typedef struct {
     uint32_t rx_fragments;

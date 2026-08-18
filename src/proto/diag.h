@@ -49,6 +49,9 @@
 #define EMP_DIAG_TX_DROPPED           13u
 #define EMP_DIAG_GLYPH_MISSING        14u  /* context = the codepoint */
 #define EMP_DIAG_OVERFLOW             15u  /* diagnostics lost because every slot was in use */
+#define EMP_DIAG_UNKNOWN_CHANNEL      16u  /* context = the channel */
+#define EMP_DIAG_VERSION_MISMATCH     17u  /* context = the host's major version */
+#define EMP_DIAG_MTU_REFUSED          18u  /* context = the MTU asked for */
 
 /* Raise one. `detail` must be a string literal or otherwise outlive the flush -- only the
  * pointer is kept, because copying a message this code exists to make cheap would defeat it.
