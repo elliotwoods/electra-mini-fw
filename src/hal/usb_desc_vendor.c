@@ -34,7 +34,7 @@ static const uint8_t dev_desc[18] = {
     0x00, 0x00, 0x00, EP0_MPS,       /* class defined at the interface, not the device */
     0xC9, 0x1F,                      /* idVendor  0x1FC9 */
     0xD0, 0x82,                      /* idProduct 0x82D0 — new; see the note above about 0xEE */
-    0x03, 0x00,                      /* bcdDevice 0.03 -- Windows caches its MS OS decision per
+    0x05, 0x00,                      /* bcdDevice 0.05 -- Windows caches its MS OS decision per
                                       * VID/PID/REV, so a revision bump is how you get a fresh
                                       * probe instead of yesterday's answer replayed */
     1, 2, 0,                         /* iManufacturer, iProduct, NO iSerial -- see below */
@@ -82,23 +82,42 @@ static const char *const strings[] = { 0, "Kimchi and Chips", "Electra Mini FW" 
 #define MSOS20_VENDOR_CODE  0x21u
 #define MSOS20_DESC_INDEX   0x0007u
 
-#define COMPAT_ID_LEN      20u
-#define FUNC_SUBSET_LEN    (8u + COMPAT_ID_LEN)                         /* 28 */
-#define CONFIG_SUBSET_LEN  (8u + FUNC_SUBSET_LEN)                       /* 36 */
-#define MSOS20_TOTAL_LEN   (10u + CONFIG_SUBSET_LEN)                    /* 46 */
+/* {6E7A1F30-4C2B-4E8A-9B21-2D4F8C1A7E55} -- ours, fixed. Both sides must agree on it exactly. */
+#define DEVICE_INTERFACE_GUID_UTF16 \
+    '{',0, '6',0, 'E',0, '7',0, 'A',0, '1',0, 'F',0, '3',0, '0',0, '-',0, \
+    '4',0, 'C',0, '2',0, 'B',0, '-',0, \
+    '4',0, 'E',0, '8',0, 'A',0, '-',0, \
+    '9',0, 'B',0, '2',0, '1',0, '-',0, \
+    '2',0, 'D',0, '4',0, 'F',0, '8',0, 'C',0, '1',0, 'A',0, '7',0, 'E',0, '5',0, '5',0, \
+    '}',0, \
+    0,0,          /* terminates the string */ \
+    0,0           /* terminates the REG_MULTI_SZ list */
 
-/* NO REGISTRY PROPERTY, and the omission is deliberate.
+#define GUID_UTF16_BYTES   80u   /* 38 characters, then both of the nulls above */
+#define PROP_NAME_BYTES    42u   /* "DeviceInterfaceGUIDs" and its terminator, UTF-16 */
+
+#define COMPAT_ID_LEN      20u
+#define REG_PROP_LEN       (10u + PROP_NAME_BYTES + GUID_UTF16_BYTES)   /* 132 */
+#define MSOS20_TOTAL_LEN   (10u + COMPAT_ID_LEN + REG_PROP_LEN)         /* 162 */
+
+/* FLAT: features sit directly under the set header, with no subsets between them.
  *
- * A DeviceInterfaceGUIDs property is the usual way to give a WinUSB device its own interface
- * GUID, and carrying one pushed this descriptor set to 178 bytes -- three packets on a 64-byte
- * control endpoint. Without it the set is 46 bytes and goes out in ONE, which removes the
- * multi-packet EP0 path from the list of things that have to be right for a device to get a
- * driver at all. That path had never carried more than two packets before; making the very
- * first thing that depends on it also be the thing you cannot debug without it is a poor trade.
+ * The first version nested them inside a configuration subset inside a function subset, which is
+ * the shape almost every example uses -- and which is wrong here. Those subsets exist to point
+ * at ONE FUNCTION of a COMPOSITE device; this device has a single vendor interface and
+ * bDeviceClass 0, so there is no function to single out and the features apply to the device.
  *
- * Nothing is lost. WinUSB binds on the compatible ID alone, and the host finds the device
- * through the generic USB device interface class filtered by VID and PID -- which is what
- * tools/deploy/winusb.py does, and is more robust than a GUID both sides have to agree on. */
+ * Windows rejects the mismatch in the most unhelpful way available: it reads the whole set
+ * without complaint and then binds nothing, leaving a device with no driver and no error
+ * anywhere to say why. What proved it was device-side counters read back through the
+ * bootloader -- BOS requested once, vendor request answered once, exactly the declared number of
+ * bytes asked for and supplied. The descriptors were being delivered perfectly; only their shape
+ * was wrong. Flattened, Windows bound WinUSB on the next boot.
+ *
+ * THE REGISTRY PROPERTY IS NOT OPTIONAL, which cost a second cycle to learn. With only the
+ * compatible ID, Windows binds winusb.sys and the device works -- but winusb.sys registers no
+ * device interface, so there is no path for CreateFile to open and the host cannot reach it. A
+ * device that is bound and unreachable looks very much like one that is not bound at all. */
 static const uint8_t msos20_desc[MSOS20_TOTAL_LEN] = {
     /* Set header */
     0x0A, 0x00,                     /* wLength 10 */
@@ -106,25 +125,21 @@ static const uint8_t msos20_desc[MSOS20_TOTAL_LEN] = {
     0x00, 0x00, 0x03, 0x06,         /* dwWindowsVersion: 8.1 (0x06030000) */
     (uint8_t)MSOS20_TOTAL_LEN, (uint8_t)(MSOS20_TOTAL_LEN >> 8),
 
-    /* Configuration subset, for configuration 0 (the index, not bConfigurationValue) */
-    0x08, 0x00,
-    0x01, 0x00,                     /* MS_OS_20_SUBSET_HEADER_CONFIGURATION */
-    0x00,                           /* bConfigurationValue - 1 */
-    0x00,                           /* bReserved */
-    (uint8_t)CONFIG_SUBSET_LEN, (uint8_t)(CONFIG_SUBSET_LEN >> 8),
-
-    /* Function subset, starting at interface 0 */
-    0x08, 0x00,
-    0x02, 0x00,                     /* MS_OS_20_SUBSET_HEADER_FUNCTION */
-    0x00,                           /* bFirstInterface */
-    0x00,                           /* bReserved */
-    (uint8_t)FUNC_SUBSET_LEN, (uint8_t)(FUNC_SUBSET_LEN >> 8),
-
-    /* Compatible ID: bind WinUSB */
+    /* Compatible ID: bind WinUSB, to the device */
     0x14, 0x00,
     0x03, 0x00,                     /* MS_OS_20_FEATURE_COMPATIBLE_ID */
     'W', 'I', 'N', 'U', 'S', 'B', 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,     /* no sub-compatible ID */
+
+    /* Registry property: the device interface GUID the host opens the device by */
+    (uint8_t)REG_PROP_LEN, (uint8_t)(REG_PROP_LEN >> 8),
+    0x04, 0x00,                     /* MS_OS_20_FEATURE_REG_PROPERTY */
+    0x07, 0x00,                     /* REG_MULTI_SZ */
+    (uint8_t)PROP_NAME_BYTES, (uint8_t)(PROP_NAME_BYTES >> 8),
+    'D',0, 'e',0, 'v',0, 'i',0, 'c',0, 'e',0, 'I',0, 'n',0, 't',0, 'e',0,
+    'r',0, 'f',0, 'a',0, 'c',0, 'e',0, 'G',0, 'U',0, 'I',0, 'D',0, 's',0, 0,0,
+    (uint8_t)GUID_UTF16_BYTES, (uint8_t)(GUID_UTF16_BYTES >> 8),
+    DEVICE_INTERFACE_GUID_UTF16
 };
 
 #define BOS_TOTAL_LEN 33u

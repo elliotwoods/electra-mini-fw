@@ -46,6 +46,10 @@
 #define REASM_IDLE_MS      2000u
 
 #define HEARTBEAT_MS       1000u
+
+/* Queued bytes above which unsolicited traffic is skipped rather than added to the pile. Well
+ * under the driver's buffer, so that an answer always has somewhere to go. */
+#define HEARTBEAT_BACKPRESSURE 192u
 #define READY_REPEAT_MS    1000u
 #define READY_BACKOFF_MS   5000u
 
@@ -560,7 +564,19 @@ void emp_session_poll(uint32_t now_ms)
         }
     } else if ((int32_t)(now_ms - next_heartbeat_ms) >= 0) {
         next_heartbeat_ms = now_ms + HEARTBEAT_MS;
-        send_heartbeat(now_ms);
+
+        /* Not if the host has stopped collecting. Unsolicited traffic exists so that silence is
+         * informative; queueing it for a host that is not reading achieves the opposite, because
+         * the buffer fills with stale state and the next thing written -- an answer somebody IS
+         * waiting for -- is what gets dropped instead.
+         *
+         * This never mattered on CDC, where usbser.sys drains the endpoint continuously whether
+         * an application is listening or not. Under WinUSB nothing reads unless asked, and the
+         * symptom was a console that returned nothing at all until the pipe had been drained by
+         * hand. A dropped heartbeat costs nothing: the next one carries the same state, and it
+         * is counted. */
+        if (usb_tx_pending() < HEARTBEAT_BACKPRESSURE) send_heartbeat(now_ms);
+        else stats.tx_dropped++;
     }
 
     /* Last, so everything raised above goes out on this visit rather than the next one. This is

@@ -626,6 +626,17 @@ uint32_t usb_write(const uint8_t *buf, uint32_t len)
     return n;
 }
 
+/* How many bytes are queued for the host and not yet collected.
+ *
+ * On CDC this was never worth asking: usbser.sys reads the IN endpoint continuously, so the
+ * buffer always drained whether anyone was listening or not. A raw host stack reads only when
+ * the application asks, so a device that keeps writing unprompted fills this buffer and then
+ * starts losing whatever it writes NEXT -- which is the reply somebody is waiting for. */
+uint32_t usb_tx_pending(void)
+{
+    return tx_tail - tx_head;
+}
+
 /* Bytes the console gave up on. Reported by `id`, because silent truncation is worse than
  * loss: a diagnostic that quietly drops half its output makes the DEVICE look broken. */
 uint32_t g_usb_tx_dropped;

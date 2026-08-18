@@ -36,6 +36,10 @@ uint32_t usb_read(uint8_t *buf, uint32_t max);
  * buffer is full, in which case call usb_poll() and retry. */
 uint32_t usb_write(const uint8_t *buf, uint32_t len);
 
+/* Bytes queued for the host and not yet collected. Non-zero for a long time means nobody is
+ * reading, which on a raw host stack is normal rather than exceptional. */
+uint32_t usb_tx_pending(void);
+
 /* What a host asked for during enumeration, and what we refused.
  *
  * A device whose descriptors are wrong has no driver, and a device with no driver has no

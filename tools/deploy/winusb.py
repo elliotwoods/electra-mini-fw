@@ -28,11 +28,14 @@ import ctypes.wintypes as wt
 import sys
 import time
 
-# The generic USB device interface class. Every WinUSB-bound device appears under it, and the
-# path carries the VID and PID, so no custom GUID has to be agreed between the two sides -- which
-# also keeps the device's MS OS 2.0 descriptor set down to a single 64-byte packet. See the note
-# in src/hal/usb_desc_vendor.c about why that mattered.
-GUID_DEVINTERFACE_USB_DEVICE = "{A5DCBF10-6530-11D2-901F-00C04FB951ED}"
+# The device declares this GUID in its MS OS 2.0 registry property, and winusb.sys registers a
+# device interface under it. Both sides must agree on it exactly.
+#
+# Going through the generic USB device interface class instead was tried and does not work: a
+# WinUSB-bound device is not enumerated under it, so there is nothing to open. That is worth
+# knowing, because it means the registry property is load-bearing rather than decorative -- see
+# the note in src/hal/usb_desc_vendor.c.
+DEVICE_INTERFACE_GUID = "{6E7A1F30-4C2B-4E8A-9B21-2D4F8C1A7E55}"
 
 VID, PID = 0x1FC9, 0x82D0
 
@@ -76,8 +79,6 @@ class SP_DEVICE_INTERFACE_DATA(ctypes.Structure):
 
 def _guid(text):
     g = GUID()
-    if setupapi.CLSIDFromString is None:
-        raise SystemExit("CLSIDFromString unavailable")
     ole32 = ctypes.WinDLL("ole32", use_last_error=True)
     if ole32.CLSIDFromString(ctypes.c_wchar_p(text), ctypes.byref(g)) != 0:
         raise SystemExit("bad GUID: " + text)
@@ -85,12 +86,11 @@ def _guid(text):
 
 
 def device_paths(vid=VID, pid=PID):
-    """Every present USB device with this VID and PID, as filesystem paths.
+    """Every present device exposing our interface, as filesystem paths.
 
-    Matching on the path rather than on a dedicated interface GUID: the path for a device
-    interface always contains vid_xxxx&pid_xxxx, so this works for anything WinUSB has bound
-    without the firmware having to carry a GUID at all."""
-    guid = _guid(GUID_DEVINTERFACE_USB_DEVICE)
+    Filtered by VID and PID as well as by GUID, so that a stale or unrelated device claiming the
+    same interface cannot be picked up silently."""
+    guid = _guid(DEVICE_INTERFACE_GUID)
     want = "vid_%04x&pid_%04x" % (vid, pid)
 
     setupapi.SetupDiGetClassDevsW.restype = ctypes.c_void_p
@@ -150,6 +150,9 @@ class WinUsbDevice:
 
         self.path = path
         k32.CreateFileW.restype = ctypes.c_void_p
+        # FILE_FLAG_OVERLAPPED is REQUIRED: WinUsb_Initialize fails with ERROR_INVALID_HANDLE
+        # on a synchronous handle. Passing NULL for the OVERLAPPED in Read/WritePipe is still
+        # allowed and completes the transfer synchronously, which is what this tool wants.
         self.h = k32.CreateFileW(ctypes.c_wchar_p(path),
                                  GENERIC_READ | GENERIC_WRITE,
                                  FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -167,6 +170,23 @@ class WinUsbDevice:
         self._policy(EP_IN, AUTO_CLEAR_STALL, 1)
         self._policy(EP_OUT, PIPE_TRANSFER_TIMEOUT, 1000)
         self._policy(EP_OUT, AUTO_CLEAR_STALL, 1)
+
+        self.drain()
+
+    def drain(self, rounds=64):
+        """Throw away whatever was queued before this session started.
+
+        The device emits heartbeats unprompted, and under WinUSB nothing collects them until a
+        program asks -- so on opening there is a backlog describing a device state that has since
+        moved on. Worse, it is at the FRONT of the pipe, so the answer to the first command sits
+        behind it. Dropping it costs nothing and makes the first command behave like the tenth."""
+        n = 0
+        for _ in range(rounds):
+            chunk = self.read(8192)
+            if not chunk:
+                break
+            n += len(chunk)
+        return n
 
     def _policy(self, pipe, policy, value):
         v = wt.DWORD(value)
