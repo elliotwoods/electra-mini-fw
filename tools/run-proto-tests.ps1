@@ -17,6 +17,7 @@ $out = Join-Path $root 'build\host'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 
 $sources = @(
+    (Join-Path $root 'src\proto\diag.c'),
     (Join-Path $root 'src\proto\frame.c'),
     (Join-Path $root 'src\proto\surface.c'),
     (Join-Path $root 'src\app\ui_state.c'),

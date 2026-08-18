@@ -20,6 +20,7 @@
 #include "frame.h"
 #include "surface.h"
 #include "sim_wire.h"
+#include "diag.h"
 
 typedef void (*desc_report_fn)(const char *name, int passed);
 
@@ -490,6 +491,156 @@ static void test_values_skip_one_control_not_the_batch(void)
           f && f->number > 0.874 && f->number < 0.876);
 }
 
+/* ------------------------------------------------------------------ diagnostics */
+
+/* Diagnostics accumulate and are sent by the tick, so a test that wants to see one has to run
+ * the tick -- which is itself the property worth pinning: nothing is sent from inside a decoder,
+ * because that would mean framing an outbound message part-way through an inbound one. */
+static int diag_seen(uint16_t code, uint32_t *context_out, uint32_t *count_out)
+{
+    for (unsigned i = 0; i < sim_wire_count(); i++) {
+        const sim_wire_msg_t *m = sim_wire_at(i);
+        if (m->opcode != EMP_OP_DIAG || m->len < 13) continue;
+
+        uint16_t got = (uint16_t)(m->payload[1] | (m->payload[2] << 8));
+        if (got != code) continue;
+
+        if (context_out) {
+            *context_out = (uint32_t)m->payload[3] | ((uint32_t)m->payload[4] << 8)
+                         | ((uint32_t)m->payload[5] << 16) | ((uint32_t)m->payload[6] << 24);
+        }
+        if (count_out) {
+            *count_out = (uint32_t)m->payload[7] | ((uint32_t)m->payload[8] << 8)
+                       | ((uint32_t)m->payload[9] << 16) | ((uint32_t)m->payload[10] << 24);
+        }
+        return 1;
+    }
+    return 0;
+}
+
+static void test_nothing_is_sent_before_the_tick(void)
+{
+    surf_init();
+    emp_diag_reset();
+    sim_wire_reset();
+
+    xfer_t x;
+    xfer_begin(&x, 30, 1);
+    xfer_field(&x, 0, 801, "Mystery", 0.0, 0, 0x40u, (const uint8_t *)"", 0);
+
+    int quiet_during = !diag_seen(EMP_DIAG_VALUE_UNDECODABLE, 0, 0);
+    emp_diag_tick();
+    uint32_t ctx = 0;
+    int said_after = diag_seen(EMP_DIAG_VALUE_UNDECODABLE, &ctx, 0) && ctx == 0x40u;
+
+    check("a diagnostic is raised inside the decoder and sent by the tick",
+          quiet_during && said_after);
+}
+
+static void test_repeats_coalesce(void)
+{
+    surf_init();
+    emp_diag_reset();
+    sim_wire_reset();
+
+    /* Five fields, each with a tag this device steps over. One message, count five -- because a
+     * diagnostic that fires per glyph per repaint would otherwise flood the link it reports on. */
+    static const uint8_t body[] = { 0x01, 0x00, 0x7A };
+    xfer_t x;
+    xfer_begin(&x, 31, 5);
+    for (uint16_t i = 0; i < 5; i++) {
+        xfer_field(&x, i, (uint16_t)(900 + i), "Ext", 0.0, 0, 0x81u, body, (uint16_t)sizeof(body));
+    }
+    xfer_end(&x, 0, 0);
+    emp_diag_tick();
+
+    uint32_t count = 0;
+    int one_message = 0;
+    unsigned diags = 0;
+    for (unsigned i = 0; i < sim_wire_count(); i++) {
+        if (sim_wire_at(i)->opcode == EMP_OP_DIAG) diags++;
+    }
+    one_message = (diags == 1);
+
+    check("repeated diagnostics coalesce into one message with a count",
+          one_message && diag_seen(EMP_DIAG_UNKNOWN_VALUE_TAG, 0, &count) && count == 5
+          && emp_diag_count(EMP_SEV_INFO) == 5);
+}
+
+static void test_non_finite_is_refused_on_decode(void)
+{
+    surf_init();
+    emp_diag_reset();
+    sim_wire_reset();
+
+    /* An IEEE-754 quiet NaN, which a host can produce from a division it did not check. Left in
+     * place it does not merely display wrongly: every comparison against it is false, so the bar
+     * geometry, the clamp and the digit editor all take their else branch. */
+    static const uint8_t nan_bits[] = { 0, 0, 0, 0, 0, 0, 0xF8, 0x7F };
+
+    xfer_t x;
+    xfer_begin(&x, 32, 1);
+    xfer_field(&x, 0, 1001, "Poisoned", 0.0, 0, EMP_VAL_NUMBER, nan_bits, 8);
+    xfer_end(&x, 0, 0);
+    emp_diag_tick();
+
+    const surf_field_t *f = surf_field(0);
+    check("a non-finite value is refused, and the field says so",
+          surf_field_count() == 1 && label_is(0, "Poisoned")
+          && f && f->number == 0.0
+          && (f->flags & EMP_FIELD_TRUNCATED)
+          && diag_seen(EMP_DIAG_NON_FINITE, 0, 0));
+}
+
+static void test_non_finite_is_refused_on_encode(void)
+{
+    load_good();
+    emp_diag_reset();
+    sim_wire_reset();
+
+    /* Built by bit pattern rather than by 0.0/0.0, which some compilers fold at build time. */
+    static const uint8_t inf_bits[] = { 0, 0, 0, 0, 0, 0, 0xF0, 0x7F };
+    double inf;
+    memcpy(&inf, inf_bits, 8);
+
+    surf_set_number(0, inf);
+    emp_diag_tick();
+
+    /* Nothing may be sent, because round-trip equality is what the host's property tests rest
+     * on -- and an infinity that survived the trip would break it for every value. */
+    check("a non-finite edit is refused rather than encoded",
+          sim_wire_last(EMP_OP_EDIT) == 0
+          && surf_field(0)->number == 0.5
+          && diag_seen(EMP_DIAG_NON_FINITE, 0, 0));
+}
+
+static void test_pool_exhaustion_is_reported(void)
+{
+    surf_init();
+    emp_diag_reset();
+    sim_wire_reset();
+
+    /* Fill the pool with labels until it cannot take another. The field must still load -- a
+     * knob with no name still turns -- but the device must say which one lost its label. */
+    static char big[257];
+    memset(big, 'x', sizeof(big) - 1);
+    big[sizeof(big) - 1] = 0;
+
+    uint16_t n = (uint16_t)(SURF_STRING_POOL / 256u + 2u);
+    xfer_t x;
+    xfer_begin(&x, 33, n);
+    for (uint16_t i = 0; i < n; i++) xfer_number(&x, i, (uint16_t)(1100 + i), big, 0.25);
+    xfer_end(&x, 0, 0);
+    emp_diag_tick();
+
+    const surf_field_t *last = surf_field((uint16_t)(n - 1));
+    check("a label dropped for want of pool is reported, and the field still loads",
+          surf_field_count() == n
+          && last && last->id == 1100 + n - 1 && last->label_len == 0
+          && (last->flags & EMP_FIELD_TRUNCATED)
+          && diag_seen(EMP_DIAG_STRING_TRUNCATED, 0, 0));
+}
+
 /* ------------------------------------------------------------------ runner */
 
 int desc_run_selftests(desc_report_fn report)
@@ -514,6 +665,12 @@ int desc_run_selftests(desc_report_fn report)
     test_reserved_tag_abandons_the_record();
     test_extension_default_is_dropped_not_fatal();
     test_values_skip_one_control_not_the_batch();
+
+    test_nothing_is_sent_before_the_tick();
+    test_repeats_coalesce();
+    test_non_finite_is_refused_on_decode();
+    test_non_finite_is_refused_on_encode();
+    test_pool_exhaustion_is_reported();
 
     report_fn = 0;
     return failures;

@@ -21,6 +21,7 @@
 #include <string.h>
 #include "surface.h"
 #include "session.h"
+#include "diag.h"
 
 /* Provided by session.c: framing and transmission live there, policy lives here. */
 void emp_send(uint8_t channel, uint8_t opcode, const uint8_t *payload, uint32_t len);
@@ -96,6 +97,23 @@ static double rdf64(rd_t *r)
     return d;
 }
 
+/* Is this an f64 the device can do arithmetic with?
+ *
+ * docs/protocol.md 3.4 forbids encoding a non-finite value, but a device that only trusts that
+ * rule is trusting the host. A NaN here does not stay here: it propagates into the bar geometry
+ * (every comparison against it is false, so the bar draws at an arbitrary length), into the
+ * digit editor, and back out to the host on the next rotation. It is cheaper to refuse it at
+ * the boundary than to make every consumer NaN-aware.
+ *
+ * Tested by bit pattern rather than with <math.h>: src/proto depends on <stdint.h> and
+ * <string.h> only, which is what lets this code run under a sanitiser off-target. */
+static int finite_f64(double d)
+{
+    uint64_t bits;
+    memcpy(&bits, &d, 8);
+    return ((bits >> 52) & 0x7FFu) != 0x7FFu;      /* exponent all ones == inf or NaN */
+}
+
 /* Copies into the string pool and returns its offset. Strings are UTF-8 and not terminated on
  * the wire; the pool keeps them that way and carries an explicit length. */
 static int rd_string(rd_t *r, uint16_t *off_out, uint16_t *len_out)
@@ -135,13 +153,24 @@ static int rd_string(rd_t *r, uint16_t *off_out, uint16_t *len_out)
 #define RDV_UNDECODABLE 0
 #define RDV_STORED      1
 #define RDV_SKIPPED     2
+#define RDV_NONFINITE   3   /* read correctly, refused on its merits; value left at zero */
 
 static int rd_value(rd_t *r, uint8_t tag, uint8_t *b_out, double *n_out, uint32_t *c_out)
 {
     switch (tag) {
-    case EMP_VAL_BOOL:   *b_out = rd8(r);   return RDV_STORED;
-    case EMP_VAL_NUMBER: *n_out = rdf64(r); return RDV_STORED;
-    case EMP_VAL_CHOICE: *c_out = rd32(r);  return RDV_STORED;
+    case EMP_VAL_BOOL:   *b_out = rd8(r);  return RDV_STORED;
+    case EMP_VAL_CHOICE: *c_out = rd32(r); return RDV_STORED;
+
+    case EMP_VAL_NUMBER: {
+        double d = rdf64(r);
+        if (!finite_f64(d)) {
+            emp_diag(EMP_SEV_WARN, EMP_DIAG_NON_FINITE, 0, "non-finite f64 substituted with 0");
+            d = 0.0;
+            return RDV_NONFINITE;
+        }
+        *n_out = d;
+        return RDV_STORED;
+    }
 
     case EMP_VAL_TEXT: {
         /* A String. Skipped rather than pooled: nothing on this panel renders a text value, and
@@ -149,6 +178,8 @@ static int rd_value(rd_t *r, uint8_t tag, uint8_t *b_out, double *n_out, uint32_
         uint16_t n = rd16(r);
         if (!rd_avail(r, n)) { r->bad = 1; return RDV_UNDECODABLE; }
         r->off += n;
+        emp_diag(EMP_SEV_INFO, EMP_DIAG_UNKNOWN_VALUE_TAG, EMP_VAL_TEXT,
+                 "text values are not rendered");
         return RDV_SKIPPED;
     }
 
@@ -158,6 +189,8 @@ static int rd_value(rd_t *r, uint8_t tag, uint8_t *b_out, double *n_out, uint32_
         uint32_t bytes = (uint32_t)n * 4u;
         if (!rd_avail(r, bytes)) { r->bad = 1; return RDV_UNDECODABLE; }
         r->off += bytes;
+        emp_diag(EMP_SEV_INFO, EMP_DIAG_UNKNOWN_VALUE_TAG, EMP_VAL_COLOR,
+                 "colour values are not rendered yet");
         return RDV_SKIPPED;
     }
 
@@ -167,10 +200,14 @@ static int rd_value(rd_t *r, uint8_t tag, uint8_t *b_out, double *n_out, uint32_
             uint16_t n = rd16(r);
             if (!rd_avail(r, n)) { r->bad = 1; return RDV_UNDECODABLE; }
             r->off += n;
+            emp_diag(EMP_SEV_INFO, EMP_DIAG_UNKNOWN_VALUE_TAG, tag,
+                     "extension value tag stepped over");
             return RDV_SKIPPED;
         }
         /* 0x05-0x7F: reserved, and reserved tags carry no length. There is no way to find the
          * end of this value, so there is no honest way to continue reading the record. */
+        emp_diag(EMP_SEV_ERROR, EMP_DIAG_VALUE_UNDECODABLE, tag,
+                 "reserved value tag has no length");
         return RDV_UNDECODABLE;
     }
 }
@@ -185,8 +222,17 @@ static void wr16(wr_t *w, uint16_t v) { wr8(w, (uint8_t)v); wr8(w, (uint8_t)(v >
 static void wr32(wr_t *w, uint32_t v) { wr16(w, (uint16_t)v); wr16(w, (uint16_t)(v >> 16)); }
 static void wr64(wr_t *w, uint64_t v) { wr32(w, (uint32_t)v); wr32(w, (uint32_t)(v >> 32)); }
 
+/* The encode side of the same rule: a non-finite f64 MUST NOT go on the wire
+ * (docs/protocol.md 3.4). Refusing it here is what keeps round-trip equality total, which is
+ * the property the host's tests are built on -- a NaN that survived a round trip would not even
+ * compare equal to itself. */
 static void wrf64(wr_t *w, double d)
 {
+    if (!finite_f64(d)) {
+        emp_diag(EMP_SEV_ERROR, EMP_DIAG_NON_FINITE, 0, "refused to encode a non-finite f64");
+        d = 0.0;
+    }
+
     uint8_t b[8];
     memcpy(b, &d, 8);
     for (int i = 0; i < 8; i++) wr8(w, b[i]);
@@ -285,6 +331,8 @@ static void desc_begin(const uint8_t *msg, uint32_t len)
         /* Say so immediately rather than accepting fields until we run out. A host that knows
          * it asked for too much can send a smaller page; a host that discovers it halfway
          * through has already wasted the transfer. */
+        emp_diag(EMP_SEV_ERROR, EMP_DIAG_DESC_TOO_MANY_FIELDS, staging_expect,
+                 "descriptor larger than this device can hold");
         send_desc_request(EMP_REQ_TOO_MANY_FIELDS);
         staging_open = 0;
         return;
@@ -315,6 +363,8 @@ static void desc_field(const uint8_t *msg, uint32_t len)
     /* Indices MUST ascend by exactly one. A gap means a message was lost or reordered, and
      * silently filling the hole would produce a descriptor that looks complete and is wrong. */
     if (index != staging_next) {
+        emp_diag(EMP_SEV_ERROR, EMP_DIAG_DESC_SEQUENCE, staging_next,
+                 "descriptor field out of sequence");
         send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
         staging_open = 0;
         return;
@@ -344,23 +394,39 @@ static void desc_field(const uint8_t *msg, uint32_t len)
     case RDV_STORED:
         break;
     case RDV_SKIPPED:
-        /* A value we stepped over cleanly. Keep the field, drop the value: refusing the whole
-         * descriptor because one control used a tag from a newer host would take away every
-         * other knob as well. The tag is normalised so that everything downstream can assume
-         * value_tag is one of the three this device can actually render. */
+    case RDV_NONFINITE:
+        /* A value we stepped over cleanly, or one we read and refused. Keep the field, drop the
+         * value: refusing the whole descriptor because one control used a tag from a newer host
+         * would take away every other knob as well. The tag is normalised so that everything
+         * downstream can assume value_tag is one of the three this device can render, and the
+         * field is marked so the host can see WHICH control it lost rather than inferring it. */
         f->value_tag = EMP_VAL_NUMBER;
         f->number    = 0.0;
+        f->flags     = (uint8_t)(f->flags | EMP_FIELD_TRUNCATED);
         break;
     default:
         /* Undecodable: the reader is now at an unknown offset, so nothing after this point in
-         * the record means anything and the running CRC is over bytes we mis-split. */
+         * the record means anything and the running CRC is over bytes we mis-split. rd_value
+         * has already said which tag it was. */
         send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
         staging_open = 0;
         return;
     }
 
-    (void)rd_string(&r, &f->label_off, &f->label_len);
-    if (f->present & EMP_PRESENT_UNIT) (void)rd_string(&r, &f->unit_off, &f->unit_len);
+    if (!rd_string(&r, &f->label_off, &f->label_len)) {
+        /* The string pool is full. The field still loads and its knob still works; it simply
+         * has no name on screen. That is a degraded control rather than a missing one, which is
+         * the right trade -- but it is exactly the kind of degradation that must not be silent,
+         * because from the panel it is indistinguishable from a host that sent no label. */
+        f->flags = (uint8_t)(f->flags | EMP_FIELD_TRUNCATED);
+        emp_diag(EMP_SEV_WARN, EMP_DIAG_STRING_TRUNCATED, index, "label dropped: pool full");
+    }
+    if (f->present & EMP_PRESENT_UNIT) {
+        if (!rd_string(&r, &f->unit_off, &f->unit_len)) {
+            f->flags = (uint8_t)(f->flags | EMP_FIELD_TRUNCATED);
+            emp_diag(EMP_SEV_WARN, EMP_DIAG_STRING_TRUNCATED, index, "unit dropped: pool full");
+        }
+    }
 
     /* Choice option labels, per the field record's order in docs/protocol.md 3.4: they follow
      * `unit`. These used to be dropped on the floor, which made every Choice field display its
@@ -377,12 +443,20 @@ static void desc_field(const uint8_t *msg, uint32_t len)
             uint16_t off = 0, ln = 0;
             if (!rd_string(&r, &off, &ln)) {
                 /* Ran out of pool or of message. Keep whatever landed; stop here. */
+                f->flags = (uint8_t)(f->flags | EMP_FIELD_TRUNCATED);
+                emp_diag(EMP_SEV_WARN, EMP_DIAG_STRING_TRUNCATED, index,
+                         "choice label dropped: pool full");
                 if (r.bad) break;
             }
             if (a->choices_used < SURF_MAX_CHOICES) {
                 a->choices[a->choices_used].off = off;
                 a->choices[a->choices_used].len = ln;
                 a->choices_used++;
+            } else {
+                /* The knob will show "3" where the host said "Sawtooth". Worth saying so. */
+                f->flags = (uint8_t)(f->flags | EMP_FIELD_TRUNCATED);
+                emp_diag(EMP_SEV_WARN, EMP_DIAG_CHOICES_EXHAUSTED, index,
+                         "choice labels dropped: table full");
             }
         }
     }
@@ -397,9 +471,11 @@ static void desc_field(const uint8_t *msg, uint32_t len)
         case RDV_STORED:
             break;
         case RDV_SKIPPED:
+        case RDV_NONFINITE:
             /* Drop the default rather than the field: losing Reset on one control is a far
              * smaller harm than refusing the descriptor. */
             f->present = (uint16_t)(f->present & ~EMP_PRESENT_DEFAULT);
+            f->flags   = (uint8_t)(f->flags | EMP_FIELD_TRUNCATED);
             break;
         default:
             send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
@@ -409,6 +485,7 @@ static void desc_field(const uint8_t *msg, uint32_t len)
     }
 
     if (r.bad) {
+        emp_diag(EMP_SEV_ERROR, EMP_DIAG_DESC_SEQUENCE, index, "descriptor field truncated");
         send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
         staging_open = 0;
         return;
@@ -432,12 +509,16 @@ static void desc_end(const uint8_t *msg, uint32_t len)
     staging_open = 0;
 
     if (count != staging_next || revision != staging_revision) {
+        emp_diag(EMP_SEV_ERROR, EMP_DIAG_DESC_SEQUENCE, staging_next,
+                 "descriptor ended with a count or revision we did not build");
         send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
         return;
     }
     if ((~staging_crc) != crc) {
         /* The transfer arrived complete and wrong. Without this check that is indistinguishable
          * from arriving correct, which is the failure the old integration could not see. */
+        emp_diag(EMP_SEV_ERROR, EMP_DIAG_DESC_CRC, count,
+                 "descriptor arrived complete and wrong");
         send_desc_request(EMP_REQ_CRC_MISMATCH);
         return;
     }
@@ -476,6 +557,8 @@ static void handle_values(const uint8_t *msg, uint32_t len)
 
     /* The revision gate. 0 means "unstamped", accepted only because legacy fixtures use it. */
     if (revision != 0 && revision != LIVE->revision) {
+        emp_diag(EMP_SEV_WARN, EMP_DIAG_REVISION_UNKNOWN, (uint32_t)revision,
+                 "values for a descriptor this device does not hold");
         send_desc_request(EMP_REQ_REVISION_UNKNOWN);
         return;
     }
@@ -495,7 +578,12 @@ static void handle_values(const uint8_t *msg, uint32_t len)
         int got = rd_value(&r, tag, &boolean, &number, &choice);
         if (got == RDV_UNDECODABLE) break;
         if (r.bad) break;
-        if (got == RDV_SKIPPED) continue;
+
+        /* A refused value leaves the control showing the last good one. Substituting zero, as
+         * the encode rule does for a fresh descriptor, would make a knob jump to the bottom of
+         * its range because of a host-side arithmetic mistake -- on a controller driving
+         * something audible, that is the worse of the two failures. */
+        if (got == RDV_SKIPPED || got == RDV_NONFINITE) continue;
 
         uint16_t idx;
         if (!index_of_id(id, &idx)) continue;
@@ -575,6 +663,16 @@ void surf_set_number_cause(uint16_t index, double v, uint8_t cause)
     if (index >= LIVE->field_count) return;
     surf_field_t *f = &LIVE->fields[index];
     if (f->kind == EMP_KIND_READONLY) return;      /* a read-only field is not ours to change */
+
+    /* Nothing on the device should be able to produce this, but the arithmetic that reaches
+     * here runs through the digit editor and a host-supplied min/max/step -- a step of zero and
+     * a scale of infinity are both things a host can legitimately declare. Refusing at the door
+     * keeps the NaN out of the stored value, not merely off the wire. */
+    if (!finite_f64(v)) {
+        emp_diag(EMP_SEV_ERROR, EMP_DIAG_NON_FINITE, index, "refused a non-finite edit");
+        return;
+    }
+
     f->number    = v;
     f->value_tag = EMP_VAL_NUMBER;
     send_edit(index, cause);

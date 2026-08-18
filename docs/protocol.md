@@ -164,6 +164,43 @@ from a document.
 turns it into `snapshot.log`, `error_count` and `SurfaceLink::detail`. Only a transport
 failure changes phase.
 
+**`DIAG` payload**: `severity` u8 (`0` info, `1` warn, `2` error), `code` u16, `context` u32,
+`count` u32, `detail` String.
+
+`count` is what makes the obligations elsewhere in this document affordable. Several of them —
+an uncovered codepoint, a dropped label — are raised per glyph per repaint, and one message per
+occurrence would turn a diagnostic into a denial of service against the link it is reporting on.
+A sender therefore holds one slot per distinct `code` and emits the accumulated `count` when it
+flushes; `context` and `detail` come from the first occurrence in that batch. A receiver must
+treat `count` as "this happened *n* times", not as a repeat of one event.
+
+`context` is code-specific and always a number, never text, so the device never formats a
+string: the field index for a truncated label, the tag for an unknown value tag,
+`(channel << 8) | opcode` for an unknown opcode, the codepoint for a missing glyph.
+
+| code | meaning |
+|---|---|
+| `1` | `E_STRING_TRUNCATED` — string pool exhausted; the field keeps its knob and loses its name |
+| `2` | `E_NON_FINITE` — NaN or infinity refused, on decode or encode |
+| `3` | `E_UNKNOWN_VALUE_TAG` — stepped over by its declared length |
+| `4` | `E_VALUE_UNDECODABLE` — reserved tag, no length; the record was abandoned |
+| `5` | `E_CHOICES_EXHAUSTED` — option labels dropped; the knob shows indices |
+| `6` | `E_DESC_TOO_MANY_FIELDS` |
+| `7` | `E_DESC_SEQUENCE` |
+| `8` | `E_DESC_CRC` |
+| `9` | `E_REVISION_UNKNOWN` |
+| `10` | `E_FRAGMENT_UNEXPECTED` |
+| `11` | `E_REASSEMBLY_TIMEOUT` |
+| `12` | `E_UNKNOWN_OPCODE` |
+| `13` | `E_TX_DROPPED` |
+| `14` | `E_GLYPH_MISSING` |
+| `15` | `E_DIAG_OVERFLOW` — diagnostics lost because every slot was in use. Reported rather than dropped silently, since dropping silently is the failure this whole message exists to end. |
+
+A device MUST NOT send `DIAG` from inside a decoder. Framing an outbound message part-way
+through an inbound one means building it from state the inbound parse is still walking, and on
+a device that streams unframed data (see `TRANSPORT`) it can also land diagnostics in the middle
+of an image. Raise, then flush from the service loop.
+
 ### 3.2 Channel 1 — SURFACE (host → device)
 
 `0x20 DESC_BEGIN` · `0x21 DESC_FIELD` · `0x22 DESC_END` · `0x23 DESC_ABORT` ·

@@ -25,6 +25,7 @@
 #include "usb_fs.h"
 #include "session.h"
 #include "surface.h"
+#include "diag.h"
 
 /* Bulk endpoints, so the bulk MTU. Both are 64-byte endpoints on this full-speed port; the MTU
  * is the payload we are willing to put in one fragment, not the packet size. */
@@ -272,6 +273,7 @@ void emp_session_init(uint32_t session_id)
 {
     memset(&stats, 0, sizeof(stats));
     emp_reasm_init(&reasm);
+    emp_diag_reset();
     surf_init();
     stats.session_id = session_id;
     rx_have = 0;
@@ -295,6 +297,13 @@ void emp_session_mute(int on) { muted = on ? 1 : 0; }
 void emp_session_poll(uint32_t now_ms)
 {
     if (muted) return;
+
+    /* Flush diagnostics here rather than where they are raised: this is the one place that is
+     * outside every decoder AND already knows not to talk during a raw pixel stream. Flushing
+     * unconditionally, even before a host has been seen, is deliberate -- the writes go nowhere
+     * and the slots clear, so a host that attaches later gets what is happening NOW instead of
+     * a backlog from a link it was not part of. */
+    emp_diag_tick();
 
     if (!boot_ms) boot_ms = now_ms;
 

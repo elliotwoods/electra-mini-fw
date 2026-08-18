@@ -107,6 +107,7 @@ add_executable(app
     src/app/history.c
     src/app/font_data.c
     src/app/text.c
+    src/proto/diag.c
     src/proto/frame.c
     src/proto/session.c
     src/proto/surface.c
