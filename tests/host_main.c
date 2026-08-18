@@ -12,6 +12,7 @@ typedef void (*emp_report_fn)(const char *name, int passed);
 int emp_run_selftests(emp_report_fn report);
 int ui_run_selftests(emp_report_fn report);
 int desc_run_selftests(emp_report_fn report);
+int txq_run_selftests(emp_report_fn report);
 
 static void report(const char *name, int passed)
 {
@@ -22,6 +23,12 @@ int main(void)
 {
     printf("EMP/1 codec tests (host)\n");
     int failures = emp_run_selftests(report);
+
+    /* The outbound queues. Their failure mode is silence: a queue that coalesces wrongly
+     * delivers a knob to the wrong place and reports nothing, and the only witness is a hand
+     * that moved further than the value did. */
+    printf("\ntransmit queue tests (host)\n");
+    failures += txq_run_selftests(report);
 
     /* Descriptor transfer, which is the only path by which the device learns what its knobs
      * mean. Its failure cases are invisible from the panel: a descriptor that fails to load

@@ -26,6 +26,7 @@
 #include "session.h"
 #include "surface.h"
 #include "diag.h"
+#include "txq.h"
 
 /* What this device can RECEIVE in one fragment. Bulk endpoints, so the bulk MTU; both are
  * 64-byte endpoints on this full-speed port, and the MTU is the payload we are willing to put
@@ -139,28 +140,84 @@ static void send_message(uint8_t channel, uint8_t opcode, const uint8_t *payload
 static uint8_t tx_buf[EMP_HEADER_BYTES + SESSION_MTU + EMP_PREFIX_BYTES];
 static uint16_t tx_seq;
 
-/* Exposed so the surface layer can send without owning framing or the endpoint. Policy lives
- * in surface.c, transport lives here, and neither reaches into the other. */
-void emp_send(uint8_t channel, uint8_t opcode, const uint8_t *payload, uint32_t len)
+/* ---------------------------------------------------------------- transmit
+ *
+ * The queueing and coalescing rules live in txq.c, which knows nothing about USB or framing --
+ * see the header there for why each queue exists. This is the part that cannot be tested off
+ * the device: turning a queued message into fragments and pushing them at the endpoint.
+ */
+
+static txq_t txq;
+
+/* A message part-way out of the door. usb_write() takes what fits and no more, so a fragment
+ * stream has to survive being handed over in pieces -- which it does, because the receiving
+ * side is byte-oriented and payload_len is authoritative. Framing happens once; writing may
+ * take several visits, and neither ever blocks. */
+static uint32_t tx_pending_len, tx_pending_sent;
+
+static int tx_flush_pending(void)
 {
-    send_message(channel, opcode, payload, len);
+    while (tx_pending_sent < tx_pending_len) {
+        uint32_t n = usb_write(tx_buf + tx_pending_sent, tx_pending_len - tx_pending_sent);
+        if (!n) return 0;                       /* full; try again next visit, never spin */
+        tx_pending_sent += n;
+    }
+    if (tx_pending_len) {
+        tx_pending_len = tx_pending_sent = 0;
+        stats.tx_fragments++;
+    }
+    return 1;
 }
 
-static void send_message(uint8_t channel, uint8_t opcode, const uint8_t *payload, uint32_t len)
+static int tx_emit(uint8_t channel, uint8_t opcode, const uint8_t *payload, uint32_t len,
+                   void *ctx)
 {
+    (void)ctx;
+
+    /* Anything already framed goes first, or fragments would arrive interleaved with the
+     * message that displaced them -- which rule F4 forbids for exactly this reason. */
+    if (!tx_flush_pending()) return 0;
+
     emp_writer_t w;
     emp_writer_init(&w, tx_buf, sizeof(tx_buf), tx_mtu);
     w.seq = tx_seq;
 
     if (emp_write_message(&w, channel, opcode, payload, len) != EMP_OK) {
+        /* Unframeable, so it will never become frameable. Dropping it is the only alternative
+         * to blocking the queue behind it forever. */
         stats.tx_dropped++;
-        return;
+        return 1;
     }
     tx_seq = w.seq;
 
-    usb_write_block(tx_buf, w.used);
-    stats.tx_fragments++;
+    tx_pending_len  = w.used;
+    tx_pending_sent = 0;
     stats.tx_messages++;
+
+    /* Always accepted once framed, whether or not it all fits right now: the queue has handed
+     * this message over, and what is left of it drains from tx_pending on the next visit. */
+    (void)tx_flush_pending();
+    return 1;
+}
+
+static void tx_drop(uint8_t channel, uint8_t opcode, const char *why, void *ctx)
+{
+    (void)channel;
+    (void)ctx;
+    stats.tx_dropped++;
+    emp_diag(EMP_SEV_WARN, EMP_DIAG_TX_DROPPED, opcode, why);
+}
+
+/* Exposed so the surface layer can send without owning framing or the endpoint. Policy lives
+ * in surface.c, transport lives here, and neither reaches into the other. */
+void emp_send(uint8_t channel, uint8_t opcode, const uint8_t *payload, uint32_t len)
+{
+    txq_push(&txq, channel, opcode, payload, len);
+}
+
+static void send_message(uint8_t channel, uint8_t opcode, const uint8_t *payload, uint32_t len)
+{
+    emp_send(channel, opcode, payload, len);
 }
 
 static void send_ready(void)
@@ -416,6 +473,7 @@ void emp_session_init(uint32_t session_id)
     render_us_max = 0;
     reasm_last_len = 0;
     reasm_idle_ms = 0;
+    txq_init(&txq, tx_emit, tx_drop, 0);
     next_ready_ms = 0;
     next_heartbeat_ms = 0;
 }
@@ -444,6 +502,17 @@ void emp_session_poll(uint32_t now_ms)
 
     last_now_ms = now_ms;
 
+    /* Nothing queued survives losing the host. Input events describe a panel state that will
+     * have moved on by the time anyone reconnects, and delivering them late is worse than not
+     * delivering them: a knob position from before the cable was pulled would arrive as a fresh
+     * edit and overwrite whatever the host has since decided. Diagnostics go the same way, for
+     * the same reason -- they are about a link that no longer exists. */
+    if (!usb_configured()) {
+        txq_clear(&txq);
+        emp_diag_drop_pending();
+        return;
+    }
+
     /* A reassembly that has stopped arriving must not wedge the receiver.
      *
      * Judged by PROGRESS, not by age: a large descriptor at a small MTU legitimately takes a
@@ -470,10 +539,7 @@ void emp_session_poll(uint32_t now_ms)
     }
 
     /* Flush diagnostics here rather than where they are raised: this is the one place that is
-     * outside every decoder AND already knows not to talk during a raw pixel stream. Flushing
-     * unconditionally, even before a host has been seen, is deliberate -- the writes go nowhere
-     * and the slots clear, so a host that attaches later gets what is happening NOW instead of
-     * a backlog from a link it was not part of. */
+     * outside every decoder AND already knows not to talk during a raw pixel stream. */
     emp_diag_tick();
 
     if (!boot_ms) boot_ms = now_ms;
@@ -492,13 +558,14 @@ void emp_session_poll(uint32_t now_ms)
             next_ready_ms = now_ms + (age < 5000u ? READY_REPEAT_MS : READY_BACKOFF_MS);
             send_ready();
         }
-        return;
-    }
-
-    if ((int32_t)(now_ms - next_heartbeat_ms) >= 0) {
+    } else if ((int32_t)(now_ms - next_heartbeat_ms) >= 0) {
         next_heartbeat_ms = now_ms + HEARTBEAT_MS;
         send_heartbeat(now_ms);
     }
+
+    /* Last, so everything raised above goes out on this visit rather than the next one. This is
+     * the ONLY place that writes to the endpoint on the protocol's behalf. */
+    (void)txq_pump(&txq);
 }
 
 const emp_stats_t *emp_session_stats(void)

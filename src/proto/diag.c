@@ -102,6 +102,17 @@ void emp_diag_tick(void)
     }
 }
 
+/* Throw away what is pending without sending it, keeping the running totals.
+ *
+ * For losing the host: the diagnostics in flight describe a link that no longer exists, and the
+ * counts are still worth having, since "this device has complained 400 times" remains true
+ * across a reconnect. */
+void emp_diag_drop_pending(void)
+{
+    memset(slots, 0, sizeof(slots));
+    overflowed = 0;
+}
+
 void emp_diag_reset(void)
 {
     memset(slots, 0, sizeof(slots));

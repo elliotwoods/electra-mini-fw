@@ -61,6 +61,10 @@ void emp_diag(uint8_t severity, uint16_t code, uint32_t context, const char *det
 /* Send whatever has accumulated. Call from the service loop. */
 void emp_diag_tick(void);
 
+/* Throw away what is pending without sending it, keeping the running totals. For losing the
+ * host: those diagnostics are about a link that no longer exists. */
+void emp_diag_drop_pending(void);
+
 /* Drop everything pending without sending, for tests and for a session reset -- diagnostics
  * from before a host attached are not that host's business. */
 void emp_diag_reset(void);

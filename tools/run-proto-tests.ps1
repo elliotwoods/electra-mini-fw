@@ -19,6 +19,7 @@ New-Item -ItemType Directory -Force -Path $out | Out-Null
 $sources = @(
     (Join-Path $root 'src\proto\diag.c'),
     (Join-Path $root 'src\proto\frame.c'),
+    (Join-Path $root 'src\proto\txq.c'),
     (Join-Path $root 'src\proto\surface.c'),
     (Join-Path $root 'src\app\ui_state.c'),
     (Join-Path $root 'src\app\history.c'),
@@ -26,6 +27,7 @@ $sources = @(
     (Join-Path $root 'tests\proto_tests.c'),
     (Join-Path $root 'tests\ui_state_tests.c'),
     (Join-Path $root 'tests\desc_tests.c'),
+    (Join-Path $root 'tests\txq_tests.c'),
     (Join-Path $root 'tests\host_main.c')
 ) -join ' '
 
