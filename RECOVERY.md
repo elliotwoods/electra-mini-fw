@@ -2,11 +2,13 @@
 
 Read this before flashing anything. It is the procedure that makes every other mistake reversible.
 
-The device is an **Electra One Mini** — a Renesas Synergy S7G2. Its bootloader lives at
-`0x00000000`–`0x000FFFFF` and our application at `0x00100000`. The bootloader has its own
-screen, USB stack, SD-card access and S-record flasher, none of it borrowed from the
-application. That is why a completely dead application is still recoverable: getting into the
-bootloader does not depend on any of our code being correct.
+The device is an **Electra One Mini** — a Renesas Synergy S7G2. Electra's own bootloader lives
+at `0x00000000`–`0x000FFFFF`; **our** bootloader sits at `0x00100000`, in the slot that used to
+hold Electra's application, and our application sits above it at `0x00120000`.
+
+Electra's bootloader has its own screen, USB stack, SD-card access and S-record flasher, none of
+it borrowed from anything of ours. That is why a completely dead image is still recoverable:
+getting into it does not depend on any of our code being correct.
 
 ---
 
@@ -45,8 +47,14 @@ So the tier below always rescues the tier above.
 
 | File | What it flashes | Written by |
 |---|---|---|
-| `/boot/update.srec` | the **application** — ours | the bootloader |
-| `/boot/blupdate.srec` | the **bootloader** itself | the application |
+| `/boot/update.srec` | whatever occupies `0x00100000` — since the split, **our bootloader** | Electra's bootloader |
+| `/boot/blupdate.srec` | **Electra's own bootloader** | the application |
+
+Read that first row carefully. Electra's bootloader always programs `update.srec` to one fixed
+address, and that address used to hold the stock application. It now holds ours. So staging an
+*application* image there overwrites our bootloader with something that is not a bootloader —
+recoverable, but only by another card cycle, and confusing while it lasts. Our application is
+flashed over USB and never appears on the card at all.
 
 The two halves flash each other. Replacing the application is always reversible because the
 bootloader survives to do it. Replacing the bootloader is the one operation with nothing behind
@@ -91,12 +99,13 @@ python tools\diag\fat32.py list
 # full backup
 python tools\diag\fat32.py copy <backup-directory>
 
-# stage a firmware image (gate it first)
-node tools\mkimage\check-image.js build\app.srec
-python tools\deploy\putfile.py build\app.srec /BOOT/update.srec
+# stage OUR BOOTLOADER (gate it first). This slot is 0x00100000 -- see the table above.
+# The application is flashed over USB with tools\deploy\flash_usb.py and never goes here.
+node tools\mkimage\check-image.js build\bootloader.srec
+python tools\deploy\putfile.py build\bootloader.srec /BOOT/update.srec
 
 # confirm it landed byte-identical
-python tools\deploy\putfile.py --verify build\app.srec /BOOT/update.srec
+python tools\deploy\putfile.py --verify build\bootloader.srec /BOOT/update.srec
 
 # undo the last write, if needed
 python tools\deploy\putfile.py --undo <undo-*.bin>

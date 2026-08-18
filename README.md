@@ -76,4 +76,11 @@ Nothing else in this repository is derived from third-party material.
 
 ## Status
 
+M0-M5 complete and verified on hardware: our own image boots, drives the panel, reads every
+input, speaks EMP/1 over USB, recovers itself from crashes, and runs a native control-surface UI.
+
+Outstanding: standalone boot without a host (the health flag lives in SRAM), the host-side
+provider crate in `av-frameworks`, and the protocol conformance gaps recorded in
+`docs/protocol.md`.
+
 Pre-M0. Nothing has been flashed. See the project plan for milestones and gates.
