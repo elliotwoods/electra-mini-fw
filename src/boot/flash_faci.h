@@ -34,6 +34,42 @@
 #define FLASH_ERR_VERIFY     -5   /* read-back did not match */
 #define FLASH_ERR_UNSUPPORTED -6  /* driver not implemented yet */
 
+/* --- the record block -------------------------------------------------------------------
+ *
+ * One 32 KB erase block inside OUR bootloader region, reserved for state that has to survive
+ * losing power. Everything below 0x00120000 belongs to us: our bootloader occupies the first
+ * 10 KB and the rest is dead remnants of the stock application that used to live at this
+ * address, which nothing reads and nothing executes.
+ *
+ * Why not the data flash, which is what a persistent record is nominally for: it is already
+ * fully in use. A dump of all 64 KB reads about 54% non-erased, uniformly, with the repeating
+ * structure of a wear-levelled E2 emulation area -- and its first kilobyte holds the stock
+ * firmware's USB descriptor strings ("Electra Controller", "Electra Port 1"). Claiming it would
+ * break the stock firmware's identity if this device were ever reverted, which is exactly the
+ * kind of one-way door the recovery design exists to avoid.
+ *
+ * Code flash endures far fewer erase cycles than data flash -- of order a thousand rather than
+ * a hundred thousand -- so this block is written as an APPEND-ONLY LOG rather than rewritten in
+ * place: 128 entries of one program unit each, and the block is erased only when it fills. That
+ * turns a thousand erases into a hundred thousand writes, which is far past anything a boot
+ * record will ever need.
+ *
+ * The address is deliberately the LAST block of the region, as far from the running bootloader
+ * as the region allows. Erasing the block the bootloader is executing from would be fatal and
+ * unrecoverable over USB. */
+#define FLASH_RECORD_BASE   0x00118000UL
+#define FLASH_RECORD_BYTES  FLASH_ERASE_BLOCK
+#define FLASH_RECORD_SLOTS  (FLASH_RECORD_BYTES / FLASH_WRITE_UNIT)   /* 128 */
+
+/* Write one program unit into the record block. Separately guarded from the application-region
+ * entry points rather than sharing a widened range check: the guard on flash_write_unit is the
+ * last thing standing between a bad offset and a device that needs physical recovery, and
+ * loosening it to admit a second region would weaken it for the first. */
+int flash_record_write(uint32_t addr, const uint8_t *data);
+
+/* Erase the record block. Refuses if the address arithmetic would touch anything else. */
+int flash_record_erase(void);
+
 /* Erase the whole application region. Slow (seconds); the caller should expect that. */
 int flash_erase_app(void);
 

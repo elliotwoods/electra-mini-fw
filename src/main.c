@@ -18,6 +18,9 @@
 #include "usb_fs.h"
 #include "console.h"
 #include "boot_handshake.h"
+#include "persist.h"
+#include "flash_faci.h"
+#include "app_launch.h"
 #include "app_launch.h"
 #include "riic.h"
 #include "qt2120.h"
@@ -1837,10 +1840,85 @@ static void cmd_tcap(const char *a)
     console_write("done");
 }
 
+
+/* pers [p|l|e|c] -- exercise the persistent boot record.
+ *
+ * This is the application's half of the standalone-boot work, and it is deliberately proven
+ * from here BEFORE the bootloader learns to read the record. A mistake in this code costs a
+ * reflash over USB; the same mistake in the bootloader costs an SD-card cycle with the case
+ * open as the fallback. So the flash writes are exercised where they are cheap, against the
+ * same block and the same driver the bootloader will use.
+ *
+ *   pers      show the stored record and the image it would be compared against
+ *   pers c    time the image CRC, since the bootloader will pay this on every boot
+ *   pers l    note a launch attempt
+ *   pers p    mark the running image proven
+ *   pers e    erase the record block
+ */
+static uint32_t app_image_crc(uint32_t *len_out)
+{
+    /* Over the image's OWN extent, from the linker, not over the whole region.
+     *
+     * Checksumming all 2.9 MB was measured at 1194 ms -- far too slow for something the
+     * bootloader pays on every boot. The real image is an order of magnitude smaller, and an
+     * image knows its own length exactly even though the bootloader does not. So the app
+     * computes both and stores them together; the bootloader then checksums over the length
+     * the record gives it, and a length that no longer matches is itself the signal that this
+     * is a different image. */
+    extern uint32_t __image_end;
+    uint32_t len = (uint32_t)&__image_end - APP_BASE_ADDR;
+    if (len_out) *len_out = len;
+    return flash_crc32(APP_BASE_ADDR, len);
+}
+
+static void cmd_pers(const char *a)
+{
+    persist_rec_t r;
+
+    if (*a == 'c') {
+        uint32_t t0 = bsp_millis();
+        uint32_t len = 0;
+        uint32_t crc = app_image_crc(&len);
+        console_hex("crc", crc);
+        console_hex("over_bytes", len);
+        console_hex("took_ms", bsp_millis() - t0);
+        return;
+    }
+
+    if (*a == 'e') {
+        console_hex("erase rc", (uint32_t)flash_record_erase());
+        return;
+    }
+
+    if (*a == 'l' || *a == 'p') {
+        uint32_t len = 0;
+        uint32_t crc = app_image_crc(&len);
+        int rc = (*a == 'l') ? persist_note_launch(crc, len)
+                             : persist_mark_proven(crc, len);
+        console_hex("rc", (uint32_t)rc);
+    }
+
+    uint32_t len = 0;
+    uint32_t crc = app_image_crc(&len);
+    console_hex("image_crc", crc);
+
+    if (!persist_read(&r)) {
+        console_write("no record stored");
+        return;
+    }
+    console_hex("rec_crc", r.app_crc);
+    console_hex("rec_len", r.app_len);
+    console_hex("launches", r.launches);
+    console_hex("proven", r.proven);
+    console_write(r.app_crc == crc ? "record MATCHES this image"
+                                   : "record is for a DIFFERENT image");
+}
+
 static const console_cmd_t app_cmds[] = {
     { "help", "list commands",                       console_help },
     { "id",   "identify + startup status",           cmd_id       },
     { "boot", "reboot into the bootloader (update)", cmd_boot     },
+    { "pers", "pers [c|l|p|e]  persistent boot record", cmd_pers },
     { "rst",  "bare warm reset, as the RESET button", cmd_rst      },
     { "lcd",  "on|off|r|g|b|t",                      cmd_lcd      },
     { "type", "draw a type specimen",                cmd_type     },

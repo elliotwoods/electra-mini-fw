@@ -87,7 +87,10 @@ SECTIONS
 
     /* Code that must not execute from flash while flash is being programmed. The FACI
        cannot serve read requests during an erase or write, so anything on that path is
-       copied to RAM at startup and run from there. Empty in the application image. */
+       copied to RAM at startup and run from there.
+
+       No longer empty in the application image: the app now writes the persistent boot
+       record, so it links the same flash driver the bootloader uses. */
     .ramfunc :
     {
         . = ALIGN(4);
@@ -97,6 +100,15 @@ SECTIONS
         __ramfunc_end = .;
     } > RAM AT > FLASH
     __ramfunc_load = LOADADDR(.ramfunc);
+
+    /* Where the image actually ends in FLASH, as opposed to where its sections end in RAM.
+       .ramfunc is the last thing loaded, so this is the high-water mark of everything the
+       flasher wrote.
+
+       It exists so an image can checksum ITSELF over exactly its own extent. Checksumming the
+       whole 2.9 MB region instead was measured at 1194 ms, which is far too slow to pay on
+       every boot; over a real 220 KB image the same work is about a tenth of that. */
+    __image_end = __ramfunc_load + (__ramfunc_end - __ramfunc_start);
 
     /* ORDER MATTERS: the stack is placed BEFORE .bss, deliberately.
 

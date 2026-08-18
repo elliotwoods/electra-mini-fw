@@ -75,6 +75,7 @@ add_executable(bootloader
     src/boot/app_launch.c
     src/boot/usb_service.c
     src/boot/flash_faci.c
+    src/common/persist.c
     src/hal/usb_fs.c
     src/common/console.c
 )
@@ -90,6 +91,8 @@ add_executable(app
     src/hal/inputs.c
     src/hal/usb_fs.c
     src/common/console.c
+    src/common/persist.c
+    src/boot/flash_faci.c
     src/boot/app_launch.c
     src/app/ui.c
     src/app/ui_state.c

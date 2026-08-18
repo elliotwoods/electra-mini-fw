@@ -184,6 +184,63 @@ static void faci_setup(void)
     REG16(FPCKAR) = (uint16_t)(0x1E00U | (F_FCLK_HZ / 1000000UL));   /* 0x1E3C */
 }
 
+/* Its own guard, deliberately not a widened range_ok(). See the header. */
+static int record_range_ok(uint32_t addr, uint32_t len)
+{
+    if (addr < FLASH_RECORD_BASE) return 0;
+    if (addr + len < addr) return 0;
+    if (addr + len > FLASH_RECORD_BASE + FLASH_RECORD_BYTES) return 0;
+    return 1;
+}
+
+int flash_record_write(uint32_t addr, const uint8_t *data)
+{
+    if (!record_range_ok(addr, FLASH_WRITE_UNIT)) return FLASH_ERR_RANGE;
+    if (addr % FLASH_WRITE_UNIT)                  return FLASH_ERR_ALIGN;
+
+    faci_setup();
+
+    uint32_t primask;
+    __asm__ volatile("mrs %0, primask" : "=r"(primask));
+    __asm__ volatile("cpsid i" ::: "memory");
+
+    int rc = pe_enter();
+    if (rc == FLASH_OK) rc = write_unit_ram(addr, data);
+    int rc2 = pe_exit();
+
+    __asm__ volatile("msr primask, %0" :: "r"(primask) : "memory");
+    if (rc != FLASH_OK) return rc;
+    if (rc2 != FLASH_OK) return rc2;
+
+    for (uint32_t i = 0; i < FLASH_WRITE_UNIT; i++) {
+        if (REG8(addr + i) != data[i]) return FLASH_ERR_VERIFY;
+    }
+    return FLASH_OK;
+}
+
+int flash_record_erase(void)
+{
+    /* Belt and braces on a constant, because the cost of this one being wrong is a device that
+     * cannot be recovered over USB. The block must sit inside our region, above the bootloader,
+     * and below the application. */
+    if (FLASH_RECORD_BASE % FLASH_ERASE_BLOCK)                       return FLASH_ERR_ALIGN;
+    if (FLASH_RECORD_BASE < 0x00108000UL)                            return FLASH_ERR_RANGE;
+    if (FLASH_RECORD_BASE + FLASH_RECORD_BYTES > APP_BASE_ADDR)      return FLASH_ERR_RANGE;
+
+    faci_setup();
+
+    uint32_t primask;
+    __asm__ volatile("mrs %0, primask" : "=r"(primask));
+    __asm__ volatile("cpsid i" ::: "memory");
+
+    int rc = pe_enter();
+    if (rc == FLASH_OK) rc = erase_block_ram(FLASH_RECORD_BASE);
+    int rc2 = pe_exit();
+
+    __asm__ volatile("msr primask, %0" :: "r"(primask) : "memory");
+    return rc != FLASH_OK ? rc : rc2;
+}
+
 int flash_erase_app(void)
 {
     faci_setup();
