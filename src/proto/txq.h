@@ -50,8 +50,20 @@ typedef void (*txq_drop_fn)(uint8_t channel, uint8_t opcode, const char *why, vo
 #define TXQ_PAYLOAD_MAX     48u   /* the largest input message: EDIT carries revision + f64 */
 #define TXQ_COALESCE_SLOTS  16u   /* eight knobs, two coalescing opcodes each */
 #define TXQ_DISCRETE_DEPTH  32u   /* docs/protocol.md 4 names this depth */
-#define TXQ_CONTROL_SLOTS   4u
-#define TXQ_CONTROL_MAX     264u  /* READY is the big one: 44 fixed bytes plus three strings */
+/* Control messages vary from two bytes to a full MTU, so they live in a byte ring rather than
+ * in fixed slots.
+ *
+ * Fixed slots were tried and were wrong. Sized for READY -- 44 bytes plus three strings -- they
+ * silently swallowed every ECHO_REPLY above 264 bytes, which showed up on hardware as the
+ * device answering a 16-byte echo and ignoring a 512-byte one. A cap that quietly discards the
+ * larger half of a diagnostic is worse than no diagnostic, because the tool then reports a
+ * transport problem that does not exist.
+ *
+ * The ceiling is the protocol's, not ours: rule F1 says a channel-0 message must fit in one
+ * fragment, so no legal control message exceeds the MTU. The ring holds one of those plus
+ * several small ones. */
+#define TXQ_CONTROL_BYTES   2048u
+#define TXQ_CONTROL_HDR     3u    /* opcode u8 + len u16 */
 
 typedef struct {
     uint32_t stamp;               /* 0 = empty; otherwise enqueue order */
@@ -63,19 +75,19 @@ typedef struct {
 } txq_slot_t;
 
 typedef struct {
-    uint16_t len;
-    uint8_t  opcode;
-    uint8_t  payload[TXQ_CONTROL_MAX];
-} txq_control_t;
+    txq_slot_t coalesce[TXQ_COALESCE_SLOTS];
+    txq_slot_t discrete[TXQ_DISCRETE_DEPTH];
 
-typedef struct {
-    txq_slot_t    coalesce[TXQ_COALESCE_SLOTS];
-    txq_slot_t    discrete[TXQ_DISCRETE_DEPTH];
-    txq_control_t control[TXQ_CONTROL_SLOTS];
+    /* Length-prefixed control messages, oldest first. Not a circular ring: entries are consumed
+     * from the front and the remainder shuffles down. At a handful of messages per second that
+     * costs nothing, and it keeps the "does this fit" question a single subtraction rather than
+     * a wrap-aware one -- which is the kind of arithmetic that goes wrong once, late. */
+    uint8_t  control[TXQ_CONTROL_BYTES];
+    uint16_t control_used;
+    uint8_t  control_count;
 
     uint32_t stamp;
     uint8_t  discrete_head, discrete_count;
-    uint8_t  control_head, control_count;
 
     uint32_t dropped;             /* every drop, counted; reported on the wire as tx_dropped */
 

@@ -18,7 +18,8 @@ void txq_clear(txq_t *q)
     memset(q->coalesce, 0, sizeof(q->coalesce));
     memset(q->discrete, 0, sizeof(q->discrete));
     q->discrete_head = q->discrete_count = 0;
-    q->control_head  = q->control_count  = 0;
+    q->control_used = 0;
+    q->control_count = 0;
     q->stamp = 0;
 }
 
@@ -135,17 +136,22 @@ static void push_discrete(txq_t *q, uint8_t channel, uint8_t opcode,
 
 static void push_control(txq_t *q, uint8_t opcode, const uint8_t *payload, uint32_t len)
 {
-    if (q->control_count >= TXQ_CONTROL_SLOTS || len > TXQ_CONTROL_MAX) {
+    uint32_t need = TXQ_CONTROL_HDR + len;
+
+    if (need > TXQ_CONTROL_BYTES || q->control_used + need > TXQ_CONTROL_BYTES) {
         /* No drop callback here: the callback's whole purpose is to raise a DIAG, and a DIAG is
          * itself a control message -- reporting this failure would queue another copy of it. */
         q->dropped++;
         return;
     }
 
-    unsigned i = (q->control_head + q->control_count) % TXQ_CONTROL_SLOTS;
-    q->control[i].opcode = opcode;
-    q->control[i].len    = (uint16_t)len;
-    if (len) memcpy(q->control[i].payload, payload, len);
+    uint8_t *p = q->control + q->control_used;
+    p[0] = opcode;
+    p[1] = (uint8_t)len;
+    p[2] = (uint8_t)(len >> 8);
+    if (len) memcpy(p + TXQ_CONTROL_HDR, payload, len);
+
+    q->control_used = (uint16_t)(q->control_used + need);
     q->control_count++;
 }
 
@@ -185,9 +191,14 @@ unsigned txq_pump(txq_t *q)
         /* Control first, unconditionally. Rule F4 exists so a heartbeat cannot queue behind a
          * burst of knob movement. */
         if (q->control_count) {
-            txq_control_t *c = &q->control[q->control_head];
-            if (!q->emit(EMP_CH_CONTROL, c->opcode, c->payload, c->len, q->ctx)) return sent;
-            q->control_head = (uint8_t)((q->control_head + 1u) % TXQ_CONTROL_SLOTS);
+            const uint8_t *p = q->control;
+            uint16_t len = (uint16_t)(p[1] | (p[2] << 8));
+
+            if (!q->emit(EMP_CH_CONTROL, p[0], p + TXQ_CONTROL_HDR, len, q->ctx)) return sent;
+
+            uint16_t took = (uint16_t)(TXQ_CONTROL_HDR + len);
+            q->control_used = (uint16_t)(q->control_used - took);
+            if (q->control_used) memmove(q->control, q->control + took, q->control_used);
             q->control_count--;
             sent++;
             continue;

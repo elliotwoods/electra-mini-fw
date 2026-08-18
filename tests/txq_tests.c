@@ -376,6 +376,45 @@ static int test_clear_drops_the_backlog(void)
     return ok;
 }
 
+/* Control messages are not all small, and the queue must not decide which ones count.
+ *
+ * Found on hardware. The control queue was fixed slots sized for READY -- 44 bytes plus three
+ * strings -- and every ECHO_REPLY above that was silently discarded. The device answered a
+ * 16-byte echo and ignored a 512-byte one, which reads as a transport that breaks above some
+ * size: exactly the wrong diagnosis, produced by the diagnostic tool itself.
+ *
+ * The bound is the protocol's, not the queue's: rule F1 puts a control message inside one
+ * fragment, so the MTU is the real ceiling. */
+static int test_large_control_messages_survive(void)
+{
+    int ok = 1;
+    txq_t q;
+    static uint8_t big[1016];
+    begin(&q);
+
+    for (unsigned i = 0; i < sizeof(big); i++) big[i] = (uint8_t)(i * 31u + 7u);
+
+    txq_push(&q, EMP_CH_CONTROL, EMP_OP_ECHO_REPLY, big, sizeof(big));
+    CHECK(txq_depth(&q) == 1);
+    CHECK(q.dropped == 0);
+
+    /* And small ones still fit alongside it, in order. */
+    uint8_t small[4] = { 1, 2, 3, 4 };
+    txq_push(&q, EMP_CH_CONTROL, EMP_OP_HEARTBEAT, small, sizeof(small));
+
+    CHECK(txq_pump(&q) == 2);
+    CHECK(sent_count == 2);
+    CHECK(sent[0].opcode == EMP_OP_ECHO_REPLY);
+    CHECK(sent[1].opcode == EMP_OP_HEARTBEAT);
+
+    /* The fake transport only records the first TXQ_PAYLOAD_MAX bytes, so the head is what can
+     * be compared -- enough to catch a length or offset that slipped. */
+    CHECK(sent[0].len == TXQ_PAYLOAD_MAX);
+    CHECK(memcmp(sent[0].payload, big, TXQ_PAYLOAD_MAX) == 0);
+    CHECK(sent[1].len == 4 && sent[1].payload[3] == 4);
+    return ok;
+}
+
 /* ------------------------------------------------------------------ entry */
 
 int txq_run_selftests(txq_report_fn report)
@@ -393,5 +432,6 @@ int txq_run_selftests(txq_report_fn report)
     run("overflow is reported",     test_overflow_is_reported(),              report, &failures);
     run("knobs never overflow",     test_knobs_never_overflow(),              report, &failures);
     run("clear drops the backlog",  test_clear_drops_the_backlog(),           report, &failures);
+    run("large control survives", test_large_control_messages_survive(),    report, &failures);
     return failures;
 }

@@ -134,11 +134,21 @@ def parse_ready(p: bytes) -> dict:
     d["session_id"] = r.u32(p)
     d["capabilities"] = r.u32(p)
     d["max_message_rx"] = r.u32(p)
+    d["max_descriptor_bytes"] = r.u32(p)
     d["max_fields"] = r.u16(p)
     d["fields_per_page"] = r.u16(p)
     d["applied_revision"] = r.u64(p)
     fw = r.u32(p)
     d["firmware"] = "%d.%d.%d" % ((fw >> 16) & 0xFF, (fw >> 8) & 0xFF, fw & 0xFF)
+    d["build_number"] = r.u32(p)
+    r.u32(p)                       # reserved
+
+    # The fixed prefix ends here, and section 6 promises exactly this much stays stable across
+    # major versions. Asserting it is the only way the promise means anything: a device that
+    # quietly grew or shrank this would otherwise be discovered by a host misreading the strings.
+    if r.off != 44:
+        raise SystemExit("READY prefix is %d bytes, not the 44 the spec promises" % r.off)
+
     d["model"] = r.string(p)
     d["serial"] = r.string(p)
     d["build"] = r.string(p)
