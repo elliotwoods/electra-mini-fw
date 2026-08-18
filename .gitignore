@@ -1,0 +1,28 @@
+# Build output
+/build/
+/Debug/
+/Release/
+*.o
+*.d
+*.elf
+*.map
+*.lst
+
+# Generated images, and any vendor firmware image. Neither belongs in version control.
+*.srec
+*.mot
+!tools/mkimage/**/*.srec
+
+# e2 studio / Eclipse
+.metadata/
+.settings/
+*.launch
+RemoteSystemsTempFiles/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Python bytecode
+__pycache__/
+*.pyc
