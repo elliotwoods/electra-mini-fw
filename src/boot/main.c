@@ -25,8 +25,25 @@
 #include "bsp.h"
 #include "boot_handshake.h"
 #include "app_launch.h"
+#include "persist.h"
+#include "flash_faci.h"
 
 #define APP_FAULT_LIMIT   3
+
+/* Does a stored record vouch for the image actually in flash right now?
+ *
+ * Deliberately conservative in three ways, because this function is the only thing that can
+ * hand control to an unattended application. It requires a record; it requires the record to
+ * carry a plausible length; and it requires the checksum over that exact length to match. Any
+ * doubt falls through to the rules that need a host, which is the safe direction. */
+static int persist_trusts_image(void)
+{
+    persist_rec_t r;
+    if (!persist_read(&r)) return 0;
+    if (r.proven != PERSIST_PROVEN) return 0;
+    if (!r.app_len || r.app_len > APP_MAX_BYTES) return 0;
+    return flash_crc32(APP_BASE_ADDR, r.app_len) == r.app_crc;
+}
 
 /* How long a host gets to claim the device before we launch the application.
  *
@@ -94,7 +111,25 @@ int main(void)
     else if (h->app_faults >= APP_FAULT_LIMIT) {
         g_boot_reason = REASON_CRASH_LOOP;
     }
-    /* 4 — the application has never proven itself. Do NOT hand over: hold here and wait.
+    /* 4 — a PERSISTENT record vouches for exactly this image. Launch it, with no host.
+     *
+     * This is what lets the device be an instrument rather than a peripheral. Everything below
+     * depends on SRAM, which does not survive losing power, so before this existed a cold boot
+     * always fell through to case 5 and held forever: plug the device into a wall socket and it
+     * would sit in the bootloader.
+     *
+     * The record is keyed to the image's CRC and length, so it vouches for one specific build.
+     * A newly flashed image does not match and falls through to the rules below unchanged --
+     * which is the right answer, because flashing happens over USB and a host is by definition
+     * present to see it prove itself. From the next boot onward it starts on its own.
+     *
+     * Checksumming costs about 87 ms over a real image; the length comes from the record rather
+     * than being assumed, because checksumming the whole 2.9 MB region measured 1194 ms. */
+    else if (persist_trusts_image()) {
+        g_boot_reason = REASON_LAUNCHED;
+        app_launch();                         /* never returns */
+    }
+    /* 5 — the application has never proven itself. Do NOT hand over: hold here and wait.
      *
      * This is the rule that makes the device always reachable. An app that hangs before it
      * can report health is exactly the app we must be able to displace, and any scheme that
@@ -104,7 +139,7 @@ int main(void)
     else if (h->health != BOOT_HEALTHY) {
         g_boot_reason = REASON_UNPROVEN_APP;
     }
-    /* 5 — known-good app: brief window for a host to intervene, then launch. */
+    /* 6 — known-good app: brief window for a host to intervene, then launch. */
     else if (usb_wait_for_host(HOST_WINDOW_MS)) {
         g_boot_reason = REASON_HOST_CLAIMED;
     }
