@@ -223,10 +223,10 @@ def parse_pong(p: bytes) -> dict:
 class Link:
     def __init__(self, port=None):
         sys.path.insert(0, __file__.rsplit("\\", 1)[0])
-        from flash_usb import find_port
-        from rawcom import RawCom
-        self.port = find_port(port)
-        self.c = RawCom(self.port)
+        from link import open_app
+        dev = open_app(port)
+        self.port = getattr(dev, "path", getattr(dev, "port", "?"))
+        self.c = dev.c
         self.dec = Decoder()
         self.seq = 0
         time.sleep(0.2)

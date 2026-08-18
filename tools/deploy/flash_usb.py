@@ -6,14 +6,19 @@ Flash an application image over USB. No buttons, no cables, no card.
     python flash_usb.py --reboot                  # ask a running app to return to the bootloader
     python flash_usb.py --console                 # interactive terminal
 
-The device presents as a CDC-ACM COM port in both the bootloader and the application. The
-bootloader accepts erase/write/crc/run; the application accepts `boot`, which writes the
-handshake word and resets so we land back in the bootloader. Between the two, the whole
-edit-build-run cycle happens without touching the hardware.
+The two images no longer share a transport, and this tool spans both so that you do not have to
+think about it. The BOOTLOADER is CDC-ACM on a COM port and accepts erase/write/crc/run. The
+APPLICATION is vendor bulk behind WinUSB and accepts `boot`, which writes the handshake word and
+resets so we land back in the bootloader.
+
+So the ordinary case is still one command: if the application is running, this reboots it over
+WinUSB, waits for the bootloader's COM port, and flashes. The whole edit-build-run cycle happens
+without touching the hardware.
 
 Requires pyserial:  python -m pip install pyserial
 """
 
+import os
 import sys
 import time
 
@@ -32,7 +37,7 @@ BAUD = 115200          # ignored by CDC-ACM, but pyserial wants a number
 CHUNK = 24
 
 
-def find_port(explicit=None):
+def find_port(explicit=None, quiet=False):
     if explicit:
         return explicit
     candidates = []
@@ -42,6 +47,11 @@ def find_port(explicit=None):
         if p.vid == 0x1FC9 and p.pid == 0x82CE:
             candidates.append(p.device)
     if not candidates:
+        # quiet: the caller is asking "is the bootloader there?", not asserting that it is.
+        # The application is on a different transport entirely now, so absence here is an
+        # ordinary answer rather than a failure.
+        if quiet:
+            return None
         ports = ", ".join(f"{p.device}({p.vid:04X}:{p.pid:04X})" for p in list_ports.comports()) or "none"
         raise SystemExit(f"No Electra Mini FW device found. Ports present: {ports}")
     if len(candidates) > 1:
@@ -270,8 +280,61 @@ def flash(path, port):
     print("done.")
 
 
-def reboot_to_bootloader(port):
-    dev = Device(port)
+def app_present():
+    """Is the application enumerated? Asked WITHOUT opening it.
+
+    Opening is not a free test: only one handle at a time can drive the interface, so a caller
+    that opens the device merely to find out whether it is there leaves it unavailable to the
+    code that actually wants it. That mistake cost a confusing "no device found" from a script
+    holding the device open itself."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from winusb import device_paths
+    except Exception:
+        return False
+    return bool(device_paths())
+
+
+def app_over_winusb():
+    """The running application, opened. None if it is not there.
+
+    The two images no longer share a transport: the bootloader is CDC and the application is
+    vendor bulk behind WinUSB. So `boot` has to be sent over a different pipe from the one the
+    flashing happens on, and this is the only part of that which is awkward -- everything after
+    the reboot is exactly as it was."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from winusb import WinUsbDevice, device_paths
+    except Exception:
+        return None
+    if not device_paths():
+        return None
+    try:
+        return WinUsbDevice()
+    except SystemExit:
+        return None
+
+
+def reboot_to_bootloader(port=None):
+    """Get the device into the bootloader, from wherever it currently is."""
+    app = app_over_winusb()
+    if app:
+        print("asking the application to reboot into the bootloader...")
+        app.write(b"boot\r")
+        time.sleep(0.5)
+        app.close()
+        time.sleep(2.5)          # re-enumeration
+        print("done — the device should now be in the bootloader.")
+        return
+
+    found = find_port(port, quiet=True)
+    if not found:
+        raise SystemExit(
+            "no device found, as either a bootloader COM port or a WinUSB application.\n"
+            "  Unplug and replug: a freshly flashed image has not proven itself, so the\n"
+            "  bootloader holds rather than launching it, and it appears as a COM port.")
+
+    dev = Device(found)
     banner = dev.cmd("id")
     if "BOOTLOADER" in banner:
         print("already in the bootloader.")
@@ -280,7 +343,7 @@ def reboot_to_bootloader(port):
     print("asking the application to reboot into the bootloader...")
     dev.cmd("boot", expect_prompt=False)
     dev.close()
-    time.sleep(2.5)          # re-enumeration
+    time.sleep(2.5)
     print("done — the device should now be in the bootloader.")
 
 
@@ -312,6 +375,13 @@ def main():
     images = [a for a in args if not a.startswith("--") and a != port]
     if not images:
         raise SystemExit(__doc__)
+
+    # If the application is running, put the device in the bootloader first rather than telling
+    # the user to run a second command. It used to be one invocation before the transports
+    # diverged, and there is no reason for it to be two now.
+    if find_port(port, quiet=True) is None and app_present():
+        reboot_to_bootloader(port)
+
     flash(images[0], find_port(port))
 
 

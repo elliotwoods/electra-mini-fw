@@ -171,6 +171,11 @@ class WinUsbDevice:
         self._policy(EP_OUT, PIPE_TRANSFER_TIMEOUT, 1000)
         self._policy(EP_OUT, AUTO_CLEAR_STALL, 1)
 
+        # The tools reach through `.c` for raw reads and writes, because flash_usb.Device wraps
+        # a separate transport object. This class IS its own transport, so it points at itself
+        # and every tool works against either without knowing which it has.
+        self.c = self
+
         self.drain()
 
     def drain(self, rounds=64):
@@ -214,9 +219,15 @@ class WinUsbDevice:
         n = wt.DWORD(0)
         ok = winusb.WinUsb_ReadPipe(self.wh, ctypes.c_ubyte(EP_IN), buf, size,
                                     ctypes.byref(n), None)
-        if not ok:
-            return b""                 # a timeout with nothing waiting; not an error
-        return buf.raw[:n.value]
+        # Return whatever arrived even when the call reports failure. A read that times out
+        # part-way through has still moved those bytes off the device, and discarding them
+        # loses data the device will never send again -- which showed up as a large ECHO
+        # getting no answer while a small one worked, and as every message after it going
+        # missing because the stream had been cut mid-frame.
+        got = buf.raw[:n.value] if n.value else b""
+        if not ok and not got:
+            return b""                 # an ordinary idle timeout
+        return got
 
     def cmd(self, line, wait=1.2):
         self.write((line + "\r").encode())

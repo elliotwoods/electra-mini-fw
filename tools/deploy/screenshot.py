@@ -28,9 +28,9 @@ def main():
     args = ap.parse_args()
 
     sys.path.insert(0, __file__.rsplit("\\", 1)[0])
-    from flash_usb import Device, find_port
+    from link import open_app
 
-    dev = Device(find_port(args.port))
+    dev = open_app(args.port)
 
     if args.region:
         x, y, w, h = args.region

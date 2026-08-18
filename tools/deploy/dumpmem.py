@@ -34,9 +34,9 @@ def main():
     length = int(args.length, 16)
 
     sys.path.insert(0, __file__.rsplit("\\", 1)[0])
-    from flash_usb import Device, find_port
+    from link import open_app
 
-    dev = Device(find_port(args.port))
+    dev = open_app(args.port)
     dev.drain()
     dev.c.write(("dump %X %X\r" % (addr, length)).encode())
 
