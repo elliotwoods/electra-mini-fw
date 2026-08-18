@@ -24,12 +24,13 @@ $sources = @(
     (Join-Path $root 'tools\sim\sim_wire.c'),
     (Join-Path $root 'tests\proto_tests.c'),
     (Join-Path $root 'tests\ui_state_tests.c'),
+    (Join-Path $root 'tests\desc_tests.c'),
     (Join-Path $root 'tests\host_main.c')
 ) -join ' '
 
 # /W4 /WX so a warning in the codec fails the build. This code runs on a device with no debugger
 # attached; an implicit conversion here is not a style question.
-$cmd = "call `"$($vcvars.FullName)`" >nul && cl /nologo /W4 /WX /I`"$root\src\proto`" /I`"$root\src\app`" " +
+$cmd = "call `"$($vcvars.FullName)`" >nul && cl /nologo /W4 /WX /I`"$root\src\proto`" /I`"$root\src\app`" /I`"$root\tools\sim`" " +
        "/Fe:`"$out\proto_tests.exe`" /Fo:`"$out\\`" $sources"
 
 cmd /c $cmd

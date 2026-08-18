@@ -11,6 +11,7 @@
 typedef void (*emp_report_fn)(const char *name, int passed);
 int emp_run_selftests(emp_report_fn report);
 int ui_run_selftests(emp_report_fn report);
+int desc_run_selftests(emp_report_fn report);
 
 static void report(const char *name, int passed)
 {
@@ -21,6 +22,12 @@ int main(void)
 {
     printf("EMP/1 codec tests (host)\n");
     int failures = emp_run_selftests(report);
+
+    /* Descriptor transfer, which is the only path by which the device learns what its knobs
+     * mean. Its failure cases are invisible from the panel: a descriptor that fails to load
+     * looks exactly like a host that has not sent one. */
+    printf("\ndescriptor transfer tests (host)\n");
+    failures += desc_run_selftests(report);
 
     /* The interaction model runs here too. It is the part of the firmware hardest to test with
      * a finger on a knob -- a focus that will not let go, or a wrong digit at three decimals,

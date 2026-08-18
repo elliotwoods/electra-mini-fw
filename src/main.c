@@ -1400,6 +1400,7 @@ static void cmd_qtrel(const char *a)
  * is not redundant: the host cannot check that the real compiler, the real alignment behaviour
  * and the real integer widths agree with the spec. A wire format verified only on a
  * workstation is a wire format whose first target-specific bug ships. */
+#if DEVICE_SELFTEST
 static void selftest_report(const char *name, int passed)
 {
     console_write(passed ? "  ok   " : "  FAIL ");
@@ -1407,13 +1408,21 @@ static void selftest_report(const char *name, int passed)
     console_write("\r\n");
     usb_poll();
 }
+#endif
 
 static void cmd_selftest(const char *a)
 {
     (void)a;
+#if DEVICE_SELFTEST
     extern int emp_run_selftests(void (*report)(const char *, int));
     console_write("EMP/1 codec tests (device)\r\n");
     console_hex("failures", (uint32_t)emp_run_selftests(selftest_report));
+#else
+    /* Not linked in by default; see DEVICE_SELFTEST in CMakeLists.txt. The same source
+     * runs on the host on every build, so this is for confirming a result on real
+     * hardware rather than for catching regressions. */
+    console_write("not built in: cmake -B build -DDEVICE_SELFTEST=ON");
+#endif
 }
 
 

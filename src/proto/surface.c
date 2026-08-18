@@ -25,20 +25,38 @@
 /* Provided by session.c: framing and transmission live there, policy lives here. */
 void emp_send(uint8_t channel, uint8_t opcode, const uint8_t *payload, uint32_t len);
 
-static surf_field_t fields[SURF_MAX_FIELDS];
-static char         pool[SURF_STRING_POOL];
-static uint16_t     pool_used;
-
-/* Choice option labels, pooled across every field. See SURF_MAX_CHOICES in surface.h. */
+/* TWO arenas, ping-ponged, so a descriptor that fails verification never becomes the live one.
+ *
+ * This used to be a comment over a set of scalars and a single array, which is not the same
+ * thing at all. DESC_BEGIN zeroed the live field count and DESC_FIELD wrote straight into the
+ * live array, so a CRC mismatch, a broken sequence or a truncated field left the device showing
+ * NOTHING -- with applied_revision still set, so the host's next VALUES passed the revision gate
+ * and then silently matched no field at all. Even a successful transfer blanked the panel for
+ * its entire duration.
+ *
+ * The cost is one more arena, about 8.7 KB. That is affordable here, and it is bought back with
+ * change to spare by no longer linking the codec tests into the image. */
 typedef struct { uint16_t off, len; } surf_choice_t;
-static surf_choice_t choices[SURF_MAX_CHOICES];
-static uint16_t      choices_used;
 
-static uint16_t     field_count;
-static uint64_t     applied_revision;
+typedef struct {
+    surf_field_t  fields[SURF_MAX_FIELDS];
+    char          pool[SURF_STRING_POOL];
+    surf_choice_t choices[SURF_MAX_CHOICES];
+    uint16_t      field_count;
+    uint16_t      pool_used;
+    uint16_t      choices_used;
+    uint64_t      revision;
+} surf_arena_t;
+
+static surf_arena_t arena[2];
+static uint8_t      live_ix;           /* which arena the panel is reading */
+
+#define LIVE   (&arena[live_ix])
+#define STAGE  (&arena[live_ix ^ 1u])
+
 static uint16_t     page;
 
-/* Staging, so a descriptor that fails verification never becomes the live one. */
+/* Transaction state for the descriptor being received into STAGE. */
 static uint64_t     staging_revision;
 static uint16_t     staging_expect;
 static uint16_t     staging_next;      /* index the next DESC_FIELD must carry */
@@ -85,7 +103,9 @@ static int rd_string(rd_t *r, uint16_t *off_out, uint16_t *len_out)
     uint16_t n = rd16(r);
     if (!rd_avail(r, n)) return 0;
 
-    if (pool_used + n > SURF_STRING_POOL) {
+    surf_arena_t *a = STAGE;
+
+    if (a->pool_used + n > SURF_STRING_POOL) {
         /* Out of pool. Record nothing rather than half a string; the field still loads, it
          * simply has no label, and the truncation is reported rather than hidden. */
         r->off += n;
@@ -93,10 +113,10 @@ static int rd_string(rd_t *r, uint16_t *off_out, uint16_t *len_out)
         *len_out = 0;
         return 0;
     }
-    memcpy(pool + pool_used, r->p + r->off, n);
-    *off_out = pool_used;
+    memcpy(a->pool + a->pool_used, r->p + r->off, n);
+    *off_out = a->pool_used;
     *len_out = n;
-    pool_used = (uint16_t)(pool_used + n);
+    a->pool_used = (uint16_t)(a->pool_used + n);
     r->off += n;
     return 1;
 }
@@ -126,7 +146,7 @@ static void send_desc_request(uint8_t reason)
     wr_t w;
     wr_init(&w, buf, sizeof(buf));
     wr8(&w, reason);
-    wr64(&w, applied_revision);
+    wr64(&w, LIVE->revision);
     emp_send(EMP_CH_INPUT, EMP_OP_DESC_REQUEST, buf, w.len);
 }
 
@@ -151,8 +171,8 @@ static void write_value(wr_t *w, const surf_field_t *f)
 
 static void send_edit(uint16_t index, uint8_t cause)
 {
-    if (index >= field_count) return;
-    surf_field_t *f = &fields[index];
+    if (index >= LIVE->field_count) return;
+    surf_field_t *f = &LIVE->fields[index];
 
     uint8_t buf[48];
     wr_t w;
@@ -164,7 +184,7 @@ static void send_edit(uint16_t index, uint8_t cause)
     /* The revision the value was decoded against travels with it. A keypress decoded against
      * an old layout must never be applied to a new one — the host enforces the same rule from
      * its side, and a rule enforced on only one side is not a rule. */
-    wr64(&w, applied_revision);
+    wr64(&w, LIVE->revision);
     wr32(&w, edit_seq);
     wr16(&w, f->id);
     wr8(&w, cause);
@@ -175,8 +195,8 @@ static void send_edit(uint16_t index, uint8_t cause)
 
 static void send_edit_delta(uint16_t index, int32_t delta)
 {
-    if (index >= field_count) return;
-    surf_field_t *f = &fields[index];
+    if (index >= LIVE->field_count) return;
+    surf_field_t *f = &LIVE->fields[index];
 
     uint8_t buf[32];
     wr_t w;
@@ -185,7 +205,7 @@ static void send_edit_delta(uint16_t index, int32_t delta)
     edit_seq++;
     last_edit_seq[index] = edit_seq;
 
-    wr64(&w, applied_revision);
+    wr64(&w, LIVE->revision);
     wr32(&w, edit_seq);
     wr16(&w, f->id);
     wr32(&w, (uint32_t)delta);
@@ -219,9 +239,13 @@ static void desc_begin(const uint8_t *msg, uint32_t len)
     staging_open  = 1;
     staging_next  = 0;
     staging_crc   = 0xFFFFFFFFu;
-    pool_used     = 0;
-    choices_used  = 0;
-    field_count   = 0;
+
+    /* Clear the SCRATCH arena. The live one is untouched, so the panel keeps showing the
+     * descriptor it already has for the whole duration of the transfer -- and keeps it for good
+     * if the transfer never completes. */
+    STAGE->pool_used    = 0;
+    STAGE->choices_used = 0;
+    STAGE->field_count  = 0;
 }
 
 static void desc_field(const uint8_t *msg, uint32_t len)
@@ -246,7 +270,7 @@ static void desc_field(const uint8_t *msg, uint32_t len)
      * even though it arrived as many independent messages. */
     staging_crc = emp_crc32c_update(staging_crc, msg + 2, len - 2);
 
-    surf_field_t *f = &fields[index];
+    surf_field_t *f = &STAGE->fields[index];
     memset(f, 0, sizeof(*f));
 
     (void)rd16(&r);                       /* field_len: forward compatibility, see below */
@@ -284,7 +308,9 @@ static void desc_field(const uint8_t *msg, uint32_t len)
      * A field whose labels do not fit keeps its count and loses its labels, and the UI falls
      * back to the index. That is a degraded display of a working control, which is the right
      * way round: refusing the descriptor would take away a knob that would otherwise work. */
-    f->choice_first = choices_used;
+    surf_arena_t *a = STAGE;
+
+    f->choice_first = a->choices_used;
     if (f->choice_count) {
         for (uint16_t i = 0; i < f->choice_count; i++) {
             uint16_t off = 0, ln = 0;
@@ -292,10 +318,10 @@ static void desc_field(const uint8_t *msg, uint32_t len)
                 /* Ran out of pool or of message. Keep whatever landed; stop here. */
                 if (r.bad) break;
             }
-            if (choices_used < SURF_MAX_CHOICES) {
-                choices[choices_used].off = off;
-                choices[choices_used].len = ln;
-                choices_used++;
+            if (a->choices_used < SURF_MAX_CHOICES) {
+                a->choices[a->choices_used].off = off;
+                a->choices[a->choices_used].len = ln;
+                a->choices_used++;
             }
         }
     }
@@ -351,9 +377,14 @@ static void desc_end(const uint8_t *msg, uint32_t len)
         return;
     }
 
-    field_count      = count;
-    applied_revision = revision;
-    page             = 0;
+    /* Verified. PUBLISH by swapping, which is a single store -- there is no instant at which
+     * the panel can read a half-built descriptor, and the arena that was live becomes the
+     * scratch space for the next transfer. */
+    STAGE->field_count = count;
+    STAGE->revision    = revision;
+    live_ix ^= 1u;
+
+    page = 0;
     for (uint16_t i = 0; i < SURF_MAX_FIELDS; i++) last_edit_seq[i] = 0;
 
     send_desc_ack(revision, count);
@@ -363,8 +394,8 @@ static void desc_end(const uint8_t *msg, uint32_t len)
 
 static int index_of_id(uint16_t id, uint16_t *out)
 {
-    for (uint16_t i = 0; i < field_count; i++) {
-        if (fields[i].id == id) { *out = i; return 1; }
+    for (uint16_t i = 0; i < LIVE->field_count; i++) {
+        if (LIVE->fields[i].id == id) { *out = i; return 1; }
     }
     return 0;
 }
@@ -379,7 +410,7 @@ static void handle_values(const uint8_t *msg, uint32_t len)
     if (r.bad) return;
 
     /* The revision gate. 0 means "unstamped", accepted only because legacy fixtures use it. */
-    if (revision != 0 && revision != applied_revision) {
+    if (revision != 0 && revision != LIVE->revision) {
         send_desc_request(EMP_REQ_REVISION_UNKNOWN);
         return;
     }
@@ -411,7 +442,7 @@ static void handle_values(const uint8_t *msg, uint32_t len)
         int under_hand = (touched_mask & (1u << (idx % SURF_POTS))) != 0;
         if (under_hand && ack_edit < last_edit_seq[idx]) continue;
 
-        surf_field_t *f = &fields[idx];
+        surf_field_t *f = &LIVE->fields[idx];
         f->value_tag = tag;
         f->number    = number;
         f->choice    = choice;
@@ -423,12 +454,9 @@ static void handle_values(const uint8_t *msg, uint32_t len)
 
 void surf_init(void)
 {
-    memset(fields, 0, sizeof(fields));
+    memset(arena, 0, sizeof(arena));
     memset(last_edit_seq, 0, sizeof(last_edit_seq));
-    pool_used = 0;
-    choices_used = 0;
-    field_count = 0;
-    applied_revision = 0;
+    live_ix = 0;
     page = 0;
     staging_open = 0;
     edit_seq = 0;
@@ -448,13 +476,13 @@ void surf_handle(uint8_t opcode, const uint8_t *msg, uint32_t len)
     }
 }
 
-uint64_t surf_applied_revision(void) { return applied_revision; }
-uint16_t surf_field_count(void)      { return field_count; }
+uint64_t surf_applied_revision(void) { return LIVE->revision; }
+uint16_t surf_field_count(void)      { return LIVE->field_count; }
 uint16_t surf_page(void)             { return page; }
 
 const surf_field_t *surf_field(uint16_t index)
 {
-    return (index < field_count) ? &fields[index] : 0;
+    return (index < LIVE->field_count) ? &LIVE->fields[index] : 0;
 }
 
 const char *surf_choice_label(const surf_field_t *f, uint16_t option, uint16_t *len)
@@ -462,33 +490,24 @@ const char *surf_choice_label(const surf_field_t *f, uint16_t option, uint16_t *
     if (!f || option >= f->choice_count) return 0;
 
     uint32_t i = (uint32_t)f->choice_first + option;
-    if (i >= choices_used) return 0;
-    if (!choices[i].len) return 0;            /* the descriptor carried no label for this one */
+    if (i >= LIVE->choices_used) return 0;
+    if (!LIVE->choices[i].len) return 0;      /* the descriptor carried no label for this one */
 
-    if (len) *len = choices[i].len;
-    return pool + choices[i].off;
+    if (len) *len = LIVE->choices[i].len;
+    return LIVE->pool + LIVE->choices[i].off;
 }
 
 const char *surf_string(uint16_t off, uint16_t len)
 {
     if ((uint32_t)off + len > SURF_STRING_POOL) return 0;
-    return pool + off;
+    return LIVE->pool + off;
 }
 
-/* ------------------------------------------------------------------ input */
-
-static int field_for_pot(unsigned pot, uint16_t *out)
-{
-    uint32_t idx = (uint32_t)page * SURF_POTS + pot;
-    if (idx >= field_count) return 0;
-    *out = (uint16_t)idx;
-    return 1;
-}
 
 void surf_set_number_cause(uint16_t index, double v, uint8_t cause)
 {
-    if (index >= field_count) return;
-    surf_field_t *f = &fields[index];
+    if (index >= LIVE->field_count) return;
+    surf_field_t *f = &LIVE->fields[index];
     if (f->kind == EMP_KIND_READONLY) return;      /* a read-only field is not ours to change */
     f->number    = v;
     f->value_tag = EMP_VAL_NUMBER;
@@ -497,8 +516,8 @@ void surf_set_number_cause(uint16_t index, double v, uint8_t cause)
 
 void surf_set_bool_cause(uint16_t index, uint8_t v, uint8_t cause)
 {
-    if (index >= field_count) return;
-    surf_field_t *f = &fields[index];
+    if (index >= LIVE->field_count) return;
+    surf_field_t *f = &LIVE->fields[index];
     if (f->kind == EMP_KIND_READONLY) return;
     f->boolean   = v ? 1u : 0u;
     f->value_tag = EMP_VAL_BOOL;
@@ -507,8 +526,8 @@ void surf_set_bool_cause(uint16_t index, uint8_t v, uint8_t cause)
 
 void surf_set_choice_cause(uint16_t index, uint32_t v, uint8_t cause)
 {
-    if (index >= field_count) return;
-    surf_field_t *f = &fields[index];
+    if (index >= LIVE->field_count) return;
+    surf_field_t *f = &LIVE->fields[index];
     if (f->kind == EMP_KIND_READONLY) return;
     f->choice    = v;
     f->value_tag = EMP_VAL_CHOICE;
@@ -521,7 +540,7 @@ void surf_set_choice(uint16_t index, uint32_t v) { surf_set_choice_cause(index, 
 
 void surf_send_delta(uint16_t index, int32_t detents)
 {
-    if (index >= field_count || !detents) return;
+    if (index >= LIVE->field_count || !detents) return;
     send_edit_delta(index, detents);
 }
 
@@ -557,12 +576,12 @@ void surf_send_focus(int32_t index, uint16_t touch_mask)
     wr_t w;
     wr_init(&w, buf, sizeof(buf));
 
-    int have = (index >= 0 && (uint16_t)index < field_count);
+    int have = (index >= 0 && (uint16_t)index < LIVE->field_count);
 
-    wr64(&w, applied_revision);
+    wr64(&w, LIVE->revision);
     wr8(&w, (uint8_t)(have ? 1 : 0));
-    wr16(&w, have ? fields[index].id : 0);
-    wr8(&w, have ? fields[index].lane : 0);
+    wr16(&w, have ? LIVE->fields[index].id : 0);
+    wr8(&w, have ? LIVE->fields[index].lane : 0);
     wr16(&w, touch_mask);
 
     emp_send(EMP_CH_INPUT, EMP_OP_FOCUS, buf, w.len);
@@ -625,10 +644,10 @@ void surf_demo_descriptor(void)
     static const char *const waveforms[] = { "Sine", "Triangle", "Sawtooth", "Square", "Noise" };
 
     surf_init();
-    pool_used = 0;
+    surf_arena_t *a = LIVE;          /* built in place: nothing to verify, so nothing to stage */
 
     for (unsigned i = 0; i < sizeof(demo) / sizeof(demo[0]); i++) {
-        surf_field_t *f = &fields[i];
+        surf_field_t *f = &a->fields[i];
         memset(f, 0, sizeof(*f));
         f->id        = demo[i].id;
         f->kind      = demo[i].kind;
@@ -645,16 +664,16 @@ void surf_demo_descriptor(void)
             f->value_tag    = EMP_VAL_CHOICE;
             f->choice       = (uint32_t)demo[i].v;
             f->choice_count = (uint16_t)(sizeof(waveforms) / sizeof(waveforms[0]));
-            f->choice_first = choices_used;
+            f->choice_first = a->choices_used;
             for (unsigned k = 0; k < f->choice_count; k++) {
                 const char *o = waveforms[k];
                 uint16_t on = 0; while (o[on]) on++;
-                if (pool_used + on <= SURF_STRING_POOL && choices_used < SURF_MAX_CHOICES) {
-                    memcpy(pool + pool_used, o, on);
-                    choices[choices_used].off = pool_used;
-                    choices[choices_used].len = on;
-                    choices_used++;
-                    pool_used = (uint16_t)(pool_used + on);
+                if (a->pool_used + on <= SURF_STRING_POOL && a->choices_used < SURF_MAX_CHOICES) {
+                    memcpy(a->pool + a->pool_used, o, on);
+                    a->choices[a->choices_used].off = a->pool_used;
+                    a->choices[a->choices_used].len = on;
+                    a->choices_used++;
+                    a->pool_used = (uint16_t)(a->pool_used + on);
                 }
             }
         } else {
@@ -664,21 +683,21 @@ void surf_demo_descriptor(void)
 
         const char *l = demo[i].label;
         uint16_t n = 0; while (l[n]) n++;
-        if (pool_used + n <= SURF_STRING_POOL) {
-            memcpy(pool + pool_used, l, n);
-            f->label_off = pool_used; f->label_len = n;
-            pool_used = (uint16_t)(pool_used + n);
+        if (a->pool_used + n <= SURF_STRING_POOL) {
+            memcpy(a->pool + a->pool_used, l, n);
+            f->label_off = a->pool_used; f->label_len = n;
+            a->pool_used = (uint16_t)(a->pool_used + n);
         }
         if (demo[i].unit) {
             const char *u = demo[i].unit;
             uint16_t m = 0; while (u[m]) m++;
-            if (pool_used + m <= SURF_STRING_POOL) {
-                memcpy(pool + pool_used, u, m);
-                f->unit_off = pool_used; f->unit_len = m;
-                pool_used = (uint16_t)(pool_used + m);
+            if (a->pool_used + m <= SURF_STRING_POOL) {
+                memcpy(a->pool + a->pool_used, u, m);
+                f->unit_off = a->pool_used; f->unit_len = m;
+                a->pool_used = (uint16_t)(a->pool_used + m);
             }
         }
     }
-    field_count = sizeof(demo) / sizeof(demo[0]);
-    applied_revision = 0xDE30;
+    a->field_count = sizeof(demo) / sizeof(demo[0]);
+    a->revision    = 0xDE30;
 }

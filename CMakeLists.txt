@@ -82,6 +82,14 @@ add_executable(bootloader
 electra_image(bootloader bootloader.ld bootloader 0x00100000)
 
 # ---------------------------------------------------------------- application
+# The codec tests can be linked into the image so `selftest` runs them on the real target, but
+# they are NOT in by default: they cost 12,204 bytes of .bss -- 40% more RAM than the module they
+# test -- plus ~2 KB of .text, and each test puts an 8 KB reassembly buffer on the stack. The
+# host runner exercises the same source on every build, so the device copy is for confirming a
+# result on real hardware, not for catching regressions.
+#   cmake -B build -DDEVICE_SELFTEST=ON
+option(DEVICE_SELFTEST "Link the EMP/1 codec tests into the device image" OFF)
+
 add_executable(app
     ${COMMON_SOURCES}
     src/hal/spi.c
@@ -102,7 +110,6 @@ add_executable(app
     src/proto/frame.c
     src/proto/session.c
     src/proto/surface.c
-    tests/proto_tests.c
     src/main.c
 )
 # Diagnostic build: leave the RA8876 exactly as the stock bootloader configured it, so the
@@ -110,5 +117,10 @@ add_executable(app
 #   cmake -B build -DLCD_SKIP_INIT=ON
 option(LCD_SKIP_INIT "Do not run our own RA8876 init; inherit the bootloader's" OFF)
 target_compile_definitions(app PRIVATE LCD_SKIP_INIT=$<BOOL:${LCD_SKIP_INIT}>)
+
+if(DEVICE_SELFTEST)
+    target_sources(app PRIVATE tests/proto_tests.c)
+endif()
+target_compile_definitions(app PRIVATE DEVICE_SELFTEST=$<BOOL:${DEVICE_SELFTEST}>)
 
 electra_image(app app.ld app 0x00120000)

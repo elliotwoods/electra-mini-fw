@@ -17,13 +17,7 @@
 #include <string.h>
 
 #include "emp.h"
-
-typedef struct {
-    uint8_t  channel;
-    uint8_t  opcode;
-    uint32_t len;
-    uint8_t  payload[256];
-} sim_wire_msg_t;
+#include "sim_wire.h"
 
 #define SIM_WIRE_CAPACITY 64
 
@@ -53,7 +47,6 @@ const sim_wire_msg_t *sim_wire_at(unsigned i)
     return (i < captured_count) ? &captured[i] : 0;
 }
 
-/* Most recent message carrying a given opcode, or NULL. */
 const sim_wire_msg_t *sim_wire_last(uint8_t opcode)
 {
     for (unsigned i = captured_count; i-- > 0; ) {
