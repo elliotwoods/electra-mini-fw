@@ -80,11 +80,12 @@ static void xfer_begin(xfer_t *x, uint64_t revision, uint16_t expect)
     surf_handle(EMP_OP_DESC_BEGIN, b.b, b.n);
 }
 
-/* One numeric field. `value_tag` is a parameter so the extension-tag cases can pass a tag this
- * decoder has never heard of; `ext_len`/`ext` carry the body such a tag is required to have. */
+/* One field. `value_tag` and the raw `vbody` bytes are parameters so a test can put a tag this
+ * decoder has never heard of on the wire, with exactly the body that tag's rule requires --
+ * including, in one case, no body at all. */
 static void xfer_field(xfer_t *x, uint16_t index, uint16_t id, const char *label,
                        double value, const char *unit,
-                       uint8_t value_tag, const uint8_t *ext, uint16_t ext_len)
+                       uint8_t value_tag, const uint8_t *vbody, uint16_t vbody_len)
 {
     buf_t b;
     b_init(&b);
@@ -105,11 +106,10 @@ static void xfer_field(xfer_t *x, uint16_t index, uint16_t id, const char *label
     b16(&b, 0);                 /* choice_count */
 
     b8(&b, value_tag);
-    if (value_tag == EMP_VAL_NUMBER) {
+    if (value_tag == EMP_VAL_NUMBER && !vbody) {
         bf64(&b, value);
-    } else if (ext_len || ext) {
-        b16(&b, ext_len);
-        for (uint16_t i = 0; i < ext_len; i++) b8(&b, ext[i]);
+    } else {
+        for (uint16_t i = 0; i < vbody_len; i++) b8(&b, vbody[i]);
     }
 
     bstr(&b, label);
@@ -354,6 +354,142 @@ static void test_pool_does_not_accumulate(void)
           surf_field_count() == 2 && label_is(0, "A rather long field label"));
 }
 
+/* ------------------------------------------------------------------ value tags */
+
+/* Every one of these puts a tag this device does not render in front of a label it must still
+ * read. The label is the assertion: if the value's body was not stepped over by exactly the
+ * right number of bytes, the label length is read from the middle of the value and everything
+ * after it is nonsense -- while the CRC still checks out, because the bytes did arrive intact.
+ * That is what made this failure so quiet: a descriptor that verified and was wrong. */
+static void check_skippable(const char *name, uint8_t tag, const uint8_t *body, uint16_t len)
+{
+    xfer_t x;
+    surf_init();
+    sim_wire_reset();
+
+    xfer_begin(&x, 11, 2);
+    xfer_field(&x, 0, 501, "Skipped", 0.0, "Hz", tag, body, len);
+    xfer_number(&x, 1, 502, "Intact", 0.5);
+    xfer_end(&x, 0, 0);
+
+    const surf_field_t *f = surf_field(0);
+    int ok = surf_field_count() == 2
+          && label_is(0, "Skipped")
+          && label_is(1, "Intact")
+          && f && f->id == 501
+          && f->unit_len == 2                       /* the unit followed the label, and landed */
+          /* Normalised to something renderable, so nothing downstream has to know the tag. */
+          && f->value_tag == EMP_VAL_NUMBER;
+
+    check(name, ok);
+}
+
+static void test_extension_tag_is_skipped(void)
+{
+    /* 0x80-0xFF: len u16 + bytes, which exists so exactly this can be survived. */
+    static const uint8_t body[] = { 0x05, 0x00, 'h', 'e', 'l', 'l', 'o' };
+    check_skippable("an extension value tag is stepped over, not misread", 0x81u,
+                    body, (uint16_t)sizeof(body));
+}
+
+static void test_text_tag_is_skipped(void)
+{
+    static const uint8_t body[] = { 0x03, 0x00, 'a', 'b', 'c' };
+    check_skippable("a Text value is stepped over, not misread", EMP_VAL_TEXT,
+                    body, (uint16_t)sizeof(body));
+}
+
+static void test_color_tag_is_skipped(void)
+{
+    /* count u8 + count x f32. Colour is deferred, which is not the same as unknown. */
+    static const uint8_t body[] = { 0x03,
+                                    0, 0, 0, 0,
+                                    0, 0, 0x80, 0x3F,
+                                    0, 0, 0, 0 };
+    check_skippable("a Color value is stepped over, not misread", EMP_VAL_COLOR,
+                    body, (uint16_t)sizeof(body));
+}
+
+static void test_reserved_tag_abandons_the_record(void)
+{
+    /* 0x05-0x7F is reserved and carries NO length. There is no honest way to find the end of
+     * the value, so guessing is the one thing that must not happen -- the field would load and
+     * be wrong, which is worse than not loading. */
+    load_good();
+    sim_wire_reset();
+
+    xfer_t x;
+    xfer_begin(&x, 9, 1);
+    xfer_field(&x, 0, 601, "Mystery", 0.0, 0, 0x40u, (const uint8_t *)"", 0);
+
+    check("a reserved value tag abandons the record rather than guessing",
+          good_is_intact() && last_request_reason() == EMP_REQ_SEQUENCE_BROKEN);
+}
+
+static void test_extension_default_is_dropped_not_fatal(void)
+{
+    /* The default sits between the choices and the optional path. Nothing reads `path` yet, so
+     * failing to consume the default is currently harmless -- which is exactly why this test is
+     * here: it is the one that starts failing the day `path` is parsed, rather than `path`
+     * quietly decoding from the middle of a default nobody stepped over. Losing Reset on one
+     * control is acceptable; losing the field, or silently misreading what follows, is not. */
+    xfer_t x;
+    surf_init();
+    sim_wire_reset();
+
+    buf_t b;
+    b_init(&b);
+    b16(&b, 0);                                   /* index */
+    uint32_t body = b.n;
+    b16(&b, 0);                                   /* field_len */
+    b16(&b, 701);                                 /* id */
+    b8(&b, EMP_KIND_NUMBER);
+    b8(&b, 0);
+    b16(&b, EMP_PRESENT_DEFAULT);
+    bf64(&b, 0.0); bf64(&b, 1.0); bf64(&b, 0.0);  /* min, max, step */
+    b8(&b, 2); b8(&b, 0);                         /* precision, lane */
+    b16(&b, 0);                                   /* choice_count */
+    b8(&b, EMP_VAL_NUMBER); bf64(&b, 0.5);        /* value */
+    bstr(&b, "Defaulted");                        /* label */
+    b8(&b, 0x90u);                                /* default: an extension tag */
+    b16(&b, 2); b8(&b, 0xAA); b8(&b, 0xBB);
+
+    xfer_begin(&x, 12, 1);
+    x.crc = emp_crc32c_update(x.crc, b.b + body, b.n - body);
+    x.count++;
+    surf_handle(EMP_OP_DESC_FIELD, b.b, b.n);
+    xfer_end(&x, 0, 0);
+
+    const surf_field_t *f = surf_field(0);
+    check("an extension default is dropped without losing the field",
+          surf_field_count() == 1 && label_is(0, "Defaulted")
+          && f && f->id == 701 && (f->present & EMP_PRESENT_DEFAULT) == 0);
+}
+
+static void test_values_skip_one_control_not_the_batch(void)
+{
+    load_good();
+    sim_wire_reset();
+
+    /* Two values, the first carrying a tag from a newer host. The second must still land. */
+    buf_t b;
+    b_init(&b);
+    b64(&b, 7);
+    b16(&b, 2);
+
+    b16(&b, 101); b32(&b, 0);
+    b8(&b, 0x82u); b16(&b, 3); b8(&b, 1); b8(&b, 2); b8(&b, 3);
+
+    b16(&b, 102); b32(&b, 0);
+    b8(&b, EMP_VAL_NUMBER); bf64(&b, 0.875);
+
+    surf_handle(EMP_OP_VALUES, b.b, b.n);
+
+    const surf_field_t *f = surf_field(1);
+    check("an unreadable value costs one control, not the batch",
+          f && f->number > 0.874 && f->number < 0.876);
+}
+
 /* ------------------------------------------------------------------ runner */
 
 int desc_run_selftests(desc_report_fn report)
@@ -371,6 +507,13 @@ int desc_run_selftests(desc_report_fn report)
     test_stale_values_do_not_apply();
     test_successive_descriptors_replace();
     test_pool_does_not_accumulate();
+
+    test_extension_tag_is_skipped();
+    test_text_tag_is_skipped();
+    test_color_tag_is_skipped();
+    test_reserved_tag_abandons_the_record();
+    test_extension_default_is_dropped_not_fatal();
+    test_values_skip_one_control_not_the_batch();
 
     report_fn = 0;
     return failures;

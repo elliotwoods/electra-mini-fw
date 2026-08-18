@@ -121,6 +121,60 @@ static int rd_string(rd_t *r, uint16_t *off_out, uint16_t *len_out)
     return 1;
 }
 
+/* Read one value of any tag, storing it if we understand it and STEPPING OVER IT if we do not.
+ *
+ * Every tag in docs/protocol.md 3.4 carries enough information to determine its own length --
+ * that is the whole point of the `0x80-0xFF` extension range being `len` u16 + bytes. The old
+ * code read the tag, failed to recognise it, and then read the NEXT member of the field record
+ * from wherever the value's body happened to start: label, unit, choices and default all came
+ * back as garbage, and the CRC then reported a transfer that had in fact arrived intact.
+ *
+ * The three return codes matter separately. STORED and SKIPPED both mean the reader is now
+ * positioned correctly and the record can continue; UNDECODABLE means it is not, and the caller
+ * must abandon the record rather than guess. */
+#define RDV_UNDECODABLE 0
+#define RDV_STORED      1
+#define RDV_SKIPPED     2
+
+static int rd_value(rd_t *r, uint8_t tag, uint8_t *b_out, double *n_out, uint32_t *c_out)
+{
+    switch (tag) {
+    case EMP_VAL_BOOL:   *b_out = rd8(r);   return RDV_STORED;
+    case EMP_VAL_NUMBER: *n_out = rdf64(r); return RDV_STORED;
+    case EMP_VAL_CHOICE: *c_out = rd32(r);  return RDV_STORED;
+
+    case EMP_VAL_TEXT: {
+        /* A String. Skipped rather than pooled: nothing on this panel renders a text value, and
+         * spending pool on one would cost a label somewhere else. */
+        uint16_t n = rd16(r);
+        if (!rd_avail(r, n)) { r->bad = 1; return RDV_UNDECODABLE; }
+        r->off += n;
+        return RDV_SKIPPED;
+    }
+
+    case EMP_VAL_COLOR: {
+        /* `count` u8 + count x f32. Colour is a deferred feature, not an unknown one. */
+        uint8_t n = rd8(r);
+        uint32_t bytes = (uint32_t)n * 4u;
+        if (!rd_avail(r, bytes)) { r->bad = 1; return RDV_UNDECODABLE; }
+        r->off += bytes;
+        return RDV_SKIPPED;
+    }
+
+    default:
+        if (tag >= 0x80u) {
+            /* The extension range, which exists precisely so this case is survivable. */
+            uint16_t n = rd16(r);
+            if (!rd_avail(r, n)) { r->bad = 1; return RDV_UNDECODABLE; }
+            r->off += n;
+            return RDV_SKIPPED;
+        }
+        /* 0x05-0x7F: reserved, and reserved tags carry no length. There is no way to find the
+         * end of this value, so there is no honest way to continue reading the record. */
+        return RDV_UNDECODABLE;
+    }
+}
+
 /* ------------------------------------------------------------------ encode helpers */
 
 typedef struct { uint8_t *p; uint32_t cap; uint32_t len; } wr_t;
@@ -286,16 +340,23 @@ static void desc_field(const uint8_t *msg, uint32_t len)
     f->choice_count = rd16(&r);
 
     f->value_tag = rd8(&r);
-    switch (f->value_tag) {
-    case EMP_VAL_BOOL:   f->boolean = rd8(&r); break;
-    case EMP_VAL_NUMBER: f->number  = rdf64(&r); break;
-    case EMP_VAL_CHOICE: f->choice  = rd32(&r); break;
-    default:
-        /* Unknown or unsupported tag: keep the field, drop the value. Refusing the whole
-         * descriptor because one value used an extension would make the device brittle against
-         * a newer host for no benefit. */
-        f->value_tag = EMP_VAL_NUMBER;
+    switch (rd_value(&r, f->value_tag, &f->boolean, &f->number, &f->choice)) {
+    case RDV_STORED:
         break;
+    case RDV_SKIPPED:
+        /* A value we stepped over cleanly. Keep the field, drop the value: refusing the whole
+         * descriptor because one control used a tag from a newer host would take away every
+         * other knob as well. The tag is normalised so that everything downstream can assume
+         * value_tag is one of the three this device can actually render. */
+        f->value_tag = EMP_VAL_NUMBER;
+        f->number    = 0.0;
+        break;
+    default:
+        /* Undecodable: the reader is now at an unknown offset, so nothing after this point in
+         * the record means anything and the running CRC is over bytes we mis-split. */
+        send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
+        staging_open = 0;
+        return;
     }
 
     (void)rd_string(&r, &f->label_off, &f->label_len);
@@ -331,15 +392,19 @@ static void desc_field(const uint8_t *msg, uint32_t len)
      * device had no Reset -- you cannot restore a value you never stored. */
     if (f->present & EMP_PRESENT_DEFAULT) {
         f->default_tag = rd8(&r);
-        switch (f->default_tag) {
-        case EMP_VAL_BOOL:   f->default_boolean = rd8(&r);   break;
-        case EMP_VAL_NUMBER: f->default_number  = rdf64(&r); break;
-        case EMP_VAL_CHOICE: f->default_choice  = rd32(&r);  break;
-        default:
-            /* An extension tag we do not understand. Drop the default rather than the field:
-             * losing Reset on one control is a far smaller harm than refusing the descriptor. */
+        switch (rd_value(&r, f->default_tag, &f->default_boolean,
+                         &f->default_number, &f->default_choice)) {
+        case RDV_STORED:
+            break;
+        case RDV_SKIPPED:
+            /* Drop the default rather than the field: losing Reset on one control is a far
+             * smaller harm than refusing the descriptor. */
             f->present = (uint16_t)(f->present & ~EMP_PRESENT_DEFAULT);
             break;
+        default:
+            send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
+            staging_open = 0;
+            return;
         }
     }
 
@@ -423,13 +488,14 @@ static void handle_values(const uint8_t *msg, uint32_t len)
         double   number = 0.0;
         uint32_t choice = 0;
         uint8_t  boolean = 0;
-        switch (tag) {
-        case EMP_VAL_BOOL:   boolean = rd8(&r); break;
-        case EMP_VAL_NUMBER: number  = rdf64(&r); break;
-        case EMP_VAL_CHOICE: choice  = rd32(&r); break;
-        default: r.bad = 1; break;
-        }
+
+        /* A tag we can step over costs one control its update, not the batch. A tag we cannot
+         * costs the batch, because every value after it would be read from the wrong offset --
+         * which is worse than dropping them, since they would be applied to real controls. */
+        int got = rd_value(&r, tag, &boolean, &number, &choice);
+        if (got == RDV_UNDECODABLE) break;
         if (r.bad) break;
+        if (got == RDV_SKIPPED) continue;
 
         uint16_t idx;
         if (!index_of_id(id, &idx)) continue;
