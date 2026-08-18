@@ -11,6 +11,7 @@
 #include "s7g2.h"
 #include "bsp.h"
 #include "usb_fs.h"
+#include "usb_desc.h"
 
 #define USB_BASE   0x40090000UL
 
@@ -79,44 +80,6 @@
 #define BULK_MPS  64
 #define PIPE_OUT  1        /* EP 0x01 OUT — CDC data out */
 #define PIPE_IN   2        /* EP 0x81 IN  — CDC data in  */
-
-/* ------------------------------------------------------------------ descriptors */
-
-static const uint8_t dev_desc[18] = {
-    18, 0x01, 0x00, 0x02,            /* bcdUSB 2.00 (still full speed; 2.00 is fine and
-                                        avoids Windows treating us as a 1.1 oddity) */
-    0x02, 0x00, 0x00, EP0_MPS,       /* class 0x02 = CDC at device level */
-    0xC9, 0x1F,                      /* idVendor  0x1FC9 (NXP, as the hardware ships) */
-    0xCE, 0x82,                      /* idProduct 0x82CE — deliberately NOT the stock 0x82CF,
-                                        so this never binds against the MIDI driver */
-    0x01, 0x00,                      /* bcdDevice 0.01 */
-    1, 2, 3,                         /* iManufacturer, iProduct, iSerial */
-    1                                /* bNumConfigurations */
-};
-
-#define CFG_TOTAL 67
-static const uint8_t cfg_desc[CFG_TOTAL] = {
-    /* configuration */
-    9, 0x02, CFG_TOTAL, 0x00, 2, 1, 0, 0x80, 250,      /* bus powered, 500 mA */
-
-    /* interface 0: CDC communications */
-    9, 0x04, 0, 0, 1, 0x02, 0x02, 0x01, 0,
-    5, 0x24, 0x00, 0x10, 0x01,                          /* CDC header */
-    4, 0x24, 0x02, 0x02,                                /* ACM, supports Set_Line_Coding */
-    5, 0x24, 0x06, 0, 1,                                /* union: master 0, slave 1 */
-    5, 0x24, 0x01, 0x00, 1,                             /* call management */
-    7, 0x05, 0x82, 0x03, 8, 0x00, 16,                   /* EP 0x82 interrupt IN */
-
-    /* interface 1: CDC data */
-    9, 0x04, 1, 0, 2, 0x0A, 0x00, 0x00, 0,
-    7, 0x05, 0x01, 0x02, BULK_MPS, 0x00, 0,             /* EP 0x01 bulk OUT */
-    7, 0x05, 0x81, 0x02, BULK_MPS, 0x00, 0,             /* EP 0x81 bulk IN  */
-};
-
-static const uint8_t str0[] = { 4, 0x03, 0x09, 0x04 };  /* en-US */
-
-/* ASCII expanded to UTF-16LE on the fly, so the tables stay readable. */
-static const char *const strings[] = { 0, "Kimchi and Chips", "Electra Mini FW", "EMB-0001" };
 
 /* ------------------------------------------------------------------ state */
 
@@ -254,36 +217,33 @@ static void pipes_init(void);
 
 static uint8_t strbuf[64];
 
-static uint32_t build_string(unsigned idx)
+/* Which of our two bulk pipes an endpoint address refers to, or 0 for one we do not have. */
+static unsigned pipe_of_endpoint(uint16_t ep)
 {
-    if (idx == 0) {
-        for (unsigned i = 0; i < sizeof(str0); i++) strbuf[i] = str0[i];
-        return sizeof(str0);
-    }
-    if (idx >= sizeof(strings) / sizeof(strings[0]) || !strings[idx]) return 0;
-
-    const char *s = strings[idx];
-    uint32_t n = 0;
-    while (s[n]) n++;
-    if (n > 30) n = 30;
-
-    strbuf[0] = (uint8_t)(2 + 2 * n);
-    strbuf[1] = 0x03;
-    for (uint32_t i = 0; i < n; i++) {
-        strbuf[2 + 2 * i]     = (uint8_t)s[i];
-        strbuf[2 + 2 * i + 1] = 0;
-    }
-    return strbuf[0];
+    if ((ep & 0x7Fu) != 1u) return 0;
+    return (ep & 0x80u) ? PIPE_IN : PIPE_OUT;
 }
+
+/* Enumeration diagnostics.
+ *
+ * A device with no bound driver has no console, so the ordinary way of finding out what a host
+ * asked for is unavailable exactly when the descriptors are the thing in question. These
+ * counters are the substitute: they are written here and read back through the bootloader,
+ * which is still CDC and still reachable. Cheap enough to leave in permanently -- four words,
+ * and `usb` prints them. */
+usb_setup_stats_t g_usb_setup;
 
 static void handle_setup(void)
 {
     uint16_t req_type_req = rd(USBREQ);
     uint16_t value        = rd(USBVAL);
+    uint16_t windex       = rd(USBINDX);
     uint16_t length       = rd(USBLENG);
 
     uint8_t bmRequestType = (uint8_t)(req_type_req & 0xFF);
     uint8_t bRequest      = (uint8_t)(req_type_req >> 8);
+
+    g_usb_setup.total++;
 
     /* Standard device requests. */
     if ((bmRequestType & 0x60) == 0x00) {
@@ -291,10 +251,22 @@ static void handle_setup(void)
         case 0x06: {                                   /* GET_DESCRIPTOR */
             uint8_t type = (uint8_t)(value >> 8);
             uint8_t idx  = (uint8_t)(value & 0xFF);
-            if (type == 0x01) { ep0_reply(dev_desc, sizeof(dev_desc), length); return; }
-            if (type == 0x02) { ep0_reply(cfg_desc, sizeof(cfg_desc), length); return; }
+            uint32_t n = 0;
+            const uint8_t *d;
+
+            if (type == 0x01) { d = usb_desc_device(&n); ep0_reply(d, n, length); return; }
+            if (type == 0x02) { d = usb_desc_config(&n); ep0_reply(d, n, length); return; }
+            if (type == 0x0F) {                        /* BOS, which is how MS OS 2.0 starts */
+                g_usb_setup.bos++;
+                d = usb_desc_bos(&n);
+                if (d) {
+                    g_usb_setup.bos_len = (uint8_t)(n < length ? n : length);
+                    ep0_reply(d, n, length);
+                    return;
+                }
+            }
             if (type == 0x03) {
-                uint32_t n = build_string(idx);
+                n = usb_desc_string(idx, strbuf);
                 if (n) { ep0_reply(strbuf, n, length); return; }
             }
             ep0_stall();
@@ -319,8 +291,52 @@ static void handle_setup(void)
             ep0_reply(&c, 1, length);
             return;
         }
+        case 0x0B:                                     /* SET_INTERFACE */
+            /* One interface with one setting, so the only legal request is "setting 0", and
+             * anything else is the host asking for something we do not have. A raw host stack
+             * issues this where usbser.sys never did; it used to fall through to a stall, which
+             * WinUSB reports as a failure to open the device. */
+            if (value == 0) { set(DCPCTR, CTR_PID_BUF | CTR_CCPL); return; }
+            ep0_stall();
+            return;
+
+        case 0x0A: {                                   /* GET_INTERFACE */
+            static const uint8_t alt = 0;
+            ep0_reply(&alt, 1, length);
+            return;
+        }
+
+        case 0x01:                                     /* CLEAR_FEATURE */
+        case 0x03: {                                   /* SET_FEATURE */
+            /* ENDPOINT_HALT, recipient endpoint. This is how a WinUSB application recovers a
+             * stalled pipe, and without it the only recovery is to unplug the device. Clearing
+             * the halt must also reset the data toggle, or the first packet after the recovery
+             * is silently discarded by the host as a duplicate -- a failure that looks like the
+             * device ignoring one message and then working perfectly. */
+            unsigned pipe = ((bmRequestType & 0x1Fu) == 0x02u && value == 0x0000u)
+                          ? pipe_of_endpoint(windex) : 0;
+            if (!pipe) { ep0_stall(); return; }
+
+            if (bRequest == 0x01) {
+                clr(PIPECTR(pipe), 0x0003);
+                set(PIPECTR(pipe), CTR_SQCLR);
+                set(PIPECTR(pipe), CTR_PID_BUF);
+            } else {
+                set(PIPECTR(pipe), CTR_PID_STALL);
+            }
+            set(DCPCTR, CTR_PID_BUF | CTR_CCPL);
+            return;
+        }
+
         case 0x00: {                                   /* GET_STATUS */
-            static const uint8_t st[2] = { 0, 0 };
+            static uint8_t st[2];
+            st[1] = 0;
+            if ((bmRequestType & 0x1Fu) == 0x02u) {
+                unsigned pipe = pipe_of_endpoint(windex);
+                st[0] = (uint8_t)((pipe && (rd(PIPECTR(pipe)) & 0x0003u) == CTR_PID_STALL) ? 1 : 0);
+            } else {
+                st[0] = 0;
+            }
             ep0_reply(st, 2, length);
             return;
         }
@@ -329,27 +345,34 @@ static void handle_setup(void)
         }
     }
 
-    /* CDC class requests. We do not implement a real UART, so line coding is accepted and
-     * discarded — but it MUST be answered, or Windows fails to open the port. */
-    if ((bmRequestType & 0x60) == 0x20) {
-        switch (bRequest) {
-        case 0x20:                                     /* SET_LINE_CODING — 7 data bytes */
-            if (length) { ep0_recv(length); }          /* status stage waits for the data */
-            else        { set(DCPCTR, CTR_PID_BUF | CTR_CCPL); }
+    /* Whatever the linked descriptor set understands: CDC line coding in the bootloader, the
+     * MS OS 2.0 fetch in the application. Neither image knows about the other's requests. */
+    {
+        const uint8_t *data = 0;
+        uint32_t dlen = 0;
+        switch (usb_desc_class_request(bmRequestType, bRequest, value, windex, length,
+                                       &data, &dlen)) {
+        case USB_REQ_DATA_IN:
+            g_usb_setup.vendor++;
+            g_usb_setup.vendor_asked = length;
+            ep0_reply(data, dlen, length);
             return;
-        case 0x22:                                     /* SET_CONTROL_LINE_STATE — no data */
-        case 0x23:                                     /* SEND_BREAK — no data */
+        case USB_REQ_ACK:
             set(DCPCTR, CTR_PID_BUF | CTR_CCPL);
             return;
-        case 0x21: {                                   /* GET_LINE_CODING */
-            static const uint8_t lc[7] = { 0x00, 0xC2, 0x01, 0x00, 0, 0, 8 };  /* 115200 8N1 */
-            ep0_reply(lc, sizeof(lc), length);
+        case USB_REQ_DATA_OUT:
+            ep0_recv(dlen);                            /* status stage waits for the data */
             return;
-        }
         default:
             break;
         }
     }
+
+    /* Whatever we did not understand, kept for the report. The LAST one is the useful one: a
+     * host that gives up does so on the request it could not get an answer to. */
+    g_usb_setup.stalls++;
+    g_usb_setup.last_stall_req  = bRequest;
+    g_usb_setup.last_stall_type = bmRequestType;
 
     ep0_stall();
 }
@@ -414,6 +437,7 @@ static void bulk_rx_service(void)
     wr(CFIFOCTR, FIFOCTR_BCLR);
     rx_len = n;
     rx_rd  = 0;
+    g_usb_setup.bulk_rx++;
 
     /* Re-arm. PIPECFG has SHTNAK set, which makes the hardware drop the pipe to NAK as soon
      * as it receives a short packet — and every console command is a short packet. Without

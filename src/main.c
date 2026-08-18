@@ -404,6 +404,75 @@ static void cmd_boot(const char *a)
     bsp_system_reset();
 }
 
+/* Hand the device back if a host enumerated us and then could not talk to us.
+ *
+ * The application moved to a vendor interface so Windows would bind WinUSB. If those
+ * descriptors are wrong, Windows enumerates the device, binds NOTHING, and there is no console
+ * to ask why -- the diagnostic tool and the thing being diagnosed are the same channel. The
+ * device would sit there, running perfectly, permanently unreachable.
+ *
+ * So it gives itself back. Three conditions, and all three matter:
+ *
+ *   A HOST IS PRESENT but has never sent a single bulk packet. Answering SETUP requests means
+ *   somebody enumerated us; never receiving bulk means whatever they bound cannot speak to us.
+ *   Together those are the driver-binding failure exactly, and nothing else.
+ *
+ *   THE IMAGE IS NOT PROVEN. A proven image is one somebody has already talked to over the
+ *   transport it uses, so this cannot fire on a working instrument -- which matters because the
+ *   instrument's whole purpose is to run on a wall socket with no computer attached.
+ *
+ *   NOTHING AT ALL HAPPENS WITH NO HOST. On a charger there are no SETUP packets, so a device
+ *   powered from the wall is untouched by any of this.
+ *
+ * What it hands back TO is the bootloader, which is still CDC and still reachable with the tools
+ * that have always worked. The enumeration counters go with it, packed into the breadcrumb word
+ * the bootloader prints, so the round trip produces a diagnosis rather than just a recovery. */
+static uint32_t app_image_crc(uint32_t *len_out);
+
+#define HANDBACK_MS  25000u
+
+static void handback_check(void)
+{
+    static uint32_t armed_ms;
+    static int done;
+
+    if (done) return;
+    if (!g_usb_setup.total) { armed_ms = bsp_millis(); return; }   /* nobody there yet */
+    if (g_usb_setup.bulk_rx) { done = 1; return; }                 /* somebody is talking */
+
+    if (!armed_ms) armed_ms = bsp_millis();
+    if (bsp_millis() - armed_ms < HANDBACK_MS) return;
+
+    /* A record vouching for THIS image means it has been talked to before. Leave it alone. */
+    {
+        persist_rec_t r;
+        uint32_t len = 0;
+        uint32_t crc = app_image_crc(&len);
+        if (persist_read(&r) && r.proven == PERSIST_PROVEN && r.app_crc == crc) {
+            done = 1;
+            return;
+        }
+    }
+
+    done = 1;
+
+    /* Pack what the host asked for into the one word the bootloader prints. Deliberately not a
+     * summary: the raw counts say which STEP of MS OS 2.0 failed. No BOS request means the host
+     * never asked, so bcdUSB or the descriptor reply is wrong; a BOS but no vendor request means
+     * the platform capability was rejected; a vendor request with the wrong wLength means the
+     * BOS was read but its length field disagrees with the set. */
+    uint32_t crumb = 0xB0000000u
+                   | ((uint32_t)(g_usb_setup.bos    & 0x0Fu) << 20)
+                   | ((uint32_t)(g_usb_setup.vendor & 0x0Fu) << 16)
+                   | ((uint32_t)(g_usb_setup.vendor_asked & 0xFFu) << 8)
+                   | (uint32_t)g_usb_setup.last_stall_req;
+    boot_stage_force(crumb);
+
+    for (int i = 0; i < 64; i++) usb_poll();
+    boot_handshake_set_request(BOOT_REQ_UPDATE, 0);
+    bsp_system_reset();
+}
+
 static void cmd_lcd(const char *a)
 {
     if (*a == 'o' && a[1] == 'n')  { ra8876_display_on(1); console_write("display on\r\n");  return; }
@@ -2169,6 +2238,7 @@ int main(void)
         report_healthy();       /* one-shot; see above for why not before the loop */
 
         emp_session_poll(bsp_millis());
+        handback_check();
 
         /* Service on the CLOCK, not on a loop counter.
          *

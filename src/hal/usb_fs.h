@@ -36,6 +36,26 @@ uint32_t usb_read(uint8_t *buf, uint32_t max);
  * buffer is full, in which case call usb_poll() and retry. */
 uint32_t usb_write(const uint8_t *buf, uint32_t len);
 
+/* What a host asked for during enumeration, and what we refused.
+ *
+ * A device whose descriptors are wrong has no driver, and a device with no driver has no
+ * console -- so the usual way to find out what happened is missing exactly when it is needed.
+ * These survive a warm reset in SRAM, and the application packs them into the breadcrumb word
+ * the bootloader prints, which is still reachable over CDC. */
+typedef struct {
+    uint16_t total;           /* SETUP packets seen at all */
+    uint16_t bos;             /* GET_DESCRIPTOR(BOS) -- MS OS 2.0 begins here or not at all */
+    uint16_t vendor;          /* vendor requests answered, i.e. the MS OS 2.0 fetch */
+    uint16_t vendor_asked;    /* wLength of the last one; 178 means the host read the BOS */
+    uint16_t stalls;
+    uint16_t bulk_rx;         /* bulk OUT packets: a host that has a driver and is using it */
+    uint8_t  bos_len;
+    uint8_t  last_stall_req;
+    uint8_t  last_stall_type;
+} usb_setup_stats_t;
+
+extern usb_setup_stats_t g_usb_setup;
+
 /* Blocking convenience for diagnostics. Drops output if no host is reading, rather than
  * hanging the bootloader — an unread console must never wedge the device. */
 extern uint32_t g_usb_tx_dropped;   /* console bytes lost; non-zero means output was cut */

@@ -77,6 +77,10 @@ add_executable(bootloader
     src/boot/flash_faci.c
     src/common/persist.c
     src/hal/usb_fs.c
+    # CDC, and it stays CDC. The bootloader is reachable only over USB and replaceable only from
+    # an SD card, so its transport must not depend on anything we are still changing -- see the
+    # header of usb_desc.h. The application links usb_desc_vendor.c instead.
+    src/hal/usb_desc_cdc.c
     src/common/console.c
 )
 electra_image(bootloader bootloader.ld bootloader 0x00100000)
@@ -98,6 +102,9 @@ add_executable(app
     src/hal/qt2120.c
     src/hal/inputs.c
     src/hal/usb_fs.c
+    # Vendor bulk with WCID, so Windows binds WinUSB unaided -- see usb_desc_vendor.c. The
+    # bootloader deliberately links the CDC set instead.
+    src/hal/usb_desc_vendor.c
     src/common/console.c
     src/common/persist.c
     src/boot/flash_faci.c

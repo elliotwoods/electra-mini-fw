@@ -63,10 +63,40 @@ it, and this project never needs to. If you find yourself about to copy a file n
 
 ---
 
+## Tier 0 — the application is unreachable over USB (no case, no card)
+
+**Unplug the device, plug it back in, and it will be sitting in the bootloader on a COM port.**
+
+This is the recovery for the ordinary case, and it is worth understanding rather than
+memorising, because it is what makes the tier below almost never necessary.
+
+The application and the bootloader no longer enumerate the same way. The application is a
+**vendor bulk device** bound to WinUSB, reached with `tools\deploy\winusb.py`. The bootloader is
+still **CDC**, reached with `rawcom.py` and `flash_usb.py` exactly as it always was. So if a new
+application will not talk — wrong descriptors, a broken WinUSB tool, a hang before USB comes up —
+the way back does not go through the application at all.
+
+A cold boot lands in the bootloader because SRAM does not survive losing power, so the health
+word the bootloader looks for reads as zero, and rule 5 in `src/boot/main.c` **holds** rather
+than launching an application that has never proven itself. It sits there and waits.
+
+```
+python tools\deploy\flash_usb.py build\app.srec     # the device is already in the bootloader
+```
+
+**The one thing that defeats this is `pers p`.** That command writes a persistent record
+vouching for the exact image in flash, and from then on the bootloader launches it on a cold
+boot with no window to interrupt — which is the entire point of the record, and exactly what you
+do not want on an image you have not finished trusting. Run `pers p` only after the image has
+proven itself over the transport you intend to use. `pers e` erases the record and restores the
+behaviour above.
+
+---
+
 ## Tier 1 — application is broken (expected path, case stays shut)
 
-This is the recovery you will actually use. It works even if our firmware crashes instantly,
-hangs, or never reaches `main`.
+This is the recovery you will actually use if Tier 0 does not apply. It works even if our
+firmware crashes instantly, hangs, or never reaches `main`.
 
 ### Entering USB DISK MODE
 
