@@ -37,6 +37,8 @@ typedef struct {
     uint8_t  boolean;
     uint32_t choice;
     double   number;
+    uint8_t  color_count;
+    float    color[4];
 } hist_value_t;
 
 void hist_init(void);

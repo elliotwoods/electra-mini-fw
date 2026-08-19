@@ -29,6 +29,7 @@ $sources = @(
     "$root\src\app\ui_state.c",
     "$root\src\app\history.c",
     "$root\src\proto\surface.c",
+    "$root\src\proto\diag.c",
     "$root\src\proto\frame.c",
     "$root\tools\sim\sim_wire.c"
 ) -join ' '
@@ -42,6 +43,13 @@ $cmd = "call `"$($vcvars.FullName)`" >nul && cl /nologo /W3 /D_CRT_SECURE_NO_WAR
 
 cmd /c $cmd
 if ($LASTEXITCODE -ne 0) { throw "compile failed" }
+
+if ($Scene -eq 'choice-check') {
+    & C:/Users/user/miniconda3/python.exe "$PSScriptRoot\check-choice.py" `
+        "$out\sim.exe" $out
+    if ($LASTEXITCODE -ne 0) { throw "Choice pixel checks failed" }
+    exit 0
+}
 
 $ppm = Join-Path $out "sim.ppm"
 & "$out\sim.exe" $Scene $ppm

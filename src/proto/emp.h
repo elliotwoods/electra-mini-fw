@@ -21,7 +21,7 @@
 /* Minor may only ADD: opcodes, flag bits, trailing members inside field_len, or 0x80+ value
  * tags (docs/protocol.md 6). Both ends agree on min(host, device), so neither can send the
  * other something it has never heard of. */
-#define EMP_VERSION_MINOR    0u
+#define EMP_VERSION_MINOR    1u
 #define EMP_HEADER_BYTES     8u
 #define EMP_PREFIX_BYTES     8u          /* total_len u32 + crc32c u32, on FIRST && !LAST */
 

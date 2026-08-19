@@ -44,15 +44,18 @@
  * The stock table (DAT_1FFE14D4) is { 5,7,6,4,3,0,1,2 }. Measured against the real panel it
  * produces a constant rotation of exactly 4 — touching the first knob lit bit 4, the second
  * bit 5, and so on, wrapping. Four is half of eight and the knobs are in two rows of four, so
- * that rotation is a row swap: **stock numbers the top row first; we number the bottom row
- * first**, matching how the panel reads to someone sitting in front of it.
- *
- * The recovered table was therefore correct; only its origin differed. This is the same table
- * rotated to our ordering, so pot 0 is the bottom-left knob. Verified by touching all eight in
- * sequence and watching the reported bits advance 0,1,2...7 in step.
+ * that rotation is a row swap: stock numbers the top row first, while the UI numbers the
+ * bottom row first. Apply that row swap here so touch, push, rotation, and displayed fields all
+ * use the same physical order.
  */
 const unsigned char qt2120_pot_to_key[8] = { 3, 0, 1, 2, 5, 7, 6, 4 };
 #define pot_to_key qt2120_pot_to_key
+
+static uint8_t pot_threshold[8] = {
+    QT2120_THRESHOLD, QT2120_THRESHOLD, QT2120_THRESHOLD, QT2120_THRESHOLD,
+    QT2120_THRESHOLD, QT2120_THRESHOLD, QT2120_THRESHOLD, QT2120_THRESHOLD
+};
+static uint8_t pot_gain[8];
 
 void qt2120_hw_reset(void)
 {
@@ -229,6 +232,12 @@ int qt2120_recalibrate(void)
     return RIIC_OK;
 }
 
+int qt2120_set_threshold(uint8_t key, uint8_t threshold)
+{
+    if (key >= 12u || threshold == 0u) return -101;
+    return riic_write_reg(BUS, QT2120_ADDR, (uint8_t)(R_DETECT_THRESH + key), threshold);
+}
+
 /* Touch conditioning: the two failure modes need opposite treatments.
  *
  * Reported symptoms, both of which the stock firmware also has:
@@ -349,6 +358,34 @@ int qt2120_set_gain(uint8_t key, uint8_t pulse_scale)
 {
     if (key >= 12) return -1;
     return riic_write_reg(BUS, QT2120_ADDR, (uint8_t)(R_KEY_PULSE_SCALE + key), pulse_scale);
+}
+
+int qt2120_apply_pot_config(uint8_t pot, uint8_t threshold, uint8_t pulse_scale)
+{
+    if (pot >= 8u || threshold == 0u) return -101;
+    uint8_t pulse = (uint8_t)(pulse_scale >> 4);
+    uint8_t scale = (uint8_t)(pulse_scale & 0x0Fu);
+    if (pulse > 14u || scale > 7u || pulse > (uint8_t)(scale + 6u)) return -101;
+
+    uint8_t key = pot_to_key[pot];
+    int rc = qt2120_set_gain(key, pulse_scale);
+    if (rc != RIIC_OK) return rc;
+    rc = qt2120_set_threshold(key, threshold);
+    if (rc == RIIC_OK) {
+        pot_threshold[pot] = threshold;
+        pot_gain[pot] = pulse_scale;
+    }
+    return rc;
+}
+
+uint8_t qt2120_threshold_for_pot(uint8_t pot)
+{
+    return pot < 8u ? pot_threshold[pot] : QT2120_THRESHOLD;
+}
+
+uint8_t qt2120_gain_for_pot(uint8_t pot)
+{
+    return pot < 8u ? pot_gain[pot] : QT2120_DEFAULT_GAIN;
 }
 
 /* Peak-hold, so measuring a touch needs no coordination.

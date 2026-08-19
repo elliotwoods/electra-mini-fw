@@ -215,6 +215,24 @@ static int test_buttons_never_coalesce(void)
     return ok;
 }
 
+static int test_screen_updates_coalesce(void)
+{
+    int ok = 1;
+    txq_t q;
+    uint8_t first[12] = {0}, second[12] = {0};
+    begin(&q);
+    first[8] = 8;   first[10] = 8;
+    second[8] = 16; second[10] = 8;
+
+    txq_push(&q, EMP_CH_INPUT, EMP_OP_SCREEN, first, sizeof(first));
+    txq_push(&q, EMP_CH_INPUT, EMP_OP_SCREEN, second, sizeof(second));
+    CHECK(txq_depth(&q) == 1);
+    CHECK(txq_pump(&q) == 1);
+    CHECK(sent_count == 1 && sent[0].opcode == EMP_OP_SCREEN);
+    CHECK(sent[0].payload[8] == 16 && sent[0].payload[10] == 8);
+    return ok;
+}
+
 static int test_control_goes_first(void)
 {
     int ok = 1;
@@ -425,6 +443,7 @@ int txq_run_selftests(txq_report_fn report)
     run("absolute edits supersede", test_absolute_edits_supersede(),          report, &failures);
     run("fields stay separate",     test_different_fields_do_not_merge(),     report, &failures);
     run("buttons never coalesce",   test_buttons_never_coalesce(),            report, &failures);
+    run("screen updates coalesce",  test_screen_updates_coalesce(),           report, &failures);
     run("control goes first",       test_control_goes_first(),                report, &failures);
     run("gesture order preserved",  test_button_and_knob_keep_their_order(),  report, &failures);
     run("superseded keeps place",   test_superseded_entry_keeps_its_place(),  report, &failures);

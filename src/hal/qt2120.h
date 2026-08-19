@@ -25,6 +25,8 @@ int  qt2120_read_keys(uint16_t *keys_out);
 
 /* Detection threshold, in counts. Higher is less sensitive and less prone to latching. */
 #define QT2120_THRESHOLD  12
+#define QT2120_DEFAULT_GAIN 0x00u
+#define QT2120_DEFAULT_GAIN 0x00u
 
 /* How long a key may report touched, with its pot never moving, before we assume it is stuck.
  * Longer than any real touch-and-turn gesture; short enough that a latch is a nuisance rather
@@ -41,10 +43,18 @@ typedef struct {
 
 int qt2120_read_detail(qt2120_detail_t *out);
 int qt2120_recalibrate(void);
+int qt2120_set_threshold(uint8_t key, uint8_t threshold);
+int qt2120_set_threshold(uint8_t key, uint8_t threshold);
 
-/* Per-key gain (register 0x28 + key): high nibble scale, low nibble burst pulses. The lever for
+/* Per-key oversampling (register 0x28 + key): high nibble PULSE, low nibble SCALE. The lever for
  * one electrode being weaker than its neighbours, as opposed to the whole panel being deaf. */
 int qt2120_set_gain(uint8_t key, uint8_t pulse_scale);
+int qt2120_apply_pot_config(uint8_t pot, uint8_t threshold, uint8_t pulse_scale);
+uint8_t qt2120_threshold_for_pot(uint8_t pot);
+uint8_t qt2120_gain_for_pot(uint8_t pot);
+int qt2120_apply_pot_config(uint8_t pot, uint8_t threshold, uint8_t pulse_scale);
+uint8_t qt2120_threshold_for_pot(uint8_t pot);
+uint8_t qt2120_gain_for_pot(uint8_t pot);
 
 /* Continuous peak-hold of the per-key touch delta, so a touch can be measured without anyone
  * having to hit a capture window. Call track_peaks periodically; read and reset with get_peaks. */

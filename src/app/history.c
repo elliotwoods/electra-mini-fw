@@ -21,6 +21,8 @@ static void snapshot(const surf_field_t *f, hist_value_t *v)
     v->boolean = f->boolean;
     v->choice  = f->choice;
     v->number  = f->number;
+    v->color_count = f->color_count;
+    memcpy(v->color, f->color, sizeof(v->color));
 }
 
 static int same(const hist_value_t *a, const hist_value_t *b)
@@ -29,6 +31,9 @@ static int same(const hist_value_t *a, const hist_value_t *b)
     switch (a->tag) {
     case EMP_VAL_BOOL:   return a->boolean == b->boolean;
     case EMP_VAL_CHOICE: return a->choice  == b->choice;
+    case EMP_VAL_COLOR:
+        return a->color_count == b->color_count
+            && memcmp(a->color, b->color, sizeof(a->color)) == 0;
     default:             return a->number  == b->number;
     }
 }
@@ -91,7 +96,7 @@ void hist_commit(uint16_t field)
 
 void hist_tick(uint32_t now_ms)
 {
-    uint16_t n = surf_field_count();
+    uint16_t n = surf_slot_span();
     if (n > SURF_MAX_FIELDS) n = SURF_MAX_FIELDS;
 
     for (uint16_t i = 0; i < n; i++) {

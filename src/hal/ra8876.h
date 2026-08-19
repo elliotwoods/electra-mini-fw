@@ -33,6 +33,22 @@ void ra8876_display_on(int on);
 void ra8876_backlight(uint16_t brightness);   /* 0x0800 brightest .. 0x2000 off; BELOW
                                                * 0x0800 is also OFF. Clamped internally. */
 
+#define RA8876_BACKLIGHT_MIN_PERCENT 10u
+#define RA8876_BACKLIGHT_MAX_PERCENT 100u
+#define RA8876_BACKLIGHT_PERIOD      0x1800u
+
+/* Duty-linear user setting. The compare is always in 1..period, never the controller's
+ * blanking value. Kept inline so the exact conversion is host-testable without display I/O. */
+static inline uint16_t ra8876_backlight_compare_for_percent(uint8_t percent)
+{
+    if (percent < RA8876_BACKLIGHT_MIN_PERCENT) percent = RA8876_BACKLIGHT_MIN_PERCENT;
+    if (percent > RA8876_BACKLIGHT_MAX_PERCENT) percent = RA8876_BACKLIGHT_MAX_PERCENT;
+    return (uint16_t)(((uint32_t)RA8876_BACKLIGHT_PERIOD * percent + 50u) / 100u);
+}
+
+void ra8876_backlight_percent(uint8_t percent);
+uint16_t ra8876_backlight_programmed_pwm(void);
+
 /* Drawing. All coordinates are relative to the active window origin. */
 void ra8876_set_canvas(uint32_t addr);        /* where drawing lands */
 void ra8876_set_display_page(uint32_t addr);  /* what is scanned out */

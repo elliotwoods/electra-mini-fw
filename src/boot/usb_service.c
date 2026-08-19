@@ -28,6 +28,50 @@ static uint32_t stream_fill;
 static uint32_t stream_written;
 static int      stream_open;
 
+/* Button 5 is mux channel 4. Keep this tiny scanner local to the bootloader instead of linking
+ * the application's ADC/rotation stack into the recovery image. It requires a stable release
+ * before accepting a press, so the same hold that requested update mode cannot immediately
+ * bounce straight back into the application. */
+static int button5_pressed(void)
+{
+    static uint8_t last_raw;
+    static uint8_t stable;
+    static uint8_t count;
+    static uint8_t primed;
+    static uint8_t armed;
+
+    PORT_CLR(9, 0);                  /* mux A0 = 0 */
+    PORT_CLR(9, 1);                  /* mux A1 = 0 */
+    PORT_SET(9, 5);                  /* mux A2 = 1: channel 4 */
+    bsp_delay_us(2);
+    uint8_t raw = (uint8_t)!PORT_GET(0, 4);   /* front buttons are active low */
+
+    if (!primed) {
+        last_raw = stable = raw;
+        count = 1;
+        primed = 1;
+        armed = (uint8_t)!raw;       /* already released: the first press must act */
+        return 0;
+    }
+
+    if (raw != last_raw) {
+        last_raw = raw;
+        count = 1;
+        return 0;
+    }
+    if (count < 32u) count++;
+    if (count != 32u || raw == stable) return 0;
+
+    stable = raw;
+    if (!stable) {
+        armed = 1;                   /* a deliberate press must follow a stable release */
+        return 0;
+    }
+    if (!armed) return 0;
+    armed = 0;
+    return 1;
+}
+
 static uint32_t parse_hex(const char **p)
 {
     uint32_t v = 0;
@@ -204,5 +248,10 @@ void usb_flash_service(void)
     for (;;) {
         usb_poll();
         console_poll();
+        if (button5_pressed() && app_image_valid()) {
+            console_write("button 5: launching application...\r\n");
+            for (int i = 0; i < 64; i++) usb_poll();
+            app_launch();
+        }
     }
 }

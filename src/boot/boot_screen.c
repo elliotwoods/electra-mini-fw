@@ -26,6 +26,7 @@
 #include "text.h"
 #include "font.h"
 #include "boot_handshake.h"
+#include "app_launch.h"
 #include "boot_screen.h"
 
 #define BG       0x0000u        /* black */
@@ -36,6 +37,15 @@
 
 #define W 800
 #define H 480
+
+/* Match the application's six-button strip so the label sits directly above the physical
+ * control. Button 5 is the second button from the right (zero-based index 4). */
+#define BUTTON_GAP       6
+#define BUTTON_MARGIN    12
+#define BUTTON_W         ((W - 2 * BUTTON_MARGIN - 5 * BUTTON_GAP) / 6)
+#define BUTTON5_X        (BUTTON_MARGIN + 4 * (BUTTON_W + BUTTON_GAP))
+#define BUTTON_Y         410
+#define BUTTON_H         52
 
 static void put_hex(char *out, uint32_t v)
 {
@@ -128,5 +138,20 @@ void boot_screen_show(uint32_t reason)
     y = (int16_t)(y + step);
     text_draw(&font_small, 40, y, "python tools/deploy/flash_usb.py build/app.srec", DIM, BG);
 
-    text_draw(&font_small, 40, H - 40, "electra-mini-fw bootloader", DIM, BG);
+    text_draw(&font_small, 40, 378, "electra-mini-fw bootloader", DIM, BG);
+
+    /* Reset means "leave update mode and start the installed application". Do not draw an
+     * inert/grey control when no valid image exists: the rest of the UI follows the same rule. */
+    if (app_image_valid()) {
+        ra8876_set_fg(0x1082u);
+        ra8876_fill_rect(BUTTON5_X, BUTTON_Y, BUTTON_W, BUTTON_H);
+        ra8876_set_fg(DIM);
+        ra8876_fill_rect(BUTTON5_X, BUTTON_Y, BUTTON_W, 1);
+        ra8876_fill_rect(BUTTON5_X, BUTTON_Y + BUTTON_H - 1, BUTTON_W, 1);
+        ra8876_fill_rect(BUTTON5_X, BUTTON_Y, 1, BUTTON_H);
+        ra8876_fill_rect(BUTTON5_X + BUTTON_W - 1, BUTTON_Y, 1, BUTTON_H);
+        text_draw_centred(&font_small, BUTTON5_X + BUTTON_W / 2,
+                          BUTTON_Y + (BUTTON_H - text_height(&font_small)) / 2,
+                          "5  RESET", FG, 0x1082u);
+    }
 }

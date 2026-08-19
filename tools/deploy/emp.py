@@ -16,6 +16,7 @@ import time
 
 MAGIC = 0xE1
 VERSION_MAJOR = 1
+VERSION_MINOR = 1
 HEADER = 8
 
 FLAG_FIRST = 0x01
@@ -28,14 +29,14 @@ OP = {
     0x05: "HEARTBEAT", 0x06: "DIAG", 0x07: "FLOW", 0x08: "BYE",
     0x0E: "ECHO", 0x0F: "ECHO_REPLY",
     0x20: "DESC_BEGIN", 0x21: "DESC_FIELD", 0x22: "DESC_END", 0x24: "VALUES",
-    0x50: "EDIT", 0x54: "FOCUS", 0x55: "DESC_REQUEST", 0x56: "EDIT_DELTA",
+    0x50: "EDIT", 0x53: "SCREEN", 0x54: "FOCUS", 0x55: "DESC_REQUEST", 0x56: "EDIT_DELTA",
     0x57: "DESC_ACK", 0x58: "BUTTON",
 }
 OP_HELLO, OP_READY, OP_PING, OP_PONG = 0x01, 0x02, 0x03, 0x04
 OP_HEARTBEAT, OP_ECHO, OP_ECHO_REPLY = 0x05, 0x0E, 0x0F
 OP_DESC_BEGIN, OP_DESC_FIELD, OP_DESC_END = 0x20, 0x21, 0x22
 OP_VALUES = 0x24
-OP_EDIT, OP_FOCUS, OP_DESC_REQUEST = 0x50, 0x54, 0x55
+OP_EDIT, OP_SCREEN, OP_FOCUS, OP_DESC_REQUEST = 0x50, 0x53, 0x54, 0x55
 OP_EDIT_DELTA, OP_DESC_ACK, OP_BUTTON = 0x56, 0x57, 0x58
 CH_SURFACE, CH_INPUT = 1, 2
 
@@ -170,6 +171,12 @@ def parse_heartbeat(p: bytes) -> dict:
     return d
 
 
+def parse_screen(p: bytes) -> dict:
+    """EMP/1.1 authoritative visible range: revision, first field index, count."""
+    r = Reader()
+    return {"revision": r.u64(p), "first_index": r.u16(p), "visible_count": r.u16(p)}
+
+
 def field_record(fid, kind, label, value, lo=None, hi=None, step=None,
                  precision=None, unit=None, lane=0):
     """One DESC_FIELD body: everything after the u16 index.
@@ -276,6 +283,8 @@ def describe(m):
         return "READY " + ", ".join("%s=%s" % kv for kv in parse_ready(p).items())
     if m.get("opcode") == OP_HEARTBEAT:
         return "HEARTBEAT " + ", ".join("%s=%s" % kv for kv in parse_heartbeat(p).items())
+    if m.get("opcode") == OP_SCREEN:
+        return "SCREEN " + ", ".join("%s=%s" % kv for kv in parse_screen(p).items())
     if m.get("opcode") == OP_PONG:
         return "PONG " + ", ".join("%s=%s" % kv for kv in parse_pong(p).items())
     return "%s (%d bytes)" % (op, len(p))
@@ -315,7 +324,7 @@ def main():
         print("   nothing at all — the device is not talking unprompted")
 
     print("\n2. HELLO -> READY")
-    link.send(OP_HELLO, struct.pack("<BBHQI", VERSION_MAJOR, 0, 1016, 0, 16))
+    link.send(OP_HELLO, struct.pack("<BBHQI", VERSION_MAJOR, VERSION_MINOR, 1016, 0, 16))
     got = [m for m in link.pump(1.5) if m.get("opcode") == OP_READY]
     print("   %s" % (describe(got[0]) if got else "NO ANSWER"))
 

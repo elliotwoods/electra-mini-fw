@@ -275,6 +275,8 @@ static void pwm_init(void)
     ra_write_reg8(R_PCFGR,     0x30);           /* timer1 start + auto-reload */
 }
 
+static uint16_t programmed_pwm;
+
 /* `brightness` follows the stock firmware's convention, which is inverted and does NOT
  * extend to 0: compare = 0x2000 - brightness, and the PWM period is 0x1800. A compare
  * ABOVE the period is how stock blanks the screen (it writes 0xFFFF, giving compare
@@ -292,8 +294,17 @@ void ra8876_backlight(uint16_t brightness)
 {
     if (brightness < 0x0800U) brightness = 0x0800U;
     if (brightness > 0x2000U) brightness = 0x2000U;
-    ra_write_reg16(R_TCMPB1, (uint16_t)(0x2000U - brightness));
+    programmed_pwm = (uint16_t)(0x2000U - brightness);
+    ra_write_reg16(R_TCMPB1, programmed_pwm);
 }
+
+void ra8876_backlight_percent(uint8_t percent)
+{
+    programmed_pwm = ra8876_backlight_compare_for_percent(percent);
+    ra_write_reg16(R_TCMPB1, programmed_pwm);
+}
+
+uint16_t ra8876_backlight_programmed_pwm(void) { return programmed_pwm; }
 
 /* --- public ------------------------------------------------------------- */
 
