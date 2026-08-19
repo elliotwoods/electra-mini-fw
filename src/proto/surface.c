@@ -20,6 +20,7 @@
 
 #include <string.h>
 #include "surface.h"
+#include "ui_state.h"
 #include "session.h"
 #include "diag.h"
 
@@ -44,6 +45,8 @@ typedef struct {
     char          pool[SURF_STRING_POOL];
     surf_choice_t choices[SURF_MAX_CHOICES];
     uint16_t      field_count;
+    uint16_t      slot_span;
+    uint64_t      occupied;
     uint16_t      pool_used;
     uint16_t      choices_used;
     uint64_t      revision;
@@ -68,6 +71,13 @@ static int          staging_open;
 static uint32_t     last_edit_seq[SURF_MAX_FIELDS];
 static uint32_t     edit_seq;
 static uint16_t     touched_mask;
+
+static uint64_t slot_bit(uint16_t slot)
+{
+    uint64_t bit = 1;
+    while (slot--) bit *= 2u;
+    return bit;
+}
 
 /* ------------------------------------------------------------------ decode helpers */
 
@@ -97,6 +107,15 @@ static double rdf64(rd_t *r)
     return d;
 }
 
+static float rdf32(rd_t *r)
+{
+    float f = 0.0f;
+    if (!rd_avail(r, 4)) return 0.0f;
+    memcpy(&f, r->p + r->off, 4);
+    r->off += 4;
+    return f;
+}
+
 /* Is this an f64 the device can do arithmetic with?
  *
  * docs/protocol.md 3.4 forbids encoding a non-finite value, but a device that only trusts that
@@ -112,6 +131,13 @@ static int finite_f64(double d)
     uint64_t bits;
     memcpy(&bits, &d, 8);
     return ((bits >> 52) & 0x7FFu) != 0x7FFu;      /* exponent all ones == inf or NaN */
+}
+
+static int finite_f32(float f)
+{
+    uint32_t bits;
+    memcpy(&bits, &f, 4);
+    return ((bits >> 23) & 0xFFu) != 0xFFu;
 }
 
 /* Copies into the string pool and returns its offset. Strings are UTF-8 and not terminated on
@@ -155,7 +181,8 @@ static int rd_string(rd_t *r, uint16_t *off_out, uint16_t *len_out)
 #define RDV_SKIPPED     2
 #define RDV_NONFINITE   3   /* read correctly, refused on its merits; value left at zero */
 
-static int rd_value(rd_t *r, uint8_t tag, uint8_t *b_out, double *n_out, uint32_t *c_out)
+static int rd_value(rd_t *r, uint8_t tag, uint8_t *b_out, double *n_out, uint32_t *c_out,
+                    uint8_t *color_count_out, float color_out[4])
 {
     switch (tag) {
     case EMP_VAL_BOOL:   *b_out = rd8(r);  return RDV_STORED;
@@ -186,12 +213,13 @@ static int rd_value(rd_t *r, uint8_t tag, uint8_t *b_out, double *n_out, uint32_
     case EMP_VAL_COLOR: {
         /* `count` u8 + count x f32. Colour is a deferred feature, not an unknown one. */
         uint8_t n = rd8(r);
-        uint32_t bytes = (uint32_t)n * 4u;
-        if (!rd_avail(r, bytes)) { r->bad = 1; return RDV_UNDECODABLE; }
-        r->off += bytes;
-        emp_diag(EMP_SEV_INFO, EMP_DIAG_UNKNOWN_VALUE_TAG, EMP_VAL_COLOR,
-                 "colour values are not rendered yet");
-        return RDV_SKIPPED;
+        if (n != 3u && n != 4u) return RDV_UNDECODABLE;
+        for (uint8_t i = 0; i < n; i++) color_out[i] = rdf32(r);
+        if (r->bad) return RDV_UNDECODABLE;
+        for (uint8_t i = 0; i < n; i++)
+            if (!finite_f32(color_out[i])) return RDV_NONFINITE;
+        *color_count_out = n;
+        return RDV_STORED;
     }
 
     default:
@@ -238,6 +266,13 @@ static void wrf64(wr_t *w, double d)
     for (int i = 0; i < 8; i++) wr8(w, b[i]);
 }
 
+static void wrf32(wr_t *w, float f)
+{
+    uint8_t b[4];
+    memcpy(b, &f, 4);
+    for (int i = 0; i < 4; i++) wr8(w, b[i]);
+}
+
 /* ------------------------------------------------------------------ outbound */
 
 static void send_desc_request(uint8_t reason)
@@ -265,13 +300,17 @@ static void write_value(wr_t *w, const surf_field_t *f)
     switch (f->value_tag) {
     case EMP_VAL_BOOL:   wr8(w, EMP_VAL_BOOL);   wr8(w, f->boolean); break;
     case EMP_VAL_CHOICE: wr8(w, EMP_VAL_CHOICE); wr32(w, f->choice); break;
+    case EMP_VAL_COLOR:
+        wr8(w, EMP_VAL_COLOR); wr8(w, f->color_count);
+        for (uint8_t i = 0; i < f->color_count; i++) wrf32(w, f->color[i]);
+        break;
     default:             wr8(w, EMP_VAL_NUMBER); wrf64(w, f->number); break;
     }
 }
 
 static void send_edit(uint16_t index, uint8_t cause)
 {
-    if (index >= LIVE->field_count) return;
+    if (!surf_field(index)) return;
     surf_field_t *f = &LIVE->fields[index];
 
     uint8_t buf[48];
@@ -295,7 +334,7 @@ static void send_edit(uint16_t index, uint8_t cause)
 
 static void send_edit_delta(uint16_t index, int32_t delta)
 {
-    if (index >= LIVE->field_count) return;
+    if (!surf_field(index)) return;
     surf_field_t *f = &LIVE->fields[index];
 
     uint8_t buf[32];
@@ -348,6 +387,8 @@ static void desc_begin(const uint8_t *msg, uint32_t len)
     STAGE->pool_used    = 0;
     STAGE->choices_used = 0;
     STAGE->field_count  = 0;
+    STAGE->slot_span    = 0;
+    STAGE->occupied     = 0;
 }
 
 static void desc_field(const uint8_t *msg, uint32_t len)
@@ -374,11 +415,23 @@ static void desc_field(const uint8_t *msg, uint32_t len)
      * even though it arrived as many independent messages. */
     staging_crc = emp_crc32c_update(staging_crc, msg + 2, len - 2);
 
-    surf_field_t *f = &STAGE->fields[index];
-    memset(f, 0, sizeof(*f));
-
     (void)rd16(&r);                       /* field_len: forward compatibility, see below */
-    f->id           = rd16(&r);
+    uint16_t slot = rd16(&r);
+    if (r.bad || slot >= SURF_MAX_FIELDS) {
+        staging_open = 0;
+        send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
+        return;
+    }
+    if (STAGE->occupied & slot_bit(slot)) {
+        staging_open = 0;
+        send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
+        return;
+    }
+    STAGE->occupied |= slot_bit(slot);
+    if (STAGE->slot_span < slot + 1u) STAGE->slot_span = (uint16_t)(slot + 1u);
+    surf_field_t *f = &STAGE->fields[slot];
+    memset(f, 0, sizeof(*f));
+    f->id           = slot;
     f->kind         = rd8(&r);
     f->flags        = rd8(&r);
     f->present      = rd16(&r);
@@ -390,7 +443,8 @@ static void desc_field(const uint8_t *msg, uint32_t len)
     f->choice_count = rd16(&r);
 
     f->value_tag = rd8(&r);
-    switch (rd_value(&r, f->value_tag, &f->boolean, &f->number, &f->choice)) {
+    switch (rd_value(&r, f->value_tag, &f->boolean, &f->number, &f->choice,
+                     &f->color_count, f->color)) {
     case RDV_STORED:
         break;
     case RDV_SKIPPED:
@@ -400,6 +454,11 @@ static void desc_field(const uint8_t *msg, uint32_t len)
          * would take away every other knob as well. The tag is normalised so that everything
          * downstream can assume value_tag is one of the three this device can render, and the
          * field is marked so the host can see WHICH control it lost rather than inferring it. */
+        if (f->value_tag == EMP_VAL_COLOR) {
+            send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
+            staging_open = 0;
+            return;
+        }
         f->value_tag = EMP_VAL_NUMBER;
         f->number    = 0.0;
         f->flags     = (uint8_t)(f->flags | EMP_FIELD_TRUNCATED);
@@ -467,7 +526,8 @@ static void desc_field(const uint8_t *msg, uint32_t len)
     if (f->present & EMP_PRESENT_DEFAULT) {
         f->default_tag = rd8(&r);
         switch (rd_value(&r, f->default_tag, &f->default_boolean,
-                         &f->default_number, &f->default_choice)) {
+                         &f->default_number, &f->default_choice,
+                         &f->default_color_count, f->default_color)) {
         case RDV_STORED:
             break;
         case RDV_SKIPPED:
@@ -508,7 +568,7 @@ static void desc_end(const uint8_t *msg, uint32_t len)
 
     staging_open = 0;
 
-    if (count != staging_next || revision != staging_revision) {
+    if (count != staging_next || count != staging_expect || revision != staging_revision) {
         emp_diag(EMP_SEV_ERROR, EMP_DIAG_DESC_SEQUENCE, staging_next,
                  "descriptor ended with a count or revision we did not build");
         send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
@@ -531,19 +591,34 @@ static void desc_end(const uint8_t *msg, uint32_t len)
     live_ix ^= 1u;
 
     page = 0;
+    touched_mask = 0;
     for (uint16_t i = 0; i < SURF_MAX_FIELDS; i++) last_edit_seq[i] = 0;
 
     send_desc_ack(revision, count);
+    ui_state_surface_changed();
 }
 
 /* ------------------------------------------------------------------ values */
 
 static int index_of_id(uint16_t id, uint16_t *out)
 {
-    for (uint16_t i = 0; i < LIVE->field_count; i++) {
-        if (LIVE->fields[i].id == id) { *out = i; return 1; }
+    if (id >= SURF_MAX_FIELDS || !(LIVE->occupied & slot_bit(id))) return 0;
+    *out = id;
+    return 1;
+}
+
+static void handle_reveal(const uint8_t *msg, uint32_t len)
+{
+    rd_t r;
+    rd_init(&r, msg, len);
+    uint64_t revision = rd64(&r);
+    uint16_t id = rd16(&r);
+    if (r.bad) return;
+    if (revision != 0 && revision != LIVE->revision) {
+        send_desc_request(EMP_REQ_REVISION_UNKNOWN);
+        return;
     }
-    return 0;
+    if (surf_field(id)) (void)ui_state_reveal(id);
 }
 
 static void handle_values(const uint8_t *msg, uint32_t len)
@@ -571,11 +646,13 @@ static void handle_values(const uint8_t *msg, uint32_t len)
         double   number = 0.0;
         uint32_t choice = 0;
         uint8_t  boolean = 0;
+        uint8_t  color_count = 0;
+        float    color[4] = { 0 };
 
         /* A tag we can step over costs one control its update, not the batch. A tag we cannot
          * costs the batch, because every value after it would be read from the wrong offset --
          * which is worse than dropping them, since they would be applied to real controls. */
-        int got = rd_value(&r, tag, &boolean, &number, &choice);
+        int got = rd_value(&r, tag, &boolean, &number, &choice, &color_count, color);
         if (got == RDV_UNDECODABLE) break;
         if (r.bad) break;
 
@@ -587,6 +664,7 @@ static void handle_values(const uint8_t *msg, uint32_t len)
 
         uint16_t idx;
         if (!index_of_id(id, &idx)) continue;
+        surf_field_t *f = &LIVE->fields[idx];
 
         /* Causal echo suppression. A value is applied if the field is not under a finger, or if
          * the host has accounted for everything we have sent about it. A value that arrives
@@ -594,13 +672,17 @@ static void handle_values(const uint8_t *msg, uint32_t len)
          * clamp, a quantisation — and must be applied; anything older is a stale echo of our
          * own gesture and must not be, or the knob fights the hand turning it. */
         int under_hand = (touched_mask & (1u << (idx % SURF_POTS))) != 0;
+        const ui_state_t *us = ui_state();
+        if (f->kind == EMP_KIND_COLOR && us->focused == (int32_t)idx && touched_mask)
+            under_hand = 1;
         if (under_hand && ack_edit < last_edit_seq[idx]) continue;
 
-        surf_field_t *f = &LIVE->fields[idx];
         f->value_tag = tag;
         f->number    = number;
         f->choice    = choice;
         f->boolean   = boolean;
+        f->color_count = color_count;
+        memcpy(f->color, color, sizeof(f->color));
     }
 }
 
@@ -625,18 +707,43 @@ void surf_handle(uint8_t opcode, const uint8_t *msg, uint32_t len)
     case EMP_OP_DESC_END:   desc_end(msg, len);   break;
     case EMP_OP_DESC_ABORT: staging_open = 0;     break;
     case EMP_OP_VALUES:     handle_values(msg, len); break;
-    case EMP_OP_CLEAR:      surf_init();          break;
+    case EMP_OP_REVEAL:     handle_reveal(msg, len); break;
+    case EMP_OP_CLEAR:
+        surf_init();
+        ui_state_surface_cleared();
+        break;
     default: break;
     }
 }
 
 uint64_t surf_applied_revision(void) { return LIVE->revision; }
 uint16_t surf_field_count(void)      { return LIVE->field_count; }
+uint16_t surf_slot_span(void)        { return LIVE->slot_span; }
 uint16_t surf_page(void)             { return page; }
+
+void surf_set_page(uint16_t first_index)
+{
+    if (first_index > LIVE->slot_span) first_index = LIVE->slot_span;
+    page = first_index;
+    if (emp_session_peer_minor() < 1u) return;
+
+    /* EMP/1.1 SCREEN: the exact visible field range. The host uses this to restrict periodic
+     * VALUES traffic and to publish the new page immediately. */
+    uint8_t buf[16];
+    wr_t w;
+    wr_init(&w, buf, sizeof(buf));
+    wr64(&w, LIVE->revision);
+    wr16(&w, page);
+    uint16_t visible = (uint16_t)(LIVE->slot_span - page);
+    if (visible > SURF_POTS) visible = SURF_POTS;
+    wr16(&w, visible);
+    emp_send(EMP_CH_INPUT, EMP_OP_SCREEN, buf, w.len);
+}
 
 const surf_field_t *surf_field(uint16_t index)
 {
-    return (index < LIVE->field_count) ? &LIVE->fields[index] : 0;
+    return (index < SURF_MAX_FIELDS && (LIVE->occupied & slot_bit(index)))
+         ? &LIVE->fields[index] : 0;
 }
 
 const char *surf_choice_label(const surf_field_t *f, uint16_t option, uint16_t *len)
@@ -660,7 +767,7 @@ const char *surf_string(uint16_t off, uint16_t len)
 
 void surf_set_number_cause(uint16_t index, double v, uint8_t cause)
 {
-    if (index >= LIVE->field_count) return;
+    if (!surf_field(index)) return;
     surf_field_t *f = &LIVE->fields[index];
     if (f->kind == EMP_KIND_READONLY) return;      /* a read-only field is not ours to change */
 
@@ -680,7 +787,7 @@ void surf_set_number_cause(uint16_t index, double v, uint8_t cause)
 
 void surf_set_bool_cause(uint16_t index, uint8_t v, uint8_t cause)
 {
-    if (index >= LIVE->field_count) return;
+    if (!surf_field(index)) return;
     surf_field_t *f = &LIVE->fields[index];
     if (f->kind == EMP_KIND_READONLY) return;
     f->boolean   = v ? 1u : 0u;
@@ -690,7 +797,7 @@ void surf_set_bool_cause(uint16_t index, uint8_t v, uint8_t cause)
 
 void surf_set_choice_cause(uint16_t index, uint32_t v, uint8_t cause)
 {
-    if (index >= LIVE->field_count) return;
+    if (!surf_field(index)) return;
     surf_field_t *f = &LIVE->fields[index];
     if (f->kind == EMP_KIND_READONLY) return;
     f->choice    = v;
@@ -698,13 +805,28 @@ void surf_set_choice_cause(uint16_t index, uint32_t v, uint8_t cause)
     send_edit(index, cause);
 }
 
+void surf_set_color_cause(uint16_t index, const float *v, uint8_t count, uint8_t cause)
+{
+    if (!surf_field(index) || !v || (count != 3u && count != 4u)) return;
+    surf_field_t *f = &LIVE->fields[index];
+    if (f->kind == EMP_KIND_READONLY) return;
+    for (uint8_t i = 0; i < count; i++) if (!finite_f32(v[i])) return;
+    memcpy(f->color, v, (uint32_t)count * sizeof(float));
+    for (uint8_t i = count; i < 4u; i++) f->color[i] = 0.0f;
+    f->color_count = count;
+    f->value_tag = EMP_VAL_COLOR;
+    send_edit(index, cause);
+}
+
 void surf_set_number(uint16_t index, double v)   { surf_set_number_cause(index, v, EMP_CAUSE_ROTATE); }
 void surf_set_bool(uint16_t index, uint8_t v)    { surf_set_bool_cause(index, v, EMP_CAUSE_ROTATE); }
 void surf_set_choice(uint16_t index, uint32_t v) { surf_set_choice_cause(index, v, EMP_CAUSE_ROTATE); }
+void surf_set_color(uint16_t index, const float *v, uint8_t count)
+{ surf_set_color_cause(index, v, count, EMP_CAUSE_ROTATE); }
 
 void surf_send_delta(uint16_t index, int32_t detents)
 {
-    if (index >= LIVE->field_count || !detents) return;
+    if (!surf_field(index) || !detents) return;
     send_edit_delta(index, detents);
 }
 
@@ -740,7 +862,7 @@ void surf_send_focus(int32_t index, uint16_t touch_mask)
     wr_t w;
     wr_init(&w, buf, sizeof(buf));
 
-    int have = (index >= 0 && (uint16_t)index < LIVE->field_count);
+    int have = (index >= 0 && surf_field((uint16_t)index));
 
     wr64(&w, LIVE->revision);
     wr8(&w, (uint8_t)(have ? 1 : 0));
@@ -800,7 +922,9 @@ void surf_demo_descriptor(void)
           EMP_PRESENT_MIN | EMP_PRESENT_MAX | EMP_PRESENT_STEP | EMP_PRESENT_UNIT | EMP_PRESENT_PRECISION },
         {11, EMP_KIND_READONLY, "CPU",       "%",   37.0,   0.0, 100.0, 0.0,  0,
           EMP_PRESENT_MIN | EMP_PRESENT_MAX | EMP_PRESENT_UNIT },
-        {12, EMP_KIND_TOGGLE,  "Sync",       0,     0.0,   0.0,   0.0, 0.0,  0, 0 },
+        {12, EMP_KIND_COLOR,   "Colour",     0,     0.0,   0.0,   1.0, 0.01, 2,
+          EMP_PRESENT_MIN | EMP_PRESENT_MAX | EMP_PRESENT_STEP | EMP_PRESENT_PRECISION
+          | EMP_PRESENT_DEFAULT },
     };
 
     /* Option labels for field 9. The whole point of storing these is that a Choice knob must
@@ -813,7 +937,8 @@ void surf_demo_descriptor(void)
     for (unsigned i = 0; i < sizeof(demo) / sizeof(demo[0]); i++) {
         surf_field_t *f = &a->fields[i];
         memset(f, 0, sizeof(*f));
-        f->id        = demo[i].id;
+        f->id        = (uint16_t)i;
+        a->occupied |= slot_bit((uint16_t)i);
         f->kind      = demo[i].kind;
         f->present   = demo[i].present;
         f->min       = demo[i].lo;
@@ -840,6 +965,13 @@ void surf_demo_descriptor(void)
                     a->pool_used = (uint16_t)(a->pool_used + on);
                 }
             }
+        } else if (demo[i].kind == EMP_KIND_COLOR) {
+            f->value_tag = EMP_VAL_COLOR;
+            f->color_count = 3u;
+            f->color[0] = 0.25f; f->color[1] = 0.5f; f->color[2] = 1.0f;
+            f->default_tag = EMP_VAL_COLOR;
+            f->default_color_count = 3u;
+            memcpy(f->default_color, f->color, sizeof(f->color));
         } else {
             f->value_tag = EMP_VAL_NUMBER;
             f->number = demo[i].v;
@@ -863,5 +995,55 @@ void surf_demo_descriptor(void)
         }
     }
     a->field_count = sizeof(demo) / sizeof(demo[0]);
+    a->slot_span   = a->field_count;
     a->revision    = 0xDE30;
+}
+
+void surf_demo_choice_descriptor(uint16_t slot, const char *field_label,
+                                 const char *const *labels, uint16_t count,
+                                 uint16_t selected)
+{
+    surf_init();
+    if (slot >= SURF_MAX_FIELDS) return;
+
+    surf_arena_t *a = LIVE;
+    surf_field_t *f = &a->fields[slot];
+    f->id = slot;
+    f->kind = EMP_KIND_CHOICE;
+    f->present = EMP_PRESENT_CHOICES;
+    f->value_tag = EMP_VAL_CHOICE;
+    f->choice_count = count > SURF_MAX_CHOICES ? SURF_MAX_CHOICES : count;
+    f->choice = selected < f->choice_count ? selected
+                                           : (f->choice_count ? f->choice_count - 1u : 0u);
+    f->choice_first = 0;
+
+    for (uint16_t i = 0; i < f->choice_count; i++) {
+        const char *s = labels ? labels[i] : 0;
+        uint16_t len = 0;
+        while (s && s[len]) len++;
+        if (len && (uint32_t)a->pool_used + len <= SURF_STRING_POOL) {
+            memcpy(a->pool + a->pool_used, s, len);
+            a->choices[a->choices_used].off = a->pool_used;
+            a->choices[a->choices_used].len = len;
+            a->pool_used = (uint16_t)(a->pool_used + len);
+        }
+        /* Preserve one table entry per declared option. A zero length deliberately exercises
+         * the same numeric fallback as an omitted descriptor label. */
+        a->choices_used++;
+    }
+
+    if (!field_label) field_label = "Choice";
+    uint16_t label_len = 0;
+    while (field_label[label_len]) label_len++;
+    if ((uint32_t)a->pool_used + label_len <= SURF_STRING_POOL) {
+        memcpy(a->pool + a->pool_used, field_label, label_len);
+        f->label_off = a->pool_used;
+        f->label_len = label_len;
+        a->pool_used = (uint16_t)(a->pool_used + label_len);
+    }
+
+    a->field_count = 1u;
+    a->slot_span = (uint16_t)(slot + 1u);
+    a->occupied = slot_bit(slot);
+    a->revision = 0xDE31;
 }

@@ -21,6 +21,9 @@ Requires pyserial:  python -m pip install pyserial
 import os
 import sys
 import time
+import json
+import urllib.error
+import urllib.request
 
 try:
     import serial
@@ -35,6 +38,107 @@ BAUD = 115200          # ignored by CDC-ACM, but pyserial wants a number
 # At 32 the line was 104 chars and would have been silently truncated, corrupting the image
 # in a way that only a CRC check at the end would catch.
 CHUNK = 24
+ROUTER_APP_NAME = "av-control-surface-router"
+ROUTER_PROVIDER_ID = "av.control-surface.electra-mini-fw"
+
+
+def _router_admin_urls():
+    """Newest live-looking router admin URLs from av-app-registry.
+
+    Liveness is confirmed by the HTTP request, not inferred from an unfinished event: a process
+    can crash before writing Finish. Keeping the fold here dependency-free lets this deployment
+    tool coordinate with the Rust router without importing an av-frameworks checkout.
+    """
+    root = os.environ.get("AV_APP_REGISTRY_DIR")
+    if not root:
+        local = os.environ.get("LOCALAPPDATA")
+        if not local:
+            return []
+        root = os.path.join(local, "AuroraVision", "av-frameworks", "launcher")
+    events = os.path.join(root, "events")
+    if not os.path.isdir(events):
+        return []
+
+    runs = {}
+    for name in os.listdir(events):
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(events, name), "r", encoding="utf-8") as stream:
+                body = json.load(stream).get("body", {})
+        except (OSError, ValueError):
+            continue
+        run_id = body.get("run_id")
+        if not run_id:
+            continue
+        run = runs.setdefault(run_id, {})
+        event = body.get("event")
+        if event == "start":
+            template = body.get("template", {})
+            if template.get("app_name") == ROUTER_APP_NAME:
+                run["started_at_ms"] = body.get("started_at_ms", 0)
+        elif event == "ready":
+            run["admin_url"] = body.get("admin_url")
+        elif event == "finish":
+            run["finished"] = True
+
+    candidates = [
+        (run.get("started_at_ms", 0), run.get("admin_url"))
+        for run in runs.values()
+        if run.get("started_at_ms") is not None
+        and run.get("admin_url")
+        and not run.get("finished")
+    ]
+    return [url for _, url in sorted(candidates, reverse=True)]
+
+
+def router_maintenance(enabled, admin_url=None):
+    """Pause/resume the router provider, returning the exact router URL paused.
+
+    A 202 pause is the router's acknowledgement that plugin.shutdown completed and the WinUSB
+    handle has been dropped. Resume is always attempted by callers in finally.
+    """
+    urls = [admin_url] if admin_url else _router_admin_urls()
+    action = "pause" if enabled else "resume"
+    for base in urls:
+        endpoint = (
+            base.rstrip("/")
+            + "/api/providers/"
+            + ROUTER_PROVIDER_ID
+            + "/maintenance"
+        )
+        request = urllib.request.Request(
+            endpoint, data=action.encode("ascii"), method="POST"
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=6.0) as response:
+                message = response.read().decode("utf-8", "replace").strip()
+                if response.status != 202:
+                    raise SystemExit(
+                        f"control router maintenance {action} returned "
+                        f"HTTP {response.status}: {message}"
+                    )
+                print(f"control router: {message}")
+                return base
+        except urllib.error.HTTPError as error:
+            message = error.read().decode("utf-8", "replace").strip()
+            if error.code == 404:
+                raise SystemExit(
+                    "the running Control Router predates firmware-maintenance handoff; "
+                    "rebuild/restart av-control-surface-router"
+                )
+            raise SystemExit(
+                f"control router maintenance {action} failed "
+                f"(HTTP {error.code}): {message}"
+            )
+        except (OSError, urllib.error.URLError):
+            if admin_url:
+                print("warning: could not resume the Control Router; it will remain paused "
+                      "until restarted", file=sys.stderr)
+                return None
+            # An unfinished registry run can be stale. Try the next candidate.
+            continue
+    return None
 
 
 def find_port(explicit=None, quiet=False):
@@ -277,7 +381,25 @@ def flash(path, port):
     print("launching...")
     dev.cmd("run", expect_prompt=False)
     dev.close()
-    print("done.")
+
+    # "run" has no prompt because the bootloader detaches before jumping. Do not mistake that
+    # lack of a reply for success: hand back only after the WinUSB application enumerates.
+    deadline = time.time() + 8.0
+    while time.time() < deadline:
+        if app_present():
+            app = app_over_winusb()
+            if app:
+                reply = app.cmd("id")
+                app.close()
+                if "electra-mini-fw APP" not in reply:
+                    raise SystemExit("application enumerated but did not answer an active "
+                                     "WinUSB identity check")
+                print("application: responsive on WinUSB")
+                print("done.")
+                return
+        time.sleep(0.1)
+    raise SystemExit("image verified, but the application did not enumerate after launch; "
+                     "device may still be in update mode")
 
 
 def app_present():
@@ -368,7 +490,12 @@ def main():
     if "--reboot" in args:
         # Deliberately NOT find_port() here: that asserts a COM port exists, and the running
         # application is on WinUSB. Resolving the transport is reboot_to_bootloader's job.
-        reboot_to_bootloader(port)
+        router_url = router_maintenance(True)
+        try:
+            reboot_to_bootloader(port)
+        finally:
+            if router_url:
+                router_maintenance(False, router_url)
         return
     if "--console" in args:
         console(find_port(port))
@@ -378,13 +505,18 @@ def main():
     if not images:
         raise SystemExit(__doc__)
 
-    # If the application is running, put the device in the bootloader first rather than telling
-    # the user to run a second command. It used to be one invocation before the transports
-    # diverged, and there is no reason for it to be two now.
-    if find_port(port, quiet=True) is None and app_present():
-        reboot_to_bootloader(port)
+    router_url = router_maintenance(True)
+    try:
+        # If the application is running, put the device in the bootloader first rather than
+        # telling the user to run a second command. The router has acknowledged that it dropped
+        # its exclusive WinUSB handle before this check.
+        if find_port(port, quiet=True) is None and app_present():
+            reboot_to_bootloader(port)
 
-    flash(images[0], find_port(port))
+        flash(images[0], find_port(port))
+    finally:
+        if router_url:
+            router_maintenance(False, router_url)
 
 
 if __name__ == "__main__":

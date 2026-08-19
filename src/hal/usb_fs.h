@@ -36,6 +36,10 @@ uint32_t usb_read(uint8_t *buf, uint32_t max);
  * buffer is full, in which case call usb_poll() and retry. */
 uint32_t usb_write(const uint8_t *buf, uint32_t len);
 
+/* Queue one complete diagnostic record without polling or waiting. Returns the requested
+ * length on success and zero if it would not fit. Partial records are never emitted. */
+uint32_t usb_write_try(const uint8_t *buf, uint32_t len);
+
 /* Bytes queued for the host and not yet collected. Non-zero for a long time means nobody is
  * reading, which on a raw host stack is normal rather than exceptional. */
 uint32_t usb_tx_pending(void);

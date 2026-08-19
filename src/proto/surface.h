@@ -41,6 +41,8 @@ typedef struct {
     double   number;
     uint32_t choice;
     uint8_t  boolean;
+    uint8_t  color_count;
+    float    color[4];
 
     uint16_t label_off, label_len;
     uint16_t unit_off,  unit_len;
@@ -55,6 +57,8 @@ typedef struct {
     uint8_t  default_boolean;
     uint32_t default_choice;
     double   default_number;
+    uint8_t  default_color_count;
+    float    default_color[4];
 } surf_field_t;
 
 void surf_init(void);
@@ -64,8 +68,11 @@ void surf_init(void);
 void surf_handle(uint8_t opcode, const uint8_t *msg, uint32_t len);
 
 uint64_t surf_applied_revision(void);
+/* Number of descriptor records, distinct from the occupied physical slot span. */
 uint16_t surf_field_count(void);
-const surf_field_t *surf_field(uint16_t index);
+uint16_t surf_slot_span(void);
+/* Lookup by absolute physical slot. Returns NULL for a hole. */
+const surf_field_t *surf_field(uint16_t slot);
 const char *surf_string(uint16_t off, uint16_t len);
 
 /* Label for one option of a Choice field. Returns NULL and leaves *len untouched when the
@@ -74,6 +81,7 @@ const char *surf_choice_label(const surf_field_t *f, uint16_t option, uint16_t *
 
 /* Which page of fields the knobs currently show. */
 uint16_t surf_page(void);
+void surf_set_page(uint16_t first_index);
 
 /* Physical input -> protocol. Called from the input layer.
  *
@@ -92,6 +100,7 @@ uint16_t surf_page(void);
 void surf_set_number(uint16_t index, double v);
 void surf_set_bool(uint16_t index, uint8_t v);
 void surf_set_choice(uint16_t index, uint32_t v);
+void surf_set_color(uint16_t index, const float *v, uint8_t count);
 
 /* The same, carrying an explicit cause. A restore or an undo is not a knob turn, and the host
  * has to be able to tell them apart -- otherwise a history step looks like the user sweeping a
@@ -99,6 +108,7 @@ void surf_set_choice(uint16_t index, uint32_t v);
 void surf_set_number_cause(uint16_t index, double v, uint8_t cause);
 void surf_set_bool_cause(uint16_t index, uint8_t v, uint8_t cause);
 void surf_set_choice_cause(uint16_t index, uint32_t v, uint8_t cause);
+void surf_set_color_cause(uint16_t index, const float *v, uint8_t count, uint8_t cause);
 
 /* No bounds, no step, no precision: nothing to integrate against, so the host must do it. */
 void surf_send_delta(uint16_t index, int32_t detents);
@@ -112,5 +122,10 @@ void surf_on_button(unsigned button, int pressed);
 /* A locally-built descriptor for judging layout with no host attached. Deliberately awkward:
  * a long label, a negative value, a toggle, and a field with no bounds. */
 void surf_demo_descriptor(void);
+/* A single Choice field used by simulator layout scenes. Kept separate so the ordinary demo
+ * descriptor remains stable while 3/5/7-slot and mirrored drill layouts are exercised. */
+void surf_demo_choice_descriptor(uint16_t slot, const char *field_label,
+                                 const char *const *labels, uint16_t count,
+                                 uint16_t selected);
 
 #endif /* ELECTRA_EMP_SURFACE_H */

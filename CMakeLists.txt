@@ -119,6 +119,7 @@ add_executable(app
     src/app/ui.c
     src/app/ui_state.c
     src/app/history.c
+    src/app/touch_cal.c
     src/app/font_data.c
     src/app/text.c
     src/proto/diag.c

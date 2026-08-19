@@ -24,6 +24,7 @@
 #include "app_launch.h"
 #include "riic.h"
 #include "qt2120.h"
+#include "touch_cal.h"
 #include "inputs.h"
 #include "ui.h"
 #include "ui_state.h"
@@ -42,6 +43,8 @@
 #define MAGENTA 0xF81F
 
 static volatile int32_t  g_sdram_status;
+static ui_pref_rec_t g_ui_pref;
+static uint8_t g_brightness_saved = UI_BRIGHTNESS_DEFAULT;
 static volatile int32_t  g_lcd_init_rc;
 static volatile int32_t  g_qt_init_rc;
 static volatile uint32_t g_ticks;
@@ -70,6 +73,9 @@ static uint32_t bsp_millis(void) { return g_systick_ms; }
 /* Mirrors of what the UI is fed, for `uistate`. Diagnostics only. */
 static uint16_t g_touch_filtered, g_moved_mask;
 static uint32_t g_render_us_max;      /* worst UI repaint seen; a view switch is the worst case */
+static uint8_t  g_caltrace_enabled;
+static uint8_t  g_caltrace_last_phase = 0xFFu;
+static uint32_t g_caltrace_seq, g_caltrace_dropped;
 
 /* Microseconds, from the Cortex-M4 cycle counter.
  *
@@ -509,6 +515,14 @@ static void cmd_bl(const char *a)
     if (!v) v = 0x0800;
     ra8876_backlight((uint16_t)v);
     console_hex("backlight", v);
+}
+
+static void cmd_brightness(const char *a)
+{
+    (void)a;
+    console_hex("saved_percent", g_brightness_saved);
+    console_hex("preview_percent", ui_state()->brightness_preview);
+    console_hex("pwm_compare", ra8876_backlight_programmed_pwm());
 }
 
 /* Deliberately a command, not a startup action: it writes to external SDRAM, which is a bus
@@ -1584,9 +1598,19 @@ static void cmd_sim(const char *a)
 
     switch (what) {
     case 'r': (void)ui_state_rotate(x & 7u, (int32_t)y ? (int32_t)y : 1, bsp_millis()); break;
-    case 'p': surf_on_push(x & 7u, 1); break;
+    case 'p':
+        ui_state_push(x & 7u, 1, bsp_millis());
+        ui_state_push(x & 7u, 0, bsp_millis());
+        surf_on_push(x & 7u, 1);
+        surf_on_push(x & 7u, 0);
+        break;
     case 't': surf_on_touch((uint16_t)x); ui_state_touch((uint16_t)x, bsp_millis()); break;
-    case 'b': surf_on_button(x, 1); surf_on_button(x, 0); break;
+    case 'b':
+        ui_state_button(x, 1, bsp_millis());
+        ui_state_button(x, 0, bsp_millis());
+        surf_on_button(x, 1);
+        surf_on_button(x, 0);
+        break;
     default:  console_write("usage: sim r|p|t|b <a> [b]\r\n"); return;
     }
     console_write("injected\r\n");
@@ -1942,6 +1966,65 @@ static void cmd_tcap(const char *a)
     console_write("done");
 }
 
+/* caltrace on|off -- enable a non-blocking stream from the REAL calibration service loop.
+ *
+ * The older capture commands own the main loop while they run, which makes them excellent raw
+ * hardware probes and incapable of observing calibration itself. This switch returns
+ * immediately. The service pass emits one complete record or none; it never waits for USB,
+ * because changing the timing while measuring a one-second gate would invalidate the evidence. */
+static void cmd_caltrace(const char *a)
+{
+    if (a[0] == 'o' && a[1] == 'n') {
+        g_caltrace_enabled = 1;
+        g_caltrace_last_phase = 0xFFu;
+        g_caltrace_seq = 0;
+        g_caltrace_dropped = 0;
+        console_write("caltrace enabled; columns are seq ms phase pot cycle raw filt moved delta noise peak hold saw\r\n");
+        return;
+    }
+    if ((a[0] == 'o' && a[1] == 'f') || a[0] == '0') {
+        g_caltrace_enabled = 0;
+        console_hex("caltrace dropped", g_caltrace_dropped);
+        return;
+    }
+    console_hex("caltrace enabled", g_caltrace_enabled);
+    console_hex("caltrace sequence", g_caltrace_seq);
+    console_hex("caltrace dropped", g_caltrace_dropped);
+}
+
+static void caltrace_emit(uint32_t now_ms)
+{
+    if (!g_caltrace_enabled) return;
+
+    const touch_cal_status_t *cs = touch_cal_status();
+    uint8_t phase = (uint8_t)cs->phase;
+    if (phase == TOUCH_CAL_IDLE) return;
+    if ((phase == TOUCH_CAL_COMPLETE || phase == TOUCH_CAL_FAILED)
+        && g_caltrace_last_phase == phase) return;
+
+    char line[128];
+    char *d = line;
+    *d++ = 'C'; *d++ = 'A'; *d++ = 'L'; *d++ = ' ';
+    uint32_t seq = ++g_caltrace_seq;
+    put_nib(&d, seq, 8);                 *d++ = ' ';
+    put_nib(&d, now_ms, 8);              *d++ = ' ';
+    put_nib(&d, phase, 1);               *d++ = ' ';
+    put_nib(&d, cs->pot, 1);             *d++ = ' ';
+    put_nib(&d, cs->cycle, 1);           *d++ = ' ';
+    put_nib(&d, cs->raw_touch, 4);       *d++ = ' ';
+    put_nib(&d, g_touch_filtered, 4);    *d++ = ' ';
+    put_nib(&d, cs->moved_mask, 4);      *d++ = ' ';
+    put_nib(&d, cs->delta, 4);           *d++ = ' ';
+    put_nib(&d, cs->noise, 4);           *d++ = ' ';
+    put_nib(&d, cs->peak, 4);            *d++ = ' ';
+    put_nib(&d, cs->hold_ms, 4);         *d++ = ' ';
+    put_nib(&d, cs->saw_move, 1);
+    *d++ = '\r'; *d++ = '\n';
+    uint32_t len = (uint32_t)(d - line);
+    if (usb_write_try((const uint8_t *)line, len) != len) g_caltrace_dropped++;
+    g_caltrace_last_phase = phase;
+}
+
 
 /* pers [p|l|e|c] -- exercise the persistent boot record.
  *
@@ -2033,6 +2116,7 @@ static const console_cmd_t app_cmds[] = {
      * 0x2000 - brightness, so the scale runs backwards. Named in the help so nobody else
      * turns the backlight off while trying to turn it up, which is exactly what happened. */
     { "bl",   "backlight: 2048=full .. 8192=off",    cmd_bl       },
+    { "brightness", "saved/preview brightness and PWM", cmd_brightness },
     { "sdram","non-destructive SDRAM walk (can fault)", cmd_sdram },
     { "peek", "peek <b|h|w> <addr> [count]",         cmd_peek     },
     { "poke", "poke <b|h|w> <addr> <value>",         cmd_poke     },
@@ -2061,6 +2145,7 @@ static const console_cmd_t app_cmds[] = {
     { "watch","stream all inputs until a key",      cmd_watch   },
     { "uistate","uistate [secs]  focus + touch state", cmd_uistate },
     { "tcap", "tcap [secs]  touch path with margins",  cmd_tcap    },
+    { "caltrace", "caltrace on|off  live calibration trace", cmd_caltrace },
     { "bench","bench <KiB hex>  bulk throughput",   cmd_bench },
     { "selftest","run the EMP/1 codec tests",        cmd_selftest },
     { "emp",  "EMP session counters",                cmd_emp     },
@@ -2168,6 +2253,18 @@ int main(void)
     riic_init(RIIC_CH_TOUCHSCR);
     inputs_init();
     g_qt_init_rc = qt2120_init();
+    touch_cal_init();
+
+    if (persist_ui_pref_read(&g_ui_pref)) {
+        g_brightness_saved = (uint8_t)g_ui_pref.brightness_percent;
+    } else {
+        g_ui_pref.magic = UI_PREF_MAGIC;
+        g_ui_pref.version = UI_PREF_VERSION;
+        g_ui_pref.generation = 0;
+        g_ui_pref.brightness_percent = UI_BRIGHTNESS_DEFAULT;
+        g_ui_pref.reserved = 0;
+        g_ui_pref.checksum = persist_ui_pref_checksum(&g_ui_pref);
+    }
 
     boot_stage(STAGE_LCD_INIT);
 #if LCD_SKIP_INIT
@@ -2190,8 +2287,8 @@ int main(void)
     boot_stage(STAGE_LCD_ON);
     ra8876_display_on(1);
     boot_stage(STAGE_BACKLIGHT);
-    ra8876_backlight(0x0800);
 #endif
+    ra8876_backlight_percent(g_brightness_saved);
     boot_stage(STAGE_LOOP);
 
     /* Test pattern is now a command (`lcd t`), not a startup action. Drawing ~80 rectangles
@@ -2207,6 +2304,7 @@ int main(void)
      * useful to look at on a bench with nothing plugged into it. */
     surf_demo_descriptor();
     ui_state_init();
+    ui_state_brightness_status(g_brightness_saved);
     ui_reset();
     ui_render();
 #endif
@@ -2304,6 +2402,9 @@ int main(void)
                 edges_primed = 1;
             }
             g_moved_mask = in.moved_mask;
+            if (g_qt_init_rc == 0)
+                touch_cal_tick(now_ms, touch_raw, in.moved_mask);
+            caltrace_emit(now_ms);
 
             for (unsigned p = 0; p < INPUT_POTS; p++) {
                 if (in.detents[p]) (void)ui_state_rotate(p, in.detents[p], now_ms);
@@ -2330,6 +2431,69 @@ int main(void)
                 ui_state_touch(touch_filtered, now_ms);
             }
             ui_state_tick(now_ms);
+
+            {
+                const touch_cal_status_t *cs = touch_cal_status();
+                ui_state_calibration_status((uint8_t)cs->phase, cs->pot, cs->cycle,
+                                            cs->valid_mask, cs->custom_active,
+                                            cs->clear_ms_remaining, cs->message);
+                ui_state_system_status(now_ms, g_qt_init_rc);
+
+                ui_action_t action;
+                if (ui_state_take_action(&action)) {
+                    switch (action.kind) {
+                    case UI_ACTION_REBOOT:
+                        /* A normal restart: RUN_APP is consumed by the bootloader but does not
+                         * request update mode. The UI emits this only after the debounced release
+                         * of physical Button 5, so an ordinary reboot cannot carry the USB Disk
+                         * Mode chord into the lower boot stage. */
+                        boot_handshake_set_request(BOOT_REQ_RUN_APP, 0);
+                        bsp_delay_ms(100);       /* let the released contact settle physically */
+                        bsp_system_reset();
+                        break;
+                    case UI_ACTION_CALIBRATE:
+                        touch_cal_start(action.pot_mask, now_ms);
+                        break;
+                    case UI_ACTION_CAL_CANCEL:
+                        touch_cal_cancel();
+                        break;
+                    case UI_ACTION_CAL_RETRY:
+                        touch_cal_retry(now_ms);
+                        break;
+                    case UI_ACTION_CAL_DONE:
+                        touch_cal_done();
+                        break;
+                    case UI_ACTION_RESTORE_DEFAULTS:
+                        touch_cal_restore_defaults();
+                        break;
+                    case UI_ACTION_BRIGHTNESS_PREVIEW:
+                    case UI_ACTION_BRIGHTNESS_CANCEL:
+                        ra8876_backlight_percent(action.brightness_percent);
+                        break;
+                    case UI_ACTION_BRIGHTNESS_SAVE: {
+                        ui_pref_rec_t next = g_ui_pref;
+                        next.magic = UI_PREF_MAGIC;
+                        next.version = UI_PREF_VERSION;
+                        next.generation++;
+                        next.brightness_percent = action.brightness_percent;
+                        next.reserved = 0;
+                        next.checksum = persist_ui_pref_checksum(&next);
+                        int rc = persist_ui_pref_write(&next);
+                        if (rc == FLASH_OK) {
+                            g_ui_pref = next;
+                            g_brightness_saved = action.brightness_percent;
+                            ra8876_backlight_percent(g_brightness_saved);
+                            ui_state_brightness_save_result(1);
+                        } else {
+                            ui_state_brightness_save_result(0);
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                    }
+                }
+            }
 
             prev_push  = in.push_mask;
             prev_btn   = in.button_mask;

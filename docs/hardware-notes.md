@@ -624,9 +624,8 @@ low and poisons every later transfer on that bus.
 
 ### Panel layout
 
-**[certain, from the device's owner]** The 8 pots are in **two rows of four**, below and above
-the screen. Bottom row is left-to-right first, then the top row — that is the panel ordering the
-protocol should use.
+**[certain, from the device's owner]** The 8 pots are in **two rows of four**, above and below
+the screen. The protocol's canonical order is top row left-to-right, then bottom row left-to-right.
 
 ### Diagnostics worth keeping
 
@@ -639,18 +638,17 @@ recovering after being pulled low.
 `gpio <pin> <0|1>` plus a scan is the general technique for finding an unknown enable or reset
 line, and is how P402 was found. Both are cheap to keep and expensive to re-derive.
 
-### Panel ordering: stock counts the top row first, we count the bottom row first
+### Panel ordering: top row first
 
 **[certain, measured]** Touching the eight knobs in panel order (bottom row left-to-right, then
 top row) lit the reported bits in the order 4,5,6,7,0,1,2,3 — a **constant rotation of exactly
 4**. Pushing them in the same order cleared the sense bits in the same order. Four is half of
 eight and the knobs are two rows of four, so the rotation is a **row swap**.
 
-So the recovered key table `{5,7,6,4,3,0,1,2}` was correct; only its origin differed. Rotated to
-panel order (pot 0 = bottom-left) it is **`{3,0,1,2,5,7,6,4}`**, which is what `qt2120.c` uses.
+The canonical top-row-first order now matches stock, so the recovered key table is used directly:
+**`{5,7,6,4,3,0,1,2}`**, with pot 0 at top-left.
 
-**[certain, measured] Pot index ↔ multiplexer channel is `(n + 4) mod 8`**, and 4 is its own
-inverse modulo 8 so the same expression converts both ways.
+**[certain, measured] In top-row-first order, push/touch pot index equals multiplexer channel.**
 
 **This settles open question 3 from the plan — and the plan was right.** It asked whether the
 pot-switch index was panel-ordered or mux-ordered, noting that the stock rotation path remaps
@@ -658,12 +656,12 @@ pot-switch index was panel-ordered or mux-ordered, noting that the stock rotatio
 
 | Input | Multiplexer channel -> panel pot |
 |---|---|
-| Capacitive touch, push switch | `(ch + 4) mod 8` — a plain row swap |
-| **Pot rotation** | **`{4,0,1,5,2,7,3,6}`** — scrambled |
+| Capacitive touch, push switch | channel identity |
+| **Pot rotation** | **`{0,4,5,1,6,3,7,2}`** — scrambled |
 | Front-panel buttons | `{2,1,0,3,4,5}` — first three reversed |
 
-The rotation table is exactly the stock firmware's `{0,4,5,1,6,3,7,2}` with the same +4 row swap
-applied to convert stock's top-row-first numbering to ours. All three were established by
+The rotation table is exactly the stock firmware's `{0,4,5,1,6,3,7,2}` with no row conversion,
+because both now use top-row-first numbering. All three mappings were established by
 turning, pushing and pressing each control and reading which cell responded on screen.
 
 > **Correction.** An earlier pass here recorded the opposite — that one mapping served both, and

@@ -119,6 +119,26 @@ void ui_render_demo(void);          /* in ui.c, shared with the device */
 void ui_render_demo_focused(void);  /* the zoomed readout, mid-edit */
 void ui_render_demo_page2(void);    /* Choice and ReadOnly fields */
 void ui_render_demo_focused_top(void);  /* the mirrored drilled view */
+void ui_render_demo_focused_toggle(void);
+void ui_render_demo_focused_negative(void);
+void ui_render_demo_focused_choice(void);
+void ui_render_demo_focused_fine(void);
+void ui_render_demo_focused_color(void);
+void ui_render_demo_choice_waveform(uint16_t selected);
+void ui_render_demo_choice_short(void);
+void ui_render_demo_choice_medium(void);
+void ui_render_demo_choice_long_top(void);
+void ui_render_demo_system(void);
+void ui_render_demo_reboot(void);
+void ui_render_demo_calibration(void);
+void ui_render_demo_calibration_select(void);
+void ui_render_demo_calibration_baseline(void);
+void ui_render_demo_calibration_failed(void);
+void ui_render_demo_calibration_complete(void);
+void ui_render_demo_brightness_full(void);
+void ui_render_demo_brightness_mid(void);
+void ui_render_demo_brightness_min(void);
+void ui_render_demo_brightness_error(void);
 
 static void scene_specimen(void)
 {
@@ -155,6 +175,29 @@ int main(int argc, char **argv)
     else if (strcmp(scene, "focus")    == 0) ui_render_demo_focused();
     else if (strcmp(scene, "page2")    == 0) ui_render_demo_page2();
     else if (strcmp(scene, "focustop") == 0) ui_render_demo_focused_top();
+    else if (strcmp(scene, "focus-toggle") == 0) ui_render_demo_focused_toggle();
+    else if (strcmp(scene, "focus-negative") == 0) ui_render_demo_focused_negative();
+    else if (strcmp(scene, "focus-choice") == 0) ui_render_demo_focused_choice();
+    else if (strcmp(scene, "choice-first") == 0) ui_render_demo_choice_waveform(0u);
+    else if (strcmp(scene, "choice-middle") == 0) ui_render_demo_choice_waveform(2u);
+    else if (strcmp(scene, "choice-last") == 0) ui_render_demo_choice_waveform(4u);
+    else if (strcmp(scene, "choice-7") == 0) ui_render_demo_choice_short();
+    else if (strcmp(scene, "choice-5") == 0) ui_render_demo_choice_medium();
+    else if (strcmp(scene, "choice-3-top") == 0) ui_render_demo_choice_long_top();
+    else if (strcmp(scene, "focus-fine") == 0) ui_render_demo_focused_fine();
+    else if (strcmp(scene, "focus-color") == 0) ui_render_demo_focused_color();
+    else if (strcmp(scene, "system")   == 0) ui_render_demo_system();
+    else if (strcmp(scene, "reboot")   == 0) ui_render_demo_reboot();
+    else if (strcmp(scene, "cal")       == 0 || strcmp(scene, "cal-active") == 0)
+                                                    ui_render_demo_calibration();
+    else if (strcmp(scene, "cal-select") == 0)     ui_render_demo_calibration_select();
+    else if (strcmp(scene, "cal-baseline") == 0)   ui_render_demo_calibration_baseline();
+    else if (strcmp(scene, "cal-failed") == 0)     ui_render_demo_calibration_failed();
+    else if (strcmp(scene, "cal-complete") == 0)   ui_render_demo_calibration_complete();
+    else if (strcmp(scene, "brightness-full") == 0) ui_render_demo_brightness_full();
+    else if (strcmp(scene, "brightness-mid") == 0)  ui_render_demo_brightness_mid();
+    else if (strcmp(scene, "brightness-min") == 0)  ui_render_demo_brightness_min();
+    else if (strcmp(scene, "brightness-error") == 0) ui_render_demo_brightness_error();
     else                                     ui_render_demo();
 
     write_ppm(out);

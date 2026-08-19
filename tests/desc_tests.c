@@ -19,6 +19,7 @@
 #include "emp.h"
 #include "frame.h"
 #include "surface.h"
+#include "ui_state.h"
 #include "sim_wire.h"
 #include "diag.h"
 
@@ -48,6 +49,13 @@ static void bf64(buf_t *b, double d)
     uint8_t t[8];
     memcpy(t, &d, 8);
     for (int i = 0; i < 8; i++) b8(b, t[i]);
+}
+
+static void bf32(buf_t *b, float f)
+{
+    uint8_t t[4];
+    memcpy(t, &f, 4);
+    for (int i = 0; i < 4; i++) b8(b, t[i]);
 }
 
 static void bstr(buf_t *b, const char *s)
@@ -96,7 +104,7 @@ static void xfer_field(xfer_t *x, uint16_t index, uint16_t id, const char *label
 
     b16(&b, 0);                 /* field_len, forward compatibility */
     b16(&b, id);
-    b8(&b, EMP_KIND_NUMBER);
+    b8(&b, value_tag == EMP_VAL_COLOR ? EMP_KIND_COLOR : EMP_KIND_NUMBER);
     b8(&b, 0);                  /* flags */
     b16(&b, (uint16_t)(EMP_PRESENT_MIN | EMP_PRESENT_MAX | (unit ? EMP_PRESENT_UNIT : 0)));
     bf64(&b, 0.0);              /* min */
@@ -167,8 +175,21 @@ static void load_good(void)
     sim_wire_reset();
 
     xfer_begin(&x, 7, 2);
-    xfer_number(&x, 0, 101, "Cutoff", 0.5);
-    xfer_number(&x, 1, 102, "Resonance", 0.25);
+    xfer_number(&x, 0, 0, "Cutoff", 0.5);
+    xfer_number(&x, 1, 1, "Resonance", 0.25);
+    xfer_end(&x, 0, 0);
+}
+
+static void load_sparse(void)
+{
+    xfer_t x;
+    surf_init();
+    ui_state_init();
+    sim_wire_reset();
+
+    xfer_begin(&x, 42, 8);
+    for (uint16_t i = 0; i < 7; i++) xfer_number(&x, i, i, "First page", i / 10.0);
+    xfer_number(&x, 7, 8, "Second page", 0.8);
     xfer_end(&x, 0, 0);
 }
 
@@ -178,7 +199,7 @@ static int good_is_intact(void)
         && surf_applied_revision() == 7
         && label_is(0, "Cutoff")
         && label_is(1, "Resonance")
-        && surf_field(0) && surf_field(0)->id == 101;
+        && surf_field(0) && surf_field(0)->id == 0;
 }
 
 /* ------------------------------------------------------------------ tests */
@@ -189,8 +210,44 @@ static void test_round_trip(void)
 
     const sim_wire_msg_t *ack = sim_wire_last(EMP_OP_DESC_ACK);
     int acked = ack && ack->len >= 10 && ack->payload[0] == 7 && ack->payload[8] == 2;
+    const sim_wire_msg_t *screen = sim_wire_last(EMP_OP_SCREEN);
+    int visible = screen && screen->len == 12 && screen->payload[0] == 7
+               && screen->payload[8] == 0 && screen->payload[10] == 2;
 
-    check("descriptor round trip", good_is_intact() && acked);
+    check("descriptor round trip and initial screen", good_is_intact() && acked && visible);
+}
+
+static void test_sparse_slots_preserve_holes_and_pages(void)
+{
+    load_sparse();
+    const sim_wire_msg_t *screen = sim_wire_last(EMP_OP_SCREEN);
+    int ok = surf_field_count() == 8 && surf_slot_span() == 9
+          && surf_field(6) && !surf_field(7) && surf_field(8)
+          && label_is(8, "Second page")
+          && screen && screen->len == 12
+          && screen->payload[8] == 0 && screen->payload[10] == 8;
+
+    surf_set_number(7, 0.7);
+    ok = ok && sim_wire_last(EMP_OP_EDIT) == 0;
+    surf_set_number(8, 0.9);
+    const sim_wire_msg_t *edit = sim_wire_last(EMP_OP_EDIT);
+    ok = ok && edit && edit->len >= 14 && edit->payload[12] == 8;
+    check("sparse slots stay blank and never cross page boundaries", ok);
+}
+
+static void test_duplicate_and_out_of_range_slots_keep_live(void)
+{
+    load_good();
+    xfer_t x;
+    xfer_begin(&x, 50, 2);
+    xfer_number(&x, 0, 0, "One", 0.1);
+    xfer_number(&x, 1, 0, "Duplicate", 0.2);
+    int duplicate_kept = good_is_intact();
+
+    xfer_begin(&x, 51, 1);
+    xfer_number(&x, 0, SURF_MAX_FIELDS, "Outside", 0.3);
+    check("duplicate and out-of-range slots reject the transaction",
+          duplicate_kept && good_is_intact());
 }
 
 static void test_live_survives_transfer(void)
@@ -202,8 +259,8 @@ static void test_live_survives_transfer(void)
      * on failure. This is the case that made every host reload flicker through an empty screen. */
     xfer_t x;
     xfer_begin(&x, 9, 3);
-    xfer_number(&x, 0, 201, "Attack", 0.1);
-    xfer_number(&x, 1, 202, "Decay", 0.2);
+    xfer_number(&x, 0, 0, "Attack", 0.1);
+    xfer_number(&x, 1, 1, "Decay", 0.2);
 
     check("live descriptor survives a transfer in flight", good_is_intact());
 }
@@ -215,7 +272,7 @@ static void test_crc_mismatch_keeps_live(void)
 
     xfer_t x;
     xfer_begin(&x, 9, 1);
-    xfer_number(&x, 0, 201, "Attack", 0.1);
+    xfer_number(&x, 0, 0, "Attack", 0.1);
     xfer_end(&x, 0xDEADBEEFu, 1);          /* arrived complete and wrong */
 
     check("a CRC mismatch leaves the live descriptor alone",
@@ -229,8 +286,8 @@ static void test_sequence_break_keeps_live(void)
 
     xfer_t x;
     xfer_begin(&x, 9, 3);
-    xfer_number(&x, 0, 201, "Attack", 0.1);
-    xfer_number(&x, 2, 203, "Sustain", 0.3);   /* index 1 was lost */
+    xfer_number(&x, 0, 0, "Attack", 0.1);
+    xfer_number(&x, 2, 2, "Sustain", 0.3);   /* index 1 was lost */
 
     check("a broken sequence leaves the live descriptor alone",
           good_is_intact() && last_request_reason() == EMP_REQ_SEQUENCE_BROKEN);
@@ -249,7 +306,7 @@ static void test_truncated_field_keeps_live(void)
     b_init(&b);
     b16(&b, 0);                 /* index */
     b16(&b, 0);                 /* field_len */
-    b16(&b, 201);               /* id */
+    b16(&b, 0);                 /* id */
     b8(&b, EMP_KIND_NUMBER);
     b8(&b, 0);
     b16(&b, EMP_PRESENT_MIN | EMP_PRESENT_MAX);
@@ -267,7 +324,7 @@ static void test_abort_keeps_live(void)
 
     xfer_t x;
     xfer_begin(&x, 9, 2);
-    xfer_number(&x, 0, 201, "Attack", 0.1);
+    xfer_number(&x, 0, 0, "Attack", 0.1);
     surf_handle(EMP_OP_DESC_ABORT, 0, 0);
 
     check("an aborted transfer leaves the live descriptor alone", good_is_intact());
@@ -297,14 +354,14 @@ static void test_stale_values_do_not_apply(void)
      * ask for the descriptor it does not have. */
     xfer_t x;
     xfer_begin(&x, 9, 1);
-    xfer_number(&x, 0, 201, "Attack", 0.1);
+    xfer_number(&x, 0, 0, "Attack", 0.1);
     xfer_end(&x, 0xDEADBEEFu, 1);
 
     buf_t b;
     b_init(&b);
     b64(&b, 9);                 /* revision */
     b16(&b, 1);                 /* count */
-    b16(&b, 201);               /* id */
+    b16(&b, 0);                 /* id */
     b32(&b, 0);                 /* ack_edit */
     b8(&b, EMP_VAL_NUMBER);
     bf64(&b, 0.75);
@@ -313,6 +370,52 @@ static void test_stale_values_do_not_apply(void)
 
     check("values at a revision that failed to load are refused",
           surf_applied_revision() == 7 && last_request_reason() == EMP_REQ_REVISION_UNKNOWN);
+}
+
+static void test_values_apply_across_a_hole(void)
+{
+    load_sparse();
+    buf_t b;
+    b_init(&b);
+    b64(&b, 42); b16(&b, 2);
+    b16(&b, 7); b32(&b, 0); b8(&b, EMP_VAL_NUMBER); bf64(&b, 0.7);
+    b16(&b, 8); b32(&b, 0); b8(&b, EMP_VAL_NUMBER); bf64(&b, 0.875);
+    surf_handle(EMP_OP_VALUES, b.b, b.n);
+    check("values skip holes and still reach later slots",
+          !surf_field(7) && surf_field(8) && surf_field(8)->number == 0.875);
+}
+
+static void test_reveal_and_clear_confirm_physical_screen(void)
+{
+    load_sparse();
+    buf_t b;
+    b_init(&b); b64(&b, 42); b16(&b, 8);
+    sim_wire_reset();
+    surf_handle(EMP_OP_REVEAL, b.b, b.n);
+    const sim_wire_msg_t *screen = sim_wire_last(EMP_OP_SCREEN);
+    int ok = surf_page() == 8 && ui_state()->focused < 0
+          && screen && screen->len == 12
+          && screen->payload[8] == 8 && screen->payload[10] == 1;
+
+    b_init(&b); b64(&b, 41); b16(&b, 0);
+    sim_wire_reset();
+    surf_handle(EMP_OP_REVEAL, b.b, b.n);
+    ok = ok && surf_page() == 8 && sim_wire_last(EMP_OP_SCREEN) == 0
+       && last_request_reason() == EMP_REQ_REVISION_UNKNOWN;
+
+    b_init(&b); b64(&b, 42); b16(&b, 7);
+    sim_wire_reset();
+    surf_handle(EMP_OP_REVEAL, b.b, b.n);
+    ok = ok && surf_page() == 8 && sim_wire_last(EMP_OP_SCREEN) == 0;
+
+    sim_wire_reset();
+    surf_handle(EMP_OP_CLEAR, 0, 0);
+    screen = sim_wire_last(EMP_OP_SCREEN);
+    ok = ok && surf_field_count() == 0 && surf_slot_span() == 0 && surf_page() == 0
+       && ui_state()->mode == UI_MODE_SURFACE && ui_state()->focused < 0
+       && screen && screen->len == 12 && screen->payload[8] == 0
+       && screen->payload[10] == 0;
+    check("reveal validates revision/id and clear confirms an empty screen", ok);
 }
 
 static void test_successive_descriptors_replace(void)
@@ -324,12 +427,12 @@ static void test_successive_descriptors_replace(void)
     for (unsigned round = 0; round < 3; round++) {
         xfer_t x;
         xfer_begin(&x, 20 + round, 1);
-        xfer_number(&x, 0, (uint16_t)(300 + round), (round & 1) ? "Odd" : "Even", 0.5);
+        xfer_number(&x, 0, 0, (round & 1) ? "Odd" : "Even", 0.5);
         xfer_end(&x, 0, 0);
 
         int ok = surf_field_count() == 1
               && surf_applied_revision() == 20 + round
-              && surf_field(0)->id == 300 + round
+              && surf_field(0)->id == 0
               && label_is(0, (round & 1) ? "Odd" : "Even");
         if (!ok) { check("successive descriptors replace cleanly", 0); return; }
     }
@@ -347,8 +450,8 @@ static void test_pool_does_not_accumulate(void)
     for (unsigned round = 0; round < 200; round++) {
         xfer_t x;
         xfer_begin(&x, 1 + round, 2);
-        xfer_number(&x, 0, 400, "A rather long field label", 0.5);
-        xfer_number(&x, 1, 401, "Another long field label", 0.5);
+        xfer_number(&x, 0, 0, "A rather long field label", 0.5);
+        xfer_number(&x, 1, 1, "Another long field label", 0.5);
         xfer_end(&x, 0, 0);
     }
     check("the string pool does not accumulate across transfers",
@@ -369,15 +472,15 @@ static void check_skippable(const char *name, uint8_t tag, const uint8_t *body, 
     sim_wire_reset();
 
     xfer_begin(&x, 11, 2);
-    xfer_field(&x, 0, 501, "Skipped", 0.0, "Hz", tag, body, len);
-    xfer_number(&x, 1, 502, "Intact", 0.5);
+    xfer_field(&x, 0, 0, "Skipped", 0.0, "Hz", tag, body, len);
+    xfer_number(&x, 1, 1, "Intact", 0.5);
     xfer_end(&x, 0, 0);
 
     const surf_field_t *f = surf_field(0);
     int ok = surf_field_count() == 2
           && label_is(0, "Skipped")
           && label_is(1, "Intact")
-          && f && f->id == 501
+          && f && f->id == 0
           && f->unit_len == 2                       /* the unit followed the label, and landed */
           /* Normalised to something renderable, so nothing downstream has to know the tag. */
           && f->value_tag == EMP_VAL_NUMBER;
@@ -400,15 +503,51 @@ static void test_text_tag_is_skipped(void)
                     body, (uint16_t)sizeof(body));
 }
 
-static void test_color_tag_is_skipped(void)
+static void test_color_tag_is_native(void)
 {
-    /* count u8 + count x f32. Colour is deferred, which is not the same as unknown. */
     static const uint8_t body[] = { 0x03,
-                                    0, 0, 0, 0,
+                                    0, 0, 0x80, 0x3E,
                                     0, 0, 0x80, 0x3F,
-                                    0, 0, 0, 0 };
-    check_skippable("a Color value is stepped over, not misread", EMP_VAL_COLOR,
-                    body, (uint16_t)sizeof(body));
+                                    0, 0, 0, 0x3F };
+    xfer_t x;
+    surf_init(); sim_wire_reset();
+    xfer_begin(&x, 30, 1);
+    xfer_field(&x, 0, 0, "Colour", 0.0, 0, EMP_VAL_COLOR,
+               body, (uint16_t)sizeof(body));
+    xfer_end(&x, 0, 0);
+    const surf_field_t *f = surf_field(0);
+    int ok = f && f->kind == EMP_KIND_COLOR && f->value_tag == EMP_VAL_COLOR
+          && f->color_count == 3u && f->color[0] == 0.25f
+          && f->color[1] == 1.0f && f->color[2] == 0.5f;
+    check("RGB colour is stored as one native field", ok);
+
+    float rgba[4] = { 0.1f, 0.2f, 0.3f, 0.4f };
+    sim_wire_reset();
+    surf_set_color(0, rgba, 4u);
+    const sim_wire_msg_t *edit = sim_wire_last(EMP_OP_EDIT);
+    ok = edit && edit->len == 33u && edit->payload[15] == EMP_VAL_COLOR
+      && edit->payload[16] == 4u && memcmp(edit->payload + 17, rgba, sizeof(rgba)) == 0;
+    check("RGBA edit encoding carries every component", ok);
+}
+
+static void test_bad_colors_keep_live_descriptor(void)
+{
+    static const uint8_t bad_count[] = { 2u, 0,0,0,0, 0,0,0,0 };
+    static const uint8_t nonfinite[] = { 3u, 0,0,0xC0,0x7F,
+                                        0,0,0,0, 0,0,0,0 };
+    load_good(); sim_wire_reset();
+    xfer_t x;
+    xfer_begin(&x, 31, 1);
+    xfer_field(&x, 0, 0, "Bad count", 0.0, 0, EMP_VAL_COLOR,
+               bad_count, (uint16_t)sizeof(bad_count));
+    int ok = good_is_intact() && last_request_reason() == EMP_REQ_SEQUENCE_BROKEN;
+
+    sim_wire_reset();
+    xfer_begin(&x, 32, 1);
+    xfer_field(&x, 0, 0, "Nonfinite", 0.0, 0, EMP_VAL_COLOR,
+               nonfinite, (uint16_t)sizeof(nonfinite));
+    ok = ok && good_is_intact() && last_request_reason() == EMP_REQ_SEQUENCE_BROKEN;
+    check("malformed and non-finite colours preserve the live descriptor", ok);
 }
 
 static void test_reserved_tag_abandons_the_record(void)
@@ -421,7 +560,7 @@ static void test_reserved_tag_abandons_the_record(void)
 
     xfer_t x;
     xfer_begin(&x, 9, 1);
-    xfer_field(&x, 0, 601, "Mystery", 0.0, 0, 0x40u, (const uint8_t *)"", 0);
+    xfer_field(&x, 0, 0, "Mystery", 0.0, 0, 0x40u, (const uint8_t *)"", 0);
 
     check("a reserved value tag abandons the record rather than guessing",
           good_is_intact() && last_request_reason() == EMP_REQ_SEQUENCE_BROKEN);
@@ -443,7 +582,7 @@ static void test_extension_default_is_dropped_not_fatal(void)
     b16(&b, 0);                                   /* index */
     uint32_t body = b.n;
     b16(&b, 0);                                   /* field_len */
-    b16(&b, 701);                                 /* id */
+    b16(&b, 0);                                   /* id */
     b8(&b, EMP_KIND_NUMBER);
     b8(&b, 0);
     b16(&b, EMP_PRESENT_DEFAULT);
@@ -464,7 +603,7 @@ static void test_extension_default_is_dropped_not_fatal(void)
     const surf_field_t *f = surf_field(0);
     check("an extension default is dropped without losing the field",
           surf_field_count() == 1 && label_is(0, "Defaulted")
-          && f && f->id == 701 && (f->present & EMP_PRESENT_DEFAULT) == 0);
+          && f && f->id == 0 && (f->present & EMP_PRESENT_DEFAULT) == 0);
 }
 
 static void test_values_skip_one_control_not_the_batch(void)
@@ -478,10 +617,10 @@ static void test_values_skip_one_control_not_the_batch(void)
     b64(&b, 7);
     b16(&b, 2);
 
-    b16(&b, 101); b32(&b, 0);
+    b16(&b, 0); b32(&b, 0);
     b8(&b, 0x82u); b16(&b, 3); b8(&b, 1); b8(&b, 2); b8(&b, 3);
 
-    b16(&b, 102); b32(&b, 0);
+    b16(&b, 1); b32(&b, 0);
     b8(&b, EMP_VAL_NUMBER); bf64(&b, 0.875);
 
     surf_handle(EMP_OP_VALUES, b.b, b.n);
@@ -526,7 +665,7 @@ static void test_nothing_is_sent_before_the_tick(void)
 
     xfer_t x;
     xfer_begin(&x, 30, 1);
-    xfer_field(&x, 0, 801, "Mystery", 0.0, 0, 0x40u, (const uint8_t *)"", 0);
+    xfer_field(&x, 0, 0, "Mystery", 0.0, 0, 0x40u, (const uint8_t *)"", 0);
 
     int quiet_during = !diag_seen(EMP_DIAG_VALUE_UNDECODABLE, 0, 0);
     emp_diag_tick();
@@ -549,7 +688,7 @@ static void test_repeats_coalesce(void)
     xfer_t x;
     xfer_begin(&x, 31, 5);
     for (uint16_t i = 0; i < 5; i++) {
-        xfer_field(&x, i, (uint16_t)(900 + i), "Ext", 0.0, 0, 0x81u, body, (uint16_t)sizeof(body));
+        xfer_field(&x, i, i, "Ext", 0.0, 0, 0x81u, body, (uint16_t)sizeof(body));
     }
     xfer_end(&x, 0, 0);
     emp_diag_tick();
@@ -580,7 +719,7 @@ static void test_non_finite_is_refused_on_decode(void)
 
     xfer_t x;
     xfer_begin(&x, 32, 1);
-    xfer_field(&x, 0, 1001, "Poisoned", 0.0, 0, EMP_VAL_NUMBER, nan_bits, 8);
+    xfer_field(&x, 0, 0, "Poisoned", 0.0, 0, EMP_VAL_NUMBER, nan_bits, 8);
     xfer_end(&x, 0, 0);
     emp_diag_tick();
 
@@ -629,14 +768,14 @@ static void test_pool_exhaustion_is_reported(void)
     uint16_t n = (uint16_t)(SURF_STRING_POOL / 256u + 2u);
     xfer_t x;
     xfer_begin(&x, 33, n);
-    for (uint16_t i = 0; i < n; i++) xfer_number(&x, i, (uint16_t)(1100 + i), big, 0.25);
+    for (uint16_t i = 0; i < n; i++) xfer_number(&x, i, i, big, 0.25);
     xfer_end(&x, 0, 0);
     emp_diag_tick();
 
     const surf_field_t *last = surf_field((uint16_t)(n - 1));
     check("a label dropped for want of pool is reported, and the field still loads",
           surf_field_count() == n
-          && last && last->id == 1100 + n - 1 && last->label_len == 0
+          && last && last->id == n - 1 && last->label_len == 0
           && (last->flags & EMP_FIELD_TRUNCATED)
           && diag_seen(EMP_DIAG_STRING_TRUNCATED, 0, 0));
 }
@@ -649,6 +788,8 @@ int desc_run_selftests(desc_report_fn report)
     report_fn = report;
 
     test_round_trip();
+    test_sparse_slots_preserve_holes_and_pages();
+    test_duplicate_and_out_of_range_slots_keep_live();
     test_live_survives_transfer();
     test_crc_mismatch_keeps_live();
     test_sequence_break_keeps_live();
@@ -656,12 +797,15 @@ int desc_run_selftests(desc_report_fn report)
     test_abort_keeps_live();
     test_too_many_fields_keeps_live();
     test_stale_values_do_not_apply();
+    test_values_apply_across_a_hole();
+    test_reveal_and_clear_confirm_physical_screen();
     test_successive_descriptors_replace();
     test_pool_does_not_accumulate();
 
     test_extension_tag_is_skipped();
     test_text_tag_is_skipped();
-    test_color_tag_is_skipped();
+    test_color_tag_is_native();
+    test_bad_colors_keep_live_descriptor();
     test_reserved_tag_abandons_the_record();
     test_extension_default_is_dropped_not_fatal();
     test_values_skip_one_control_not_the_batch();

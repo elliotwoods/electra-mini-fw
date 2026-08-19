@@ -39,6 +39,34 @@ typedef struct {
 
 #define PERSIST_PROVEN  0x4F4B4159UL      /* "OKAY" */
 
+/* Per-dial capacitive calibration. This record is deliberately NOT keyed to the application
+ * CRC: replacing the application is the common case and must not discard a panel calibration. */
+#define TOUCH_CAL_MAGIC   0x54434131UL      /* "TCA1" */
+#define TOUCH_CAL_VERSION 1u
+
+typedef struct {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t generation;
+    uint32_t valid_mask;
+    uint8_t  threshold[8];
+    uint8_t  gain[8];
+    uint32_t checksum;
+} touch_cal_rec_t;
+
+#define UI_PREF_MAGIC   0x55495031UL      /* UIP1 */
+#define UI_PREF_VERSION 1u
+#define UI_BRIGHTNESS_DEFAULT 100u
+
+typedef struct {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t generation;
+    uint32_t brightness_percent;
+    uint32_t reserved;
+    uint32_t checksum;
+} ui_pref_rec_t;
+
 /* How many launches of an UNPROVEN image before the bootloader stops trying. Deliberately
  * larger than the SRAM counter's limit: a cold-boot crash loop now costs a flash write per
  * attempt, so the count wants to be meaningful rather than merely small. */
@@ -68,5 +96,12 @@ int persist_note_launch(uint32_t app_crc, uint32_t app_len);
 
 /* Record that this image has run and reported itself working. */
 int persist_mark_proven(uint32_t app_crc, uint32_t app_len);
+
+int persist_touch_cal_read(touch_cal_rec_t *out);
+int persist_touch_cal_write(const touch_cal_rec_t *rec);
+uint32_t persist_touch_cal_checksum(const touch_cal_rec_t *r);
+int persist_ui_pref_read(ui_pref_rec_t *out);
+int persist_ui_pref_write(const ui_pref_rec_t *rec);
+uint32_t persist_ui_pref_checksum(const ui_pref_rec_t *r);
 
 #endif /* ELECTRA_PERSIST_H */

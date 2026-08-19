@@ -406,9 +406,9 @@ void inputs_service(uint16_t touch_mask, input_sample_t *out)
      *
      * This used to dwell on whichever knob was touched and round-robin the rest one per pass,
      * on the reasoning that only one knob is turned at a time. That is true of a surface where
-     * eight knobs are eight fields, and false of this one: the bottom row selects a field and
-     * the TOP row edits its digits, so a hand on a bottom dial and a hand on a top dial is the
-     * ordinary case. With the dwell in place the top row was never sampled while a field was
+     * eight knobs are eight fields, and false of this one: one row retains fields while the
+     * opposite row edits a drilled value, so two hands on opposite rows is ordinary. With the
+     * dwell in place the editor row was never sampled while a field was
      * held, so digit knobs appeared to work once and then die.
      *
      * It also made movement detection unreliable in a way that was hard to see. Round-robin

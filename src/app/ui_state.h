@@ -9,8 +9,10 @@
  *   - The overview shows ALL EIGHT fields, one per knob, in two rows mirroring the panel.
  *   - Pressing a knob's own switch drills into that field. The control you press is the control
  *     you edit, so there is no separate notion of a selected field to display or move.
- *   - While drilled, the TOP row becomes a sliding four-decimal-place window over the value and
- *     the bottom row keeps editing its own fields. Pressing any top knob leaves.
+ *   - While a number is drilled, the opposite row becomes a sliding four-place digit window;
+ *     the outer buttons shift that window and pressing an editor-row knob leaves.
+ *   - Choice and Colour use dedicated drilled editors on the opposite row; their outer buttons
+ *     are disabled.
  *
  * Drill state is deliberately MECHANICAL rather than capacitive. The previous model held the
  * drilled view for as long as a finger rested on a knob, and the sensor cannot support that: a
@@ -36,20 +38,55 @@
  * never true, so every knob routes to the bottom-row branch and the entire digit window becomes
  * unreachable code that still compiles. */
 #define UI_FIELDS_PER_PAGE 8u        /* fields visible at once: one per knob */
-#define UI_ROW_SPLIT       4u        /* knobs 0-3 are the bottom row, 4-7 the top */
-#define UI_DIGITS          4u        /* the top row, when drilled */
+#define UI_ROW_SPLIT       4u        /* measured panel order: 0-3 bottom, 4-7 top */
+#define UI_DIGITS          4u        /* knobs in whichever row is the drilled editor */
 
 #define UI_DISCRETE_STEP   5         /* detents per step on a Toggle or Choice */
-#define UI_DIGIT_STEP      4         /* detents per step of a digit, on the top row */
+#define UI_DIGIT_STEP      4         /* detents per step of a numeric digit */
+#define UI_ACTIVE_MS       180u      /* keep rotary feedback visible after the last edit */
 
-/* Front-panel buttons, left to right. */
-#define UI_BTN_EXIT        0u
+/* Front-panel buttons, left to right. The outer pair page in overview and zoom numbers drilled. */
+#define UI_BTN_BACK        0u
 #define UI_BTN_UNDO        1u
 #define UI_BTN_REDO        2u
-#define UI_BTN_RESET       3u
-#define UI_BTN_PAGE_PREV   4u
+#define UI_BTN_AUX         3u
+#define UI_BTN_SYSTEM      4u
 #define UI_BTN_PAGE_NEXT   5u
 #define UI_BTN_COUNT       6u
+
+/* Compatibility names used by older tests and call sites. */
+#define UI_BTN_EXIT        UI_BTN_BACK
+#define UI_BTN_RESET       UI_BTN_SYSTEM
+#define UI_BTN_PAGE_PREV   UI_BTN_BACK
+
+typedef enum {
+    UI_MODE_SURFACE = 0,
+    UI_MODE_SYSTEM,
+    UI_MODE_REBOOT_WAIT,
+    UI_MODE_CAL_SELECT,
+    UI_MODE_CAL_RUN,
+    UI_MODE_RESTORE_CONFIRM,
+    UI_MODE_BRIGHTNESS
+} ui_mode_t;
+
+typedef enum {
+    UI_ACTION_NONE = 0,
+    UI_ACTION_REBOOT,
+    UI_ACTION_CALIBRATE,
+    UI_ACTION_CAL_CANCEL,
+    UI_ACTION_CAL_RETRY,
+    UI_ACTION_CAL_DONE,
+    UI_ACTION_RESTORE_DEFAULTS,
+    UI_ACTION_BRIGHTNESS_PREVIEW,
+    UI_ACTION_BRIGHTNESS_SAVE,
+    UI_ACTION_BRIGHTNESS_CANCEL
+} ui_action_kind_t;
+
+typedef struct {
+    ui_action_kind_t kind;
+    uint8_t pot_mask;
+    uint8_t brightness_percent;
+} ui_action_t;
 
 typedef struct {
     int32_t  focused;        /* absolute field index being edited, or -1 for the overview */
@@ -67,19 +104,47 @@ typedef struct {
      * the drilled field showing its cells, so you can still see it in context. */
     uint8_t  digit_top;
 
+    int8_t   active_pot;      /* last surface pot that changed a value, or -1 */
+    uint32_t active_until_ms; /* short visual latch; expiry is wrap-safe in ui_state_tick */
+
     uint16_t touch_mask;     /* live, 8 bits, panel order -- highlighting only */
     uint16_t press_mask;     /* live pot-switch state, for the pressed affordance */
     uint16_t btn_mask;       /* live front-panel button state, likewise */
+    ui_mode_t mode;
+    uint8_t system_selection;/* 0 touch calibration, 1 restore defaults, 2 brightness */
+    uint8_t brightness_saved;
+    uint8_t brightness_preview;
+    uint8_t brightness_save_error;
+    uint8_t cal_phase;       /* mirror of touch_cal_phase_t for rendering */
+    uint8_t cal_pot;
+    uint8_t cal_cycle;
+    uint8_t cal_valid_mask;
+    uint8_t cal_custom;
+    uint16_t cal_clear_ms;
+    const char *cal_message;
+    uint32_t uptime_ms;
+    int touch_status;
 } ui_state_t;
 
 void ui_state_init(void);
 const ui_state_t *ui_state(void);
 
-/* Physical input. `pot` is in panel order: 0-3 bottom row, 4-7 top row. */
+/* Physical input. `pot` is in measured panel order: 0-3 bottom row, 4-7 top row. */
 void ui_state_touch(uint16_t touch_mask, uint32_t now_ms);
 void ui_state_push(unsigned pot, int pressed, uint32_t now_ms);
 void ui_state_button(unsigned button, int pressed, uint32_t now_ms);
 int  ui_state_rotate(unsigned pot, int32_t detents, uint32_t now_ms);
+int  ui_state_take_action(ui_action_t *out);
+void ui_state_calibration_status(uint8_t phase, uint8_t pot, uint8_t cycle,
+                                 uint8_t valid_mask, uint8_t custom, uint16_t clear_ms,
+                                 const char *message);
+void ui_state_system_status(uint32_t uptime_ms, int touch_status);
+void ui_state_brightness_status(uint8_t saved_percent);
+void ui_state_brightness_save_result(int success);
+void ui_state_surface_changed(void);
+void ui_state_surface_cleared(void);
+/* Reveal the stable page containing an occupied absolute slot. */
+int ui_state_reveal(uint16_t slot);
 
 /* Called every service pass; runs the history settle timer. */
 void ui_state_tick(uint32_t now_ms);

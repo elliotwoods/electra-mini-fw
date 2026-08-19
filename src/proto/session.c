@@ -269,7 +269,8 @@ static void send_heartbeat(uint32_t now_ms)
     put64(&e, surf_applied_revision());
     put32(&e, now_ms - boot_ms);               /* uptime */
     put16(&e, surf_page());
-    put16(&e, surf_field_count());
+    /* EMP/1.0 uses this as the SCREEN fallback, so it is an absolute slot span. */
+    put16(&e, surf_slot_span());
     put8(&e, (uint8_t)(stats.host_seen ? 1 : 0));
 
     /* Every drop is reported. A silently degraded link is the failure this rewrite exists to
@@ -499,6 +500,12 @@ void emp_session_note_render_us(uint32_t us)
 }
 
 uint16_t emp_session_tx_mtu(void) { return tx_mtu; }
+uint8_t emp_session_peer_minor(void) { return peer_minor; }
+uint32_t emp_device_firmware_version(void) { return FW_VERSION; }
+uint32_t emp_device_firmware_build(void) { return FW_BUILD; }
+const char *emp_device_model(void) { return MODEL; }
+const char *emp_device_serial(void) { return SERIAL; }
+const char *emp_device_build_id(void) { return BUILD_ID; }
 
 void emp_session_poll(uint32_t now_ms)
 {

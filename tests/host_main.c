@@ -13,6 +13,7 @@ int emp_run_selftests(emp_report_fn report);
 int ui_run_selftests(emp_report_fn report);
 int desc_run_selftests(emp_report_fn report);
 int txq_run_selftests(emp_report_fn report);
+int touch_cal_run_selftests(emp_report_fn report);
 
 static void report(const char *name, int passed)
 {
@@ -41,6 +42,9 @@ int main(void)
      * shows up under your hand and disappears the moment you let go to look at it. */
     printf("\ninteraction model tests (host)\n");
     failures += ui_run_selftests(report);
+
+    printf("\ntouch calibration tests (host)\n");
+    failures += touch_cal_run_selftests(report);
 
     if (failures) {
         printf("\n%d test(s) FAILED\n", failures);

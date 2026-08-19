@@ -20,5 +20,6 @@
 #define ICON_REDO   "\x23"    /* U+21B7 CLOCKWISE SEMICIRCLE        */
 #define ICON_PREV   "\x24"    /* U+25C0 LEFT-POINTING TRIANGLE      */
 #define ICON_NEXT   "\x25"    /* U+25B6 RIGHT-POINTING TRIANGLE     */
+#define ICON_SETTINGS "\x26"  /* U+2699 GEAR                        */
 
 #endif /* ELECTRA_ICONS_H */

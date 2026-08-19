@@ -23,8 +23,8 @@
  *   - Pot ROTATION is scrambled: `{4,0,1,5,2,7,3,6}` indexed by multiplexer channel.
  *
  * Both are measured on the panel, not inferred. The rotation table is exactly the stock
- * firmware's `{0,4,5,1,6,3,7,2}` with the same +4 row swap applied, so prior analysis was
- * right that "the rotation path remaps and the switch path does not".
+ * firmware's `{0,4,5,1,6,3,7,2}` with the same +4 row swap applied, so both paths use the
+ * UI's bottom-row-first physical order.
  *
  * An earlier pass here concluded the opposite — that one mapping served both — from noticing
  * that pushes and phase movements appeared on the same channel in an interleaved capture. That

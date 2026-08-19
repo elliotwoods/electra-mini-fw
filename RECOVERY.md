@@ -76,6 +76,11 @@ still **CDC**, reached with `rawcom.py` and `flash_usb.py` exactly as it always 
 application will not talk — wrong descriptors, a broken WinUSB tool, a hang before USB comes up —
 the way back does not go through the application at all.
 
+When EMB shows **UPDATE MODE** and a valid application is installed, the screen shows
+**`5  RESET`** directly above front-panel button 5. Release any hold used to enter the mode,
+then press button 5 to leave the bootloader and launch the application. The control is absent
+when the application slot is invalid, because in that state it cannot do anything safely.
+
 A cold boot lands in the bootloader because SRAM does not survive losing power, so the health
 word the bootloader looks for reads as zero, and rule 5 in `src/boot/main.c` **holds** rather
 than launching an application that has never proven itself. It sits there and waits.

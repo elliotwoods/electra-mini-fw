@@ -21,6 +21,98 @@ static int slot_erased(unsigned i)
     return 1;
 }
 
+uint32_t persist_touch_cal_checksum(const touch_cal_rec_t *r)
+{
+    uint32_t sum = r->magic + r->version + r->generation + r->valid_mask;
+    for (unsigned i = 0; i < 8; i++) sum += r->threshold[i] + r->gain[i];
+    return ~sum;
+}
+
+static int touch_cal_valid(const touch_cal_rec_t *r)
+{
+    return r->magic == TOUCH_CAL_MAGIC && r->version == TOUCH_CAL_VERSION
+        && r->checksum == persist_touch_cal_checksum(r);
+}
+
+int persist_touch_cal_read(touch_cal_rec_t *out)
+{
+    if (!out) return 0;
+    int found = 0;
+    for (unsigned i = 0; i < FLASH_RECORD_SLOTS; i++) {
+        const touch_cal_rec_t *r = (const touch_cal_rec_t *)slot(i);
+        if (touch_cal_valid(r)) { *out = *r; found = 1; }
+    }
+    return found;
+}
+
+uint32_t persist_ui_pref_checksum(const ui_pref_rec_t *r)
+{
+    return ~(r->magic + r->version + r->generation
+           + r->brightness_percent + r->reserved);
+}
+
+static int ui_pref_valid(const ui_pref_rec_t *r)
+{
+    return r->magic == UI_PREF_MAGIC && r->version == UI_PREF_VERSION
+        && r->brightness_percent >= 10u && r->brightness_percent <= 100u
+        && r->checksum == persist_ui_pref_checksum(r);
+}
+
+int persist_ui_pref_read(ui_pref_rec_t *out)
+{
+    if (!out) return 0;
+    int found = 0;
+    for (unsigned i = 0; i < FLASH_RECORD_SLOTS; i++) {
+        const ui_pref_rec_t *r = (const ui_pref_rec_t *)slot(i);
+        if (ui_pref_valid(r)) { *out = *r; found = 1; }
+    }
+    return found;
+}
+
+/* Append any record type. If the shared journal fills, preserve the newest instance of all
+ * three across the erase; no setting may evict boot trust or another setting. */
+static int append_record(const void *rec, uint32_t len)
+{
+    uint8_t unit[FLASH_WRITE_UNIT];
+    unsigned i = 0;
+    while (i < FLASH_RECORD_SLOTS && !slot_erased(i)) i++;
+
+    if (i >= FLASH_RECORD_SLOTS) {
+        persist_rec_t boot;
+        touch_cal_rec_t cal;
+        ui_pref_rec_t pref;
+        int have_boot = persist_read(&boot);
+        int have_cal = persist_touch_cal_read(&cal);
+        int have_pref = persist_ui_pref_read(&pref);
+        int rc = flash_record_erase();
+        if (rc != FLASH_OK) return rc;
+        i = 0;
+
+        if (have_boot) {
+            memset(unit, 0xFF, sizeof(unit));
+            memcpy(unit, &boot, sizeof(boot));
+            rc = flash_record_write(FLASH_RECORD_BASE + (uint32_t)i++ * FLASH_WRITE_UNIT, unit);
+            if (rc != FLASH_OK) return rc;
+        }
+        if (have_cal) {
+            memset(unit, 0xFF, sizeof(unit));
+            memcpy(unit, &cal, sizeof(cal));
+            rc = flash_record_write(FLASH_RECORD_BASE + (uint32_t)i++ * FLASH_WRITE_UNIT, unit);
+            if (rc != FLASH_OK) return rc;
+        }
+        if (have_pref) {
+            memset(unit, 0xFF, sizeof(unit));
+            memcpy(unit, &pref, sizeof(pref));
+            rc = flash_record_write(FLASH_RECORD_BASE + (uint32_t)i++ * FLASH_WRITE_UNIT, unit);
+            if (rc != FLASH_OK) return rc;
+        }
+    }
+
+    memset(unit, 0xFF, sizeof(unit));
+    memcpy(unit, rec, len);
+    return flash_record_write(FLASH_RECORD_BASE + (uint32_t)i * FLASH_WRITE_UNIT, unit);
+}
+
 int persist_read(persist_rec_t *out)
 {
     if (!out) return 0;
@@ -38,25 +130,19 @@ int persist_read(persist_rec_t *out)
 
 int persist_write(const persist_rec_t *rec)
 {
-    uint8_t unit[FLASH_WRITE_UNIT];
+    return rec ? append_record(rec, sizeof(*rec)) : FLASH_ERR_RANGE;
+}
 
-    unsigned i = 0;
-    while (i < FLASH_RECORD_SLOTS && !slot_erased(i)) i++;
+int persist_touch_cal_write(const touch_cal_rec_t *rec)
+{
+    if (!rec || !touch_cal_valid(rec)) return FLASH_ERR_RANGE;
+    return append_record(rec, sizeof(*rec));
+}
 
-    if (i >= FLASH_RECORD_SLOTS) {
-        /* Full. Erasing loses the history, which is fine -- only the newest entry has ever
-         * meant anything; the older ones exist because appending is cheaper than rewriting. */
-        int rc = flash_record_erase();
-        if (rc != FLASH_OK) return rc;
-        i = 0;
-    }
-
-    /* Pad with 0xFF rather than zero, so an unused tail is indistinguishable from erased flash
-     * and a future format can extend the structure without rewriting this block. */
-    memset(unit, 0xFF, sizeof(unit));
-    memcpy(unit, rec, sizeof(*rec));
-
-    return flash_record_write(FLASH_RECORD_BASE + (uint32_t)i * FLASH_WRITE_UNIT, unit);
+int persist_ui_pref_write(const ui_pref_rec_t *rec)
+{
+    if (!rec || !ui_pref_valid(rec)) return FLASH_ERR_RANGE;
+    return append_record(rec, sizeof(*rec));
 }
 
 /* Does the stored record describe the image that is actually in flash right now? */

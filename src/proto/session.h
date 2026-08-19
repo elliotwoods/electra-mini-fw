@@ -40,6 +40,12 @@ void emp_session_note_render_us(uint32_t us);
 /* The MTU actually in use for transmission, after HELLO. Never larger than what this device
  * advertises it can receive, and never smaller than one HID report's worth. */
 uint16_t emp_session_tx_mtu(void);
+uint8_t emp_session_peer_minor(void);
+uint32_t emp_device_firmware_version(void);
+uint32_t emp_device_firmware_build(void);
+const char *emp_device_model(void);
+const char *emp_device_serial(void);
+const char *emp_device_build_id(void);
 
 /* Counters, reported in HEARTBEAT and by the console's `emp` command. */
 typedef struct {

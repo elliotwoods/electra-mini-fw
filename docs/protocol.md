@@ -1,4 +1,4 @@
-# EMP/1 — Electra Mini Protocol v1.0
+# EMP/1 — Electra Mini Protocol v1.1
 
 Normative wire spec for `electra-mini-fw` ↔ `av-frameworks`. MUST / MUST NOT / SHOULD / MAY
 per RFC 2119. Both codecs (C in `src/proto/`, Rust in the host crate) are written against
@@ -113,7 +113,7 @@ implementation manages it anyway, the CRC fails and the seq gap is reported, so 
 | Name | Value |
 |---|---|
 | `EMP_MAGIC` | `0xE1` |
-| `EMP_VERSION` | major 1, minor 0 |
+| `EMP_VERSION` | major 1, minor 1 |
 | `EMP_HEADER_BYTES` | 8 |
 | `EMP_PREFIX_BYTES` | 8 |
 | `EMP_MTU_HID` / `EMP_MTU_BULK` | 56 / 1016 |
@@ -145,7 +145,8 @@ version, mtu, `session_id` (**changes on every device boot**), capability flags,
 `max_message_rx`, `max_descriptor_bytes`, `max_fields`, `fields_per_page`, `applied_revision`,
 firmware version and build, then `model` / `serial` / `build_id` strings — which map directly
 onto `SurfacePluginSnapshot::{model, serial, firmware}`. `max_fields` and `fields_per_page`
-feed `SurfaceCapabilities`, which the current provider hardcodes to 64/4.
+feed `SurfaceCapabilities`; the firmware provider currently exposes the device's 64-field,
+8-fields-per-page limits.
 
 **`READY` prefix**, the 44 bytes §6 promises stable:
 
@@ -254,9 +255,18 @@ allocation, interleaving points at message boundaries, and a failure names a fie
 rather than "the transfer broke".
 
 - `DESC_BEGIN`: `revision` u64, `field_count` u16, `flags` u16, `total_bytes` u32, `scope`.
-- `DESC_FIELD`: `index` u16 (MUST ascend by exactly 1) + field record (§3.4).
+- `DESC_FIELD`: transaction `index` u16 (MUST ascend by exactly 1) + field record (§3.4).
 - `DESC_END`: `revision`, `field_count`, `crc32c` over the concatenated field payloads.
 - `VALUES`: `revision` u64, `count` u16, then `count` × { `id` u16, `ack_edit` u32, Value }.
+- `REVEAL`: `revision` u64 + absolute physical `id` u16. A valid request leaves drill-down,
+  moves to `(id / fields_per_page) * fields_per_page`, and is confirmed by `SCREEN`.
+- `CLEAR`: no payload. It clears the descriptor and page/focus/UI state and confirms an empty
+  screen with `SCREEN { revision: 0, first_slot: 0, slot_count: 0 }` on EMP/1.1.
+
+The field record's `id` is an absolute physical slot in `0..max_fields`; it is not the
+transaction `index`. IDs may be sparse. A descriptor containing IDs `0..6, 8` therefore leaves
+slot 7 blank and puts ID 8 on the second page. Duplicate or out-of-range IDs reject the entire
+transaction without changing the active descriptor.
 
 **Revision gate.** The device MUST drop `VALUES` / `REVEAL` / `TRANSPORT` whose `revision` is
 neither 0 nor its own `applied_revision`, and answer `DESC_REQUEST{REVISION_UNKNOWN}`. This is
@@ -285,6 +295,22 @@ round-trip out of felt latency. The last row is the acknowledged compromise.
 `BUTTON` is **diagnostics only** and produces no `SurfaceInput`, so device-local navigation
 never looks like a user edit.
 
+`SCREEN` was added in EMP/1.1 and carries `revision u64`, absolute `first_slot u16`, and
+`slot_count u16`. The half-open interval `[first_slot, first_slot + slot_count)` is authoritative
+for the physical 2x4 knob bank; holes produce no `SurfaceInput::Screen` ID. The device emits it
+after descriptor activation, every page change, a successful `REVEAL`, and `CLEAR`. A host
+immediately publishes current values for occupied IDs in that interval and limits periodic `VALUES` traffic to them;
+the heartbeat's page field is the recovery copy if a queued `SCREEN` is missed.
+It is emitted only when HELLO negotiation selects minor version 1 or newer; EMP/1.0 peers keep
+using the heartbeat page field and are never sent an opcode they did not negotiate.
+
+Physical slot order is top-row-first: slots 0â€“3 are left-to-right above the display and 4â€“7
+left-to-right below it. Sparse holes and absolute IDs retain those positions. Drilled Number
+fields use the opposite knob row as a four-place digit window; the outer buttons move toward
+more/less-significant places within the value and precision bounds. Choice and Color disable the
+outer pair. Choice traverses without wrapping; Color uses R/G/B/optional-A component knobs while
+focus and edits continue to identify the one aggregate field.
+
 ### 3.4 Encoding
 
 **String** = `len` u16 + `len` bytes **UTF-8**, no terminator. The old protocol's 22-char
@@ -303,7 +329,13 @@ device-facing index) · `0x03` Text String · `0x04` Color (`count` u8 + `count`
 lossy for a value the device echoes back, and puts display policy on the wrong side. The
 device formats using `precision`, which needs only fixed-point integer formatting.
 
-**Non-finite `f64` MUST NOT be encoded** — substitute 0.0, set `TRUNCATED`, emit
+Color count is exactly 3 (RGB) or 4 (RGBA), with finite little-endian `f32` components. Other
+counts and non-finite components are malformed. A Color field occupies one physical slot and
+every `VALUES`, `EDIT`, default, correction, and replay carries the complete vector; component
+lanes are never exposed as separate fallback Number fields.
+
+**Non-finite `f64` or colour `f32` MUST NOT be encoded** — substitute 0.0 for a fresh Number,
+or reject the complete colour without changing the live value; set `TRUNCATED` and emit
 `DIAG{E_NON_FINITE}`. This keeps round-trip equality total, which is what makes property
 testing possible.
 
@@ -329,25 +361,14 @@ quantization) and is applied; anything older is a stale echo and is ignored.
 
 ## 4. Flow control
 
-Bulk and interrupt OUT endpoints NAK when the device buffer is full and the host controller
-retries in hardware, so **data is never lost to a slow device at the USB layer**. Loss happens
-in software rings — the device's RX ring and the Windows HID input ring. Hence:
-`HidD_SetNumInputBuffers(h, 512)` is **not optional** (the default 32 reports ≈ 32 ms of slack
-at 64 KB/s). This is the direct successor to "only 4 WinMM input buffers".
-
-**Credits exist to bound the host's own OS-queued depth**, not to prevent loss. If the host
-dumps 370 fragments into the write queue, a `PING` behind them waits for the whole transfer —
-~370 ms of priority inversion on HID, exactly when liveness measurement should be sharpest.
-With `rx_window = 16` the worst case is 16 ms, and that is a test assertion.
-
-Credits are **absolute, not incremental**: `credits_total` is cumulative since session start,
-so a lost or reordered `FLOW` self-repairs on the next one. It is piggybacked on `PONG` and
-`HEARTBEAT` too, so no `FLOW` is load-bearing alone. Channels 0 and 2 are exempt — the device
-reserves ring slots so control can never be starved by a stalled bulk transfer.
+The current WinUSB implementation relies on USB bulk endpoint backpressure and does **not**
+implement EMP `FLOW` messages or enforce host-side credits. The `credits_total`/`FLOW` wire
+fields are reserved for a later throughput and priority-inversion pass; they are not an
+advertised capability or a completed gate in this milestone.
 
 **Host flood control:** coalesce pending `SurfaceValueChange`s per id to the latest, emit at
 most one `VALUES` per 20 ms, and send only what the device reported visible via `SCREEN`. At
-`fields_per_page = 4` that is ~5 KB/s — inside even the HID ceiling.
+`fields_per_page = 8` that remains a small bounded bulk message.
 
 **Device backpressure:** a coalescing queue (`EDIT`, `EDIT_DELTA`, `FOCUS`, `SCREEN` — a new
 entry for a queued id replaces it, so it cannot overflow; resolution degrades, events do not

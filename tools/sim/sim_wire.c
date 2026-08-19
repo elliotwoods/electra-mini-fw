@@ -24,6 +24,13 @@
 static sim_wire_msg_t captured[SIM_WIRE_CAPACITY];
 static unsigned       captured_count;
 
+uint8_t emp_session_peer_minor(void) { return EMP_VERSION_MINOR; }
+uint32_t emp_device_firmware_version(void) { return 0x00000100u; }
+uint32_t emp_device_firmware_build(void) { return 0; }
+const char *emp_device_model(void) { return "Electra One Mini"; }
+const char *emp_device_serial(void) { return "EMB-0001"; }
+const char *emp_device_build_id(void) { return "simulator build"; }
+
 void emp_send(uint8_t channel, uint8_t opcode, const uint8_t *payload, uint32_t len)
 {
     if (captured_count >= SIM_WIRE_CAPACITY) return;

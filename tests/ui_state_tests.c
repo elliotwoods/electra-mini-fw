@@ -17,6 +17,9 @@
 #include "ui_state.h"
 #include "history.h"
 #include "surface.h"
+#include "sim_wire.h"
+#include "touch_cal.h"
+#include "ra8876.h"
 
 typedef void (*ui_report_fn)(const char *name, int passed);
 
@@ -30,6 +33,7 @@ static void check(const char *name, int passed)
 }
 
 static int near(double a, double b) { return fabs(a - b) < 1e-9; }
+static int nearf32(float a, float b) { return fabs((double)a - (double)b) < 1e-5; }
 
 /* Press and release, which is what a finger does. */
 static void tap(unsigned pot, uint32_t t) { ui_state_push(pot, 1, t); ui_state_push(pot, 0, t + 5); }
@@ -93,6 +97,18 @@ static void test_roundp(void)
           && near(ui_roundp(-2.5, 0), -3.0)
           && near(ui_roundp(-0.5, 0), -1.0);
     check("round to precision", ok);
+}
+
+static void test_touch_calibration_policy(void)
+{
+    uint8_t threshold = 0;
+    int ok = touch_cal_choose_config(2, 80, 1, &threshold) == TOUCH_CAL_CONFIG_ACCEPT
+          && threshold == 10u;
+    ok = ok && touch_cal_choose_config(8, 35, 1, &threshold) == TOUCH_CAL_CONFIG_MORE_GAIN;
+    ok = ok && touch_cal_choose_config(8, 35, 0, &threshold) == TOUCH_CAL_CONFIG_FAIL;
+    ok = ok && touch_cal_choose_config(250, 2000, 0, &threshold) == TOUCH_CAL_CONFIG_ACCEPT
+            && threshold == 254u;
+    check("touch calibration margin policy", ok);
 }
 
 /* ------------------------------------------------------------------ the row split */
@@ -200,19 +216,19 @@ static void test_digit_knobs_follow_the_row(void)
     surf_demo_descriptor();
     ui_state_init();
 
-    /* Drilled into a top field, the BOTTOM knobs edit digits and the TOP knobs edit fields. */
-    tap(UI_ROW_SPLIT, 1000);
-    double drilled = surf_field(UI_ROW_SPLIT)->number;
+    /* Drilled into a bottom field, the TOP knobs edit digits and the BOTTOM knobs edit fields. */
+    tap(0, 1000);
+    double drilled = surf_field(0)->number;
     double neighbour = surf_field(1)->number;
 
-    (void)ui_state_rotate(1, UI_DIGIT_STEP, 1100);      /* a bottom knob: now a digit control */
-    int ok = !near(surf_field(UI_ROW_SPLIT)->number, drilled);
+    (void)ui_state_rotate(UI_ROW_SPLIT + 1u, UI_DIGIT_STEP, 1100);
+    int ok = !near(surf_field(0)->number, drilled);
     ok = ok && near(surf_field(1)->number, neighbour);  /* and it did NOT edit its own field */
 
-    /* while a top knob still edits its own field */
-    double other = surf_field(UI_ROW_SPLIT + 1)->number;
-    (void)ui_state_rotate(UI_ROW_SPLIT + 1, 4, 1200);
-    ok = ok && !near(surf_field(UI_ROW_SPLIT + 1)->number, other);
+    /* while a bottom knob still edits its own field */
+    double other = surf_field(1)->number;
+    (void)ui_state_rotate(1, 4, 1200);
+    ok = ok && !near(surf_field(1)->number, other);
     check("digit knobs follow the opposite row", ok);
 }
 
@@ -250,6 +266,9 @@ static void test_page_buttons(void)
     ui_state_button(UI_BTN_PAGE_NEXT, 1, 1000);
     ok = ok && ui_state()->page == UI_FIELDS_PER_PAGE;
     ok = ok && ui_state_field_for(0) == (int32_t)UI_FIELDS_PER_PAGE;
+    const sim_wire_msg_t *screen = sim_wire_last(EMP_OP_SCREEN);
+    ok = ok && screen && screen->len == 12 && screen->payload[8] == UI_FIELDS_PER_PAGE
+            && screen->payload[10] == 4u;     /* the demo's final page is short */
 
     /* Groups are absolute, so no field appears on two pages and the last page stays short
      * rather than sliding backwards to stay full. */
@@ -262,19 +281,25 @@ static void test_page_buttons(void)
     check("paging by button, stable absolute groups", ok);
 }
 
-static void test_paging_leaves_the_drilled_field(void)
+static void test_outer_buttons_zoom_while_drilled(void)
 {
     surf_demo_descriptor();
     ui_state_init();
 
+    surf_set_number(0, 123.45);
     tap(0, 1000);
-    int ok = ui_state()->focused == 0;
-
-    /* The focused field is not on the new page, so staying drilled would show a field the knobs
-     * no longer address. */
+    int ok = ui_state()->focused == 0 && ui_state()->ws == 2
+          && !ui_state_button_enabled(UI_BTN_BACK)
+          && ui_state_button_enabled(UI_BTN_PAGE_NEXT);
     ui_state_button(UI_BTN_PAGE_NEXT, 1, 1100);
+    ok = ok && ui_state()->focused == 0 && ui_state()->page == 0 && ui_state()->ws == 1
+            && ui_state_button_enabled(UI_BTN_BACK)
+            && !ui_state_button_enabled(UI_BTN_PAGE_NEXT);
+    ui_state_button(UI_BTN_BACK, 1, 1200);
+    ok = ok && ui_state()->focused == 0 && ui_state()->ws == 2;
+    tap(UI_ROW_SPLIT, 1300);
     ok = ok && ui_state()->focused < 0;
-    check("paging leaves the drilled field", ok);
+    check("outer buttons zoom and editor press exits", ok);
 }
 
 /* ------------------------------------------------------------------ editing */
@@ -308,6 +333,10 @@ static void test_choice_steps_and_clamps(void)
     int ok = (f != 0) && f->kind == EMP_KIND_CHOICE && f->choice_count == 5;
 
     if (ok) {
+        tap(knob, 1050);
+        ok = ui_state()->focused == idx
+          && !ui_state_button_enabled(UI_BTN_BACK)
+          && !ui_state_button_enabled(UI_BTN_PAGE_NEXT);
         uint32_t start = surf_field(idx)->choice;
         (void)ui_state_rotate(knob, 1, 1100);                 /* below the threshold */
         ok = ok && surf_field(idx)->choice == start;
@@ -356,6 +385,55 @@ static void test_top_row_edits_digits_only_when_drilled(void)
     ok = ok && near(surf_field(UI_ROW_SPLIT)->number, other);
     ok = ok && !near(surf_field(0)->number, mine);
     check("top row edits digits only while drilled", ok);
+}
+
+static void test_rotation_feedback_latches_then_expires(void)
+{
+    surf_demo_descriptor();
+    ui_state_init();
+
+    int ok = ui_state()->active_pot == -1;
+    ok = ok && ui_state_rotate(0, 4, 1000);
+    ok = ok && ui_state()->active_pot == 0;
+    ui_state_tick(1000 + UI_ACTIVE_MS - 1u);
+    ok = ok && ui_state()->active_pot == 0;
+    ui_state_tick(1000 + UI_ACTIVE_MS);
+    ok = ok && ui_state()->active_pot == -1;
+    check("rotary outline feedback latches then expires", ok);
+}
+
+static void test_colour_interaction(void)
+{
+    surf_demo_descriptor(); ui_state_init();
+    ui_state_button(UI_BTN_PAGE_NEXT, 1, 1000);
+    const uint16_t idx = 11u;
+    (void)ui_state_rotate(3, -10, 1100);
+    const surf_field_t *f = surf_field(idx);
+    int ok = f && f->color_count == 3u
+          && nearf32(f->color[0], 0.225f) && nearf32(f->color[1], 0.45f)
+          && nearf32(f->color[2], 0.9f);
+
+    tap(3, 1200);
+    (void)ui_state_rotate(UI_ROW_SPLIT, 1, 1300);
+    f = surf_field(idx);
+    ok = ok && nearf32(f->color[0], 0.235f)
+            && !ui_state_rotate(UI_ROW_SPLIT + 3u, 1, 1310);
+
+    sim_wire_reset();
+    ui_state_touch((uint16_t)(1u << UI_ROW_SPLIT), 1400);
+    const sim_wire_msg_t *focus = sim_wire_last(EMP_OP_FOCUS);
+    ok = ok && focus && focus->len == 14u && focus->payload[8] == 1u
+            && focus->payload[9] == idx;
+
+    ui_state_tick(1800);
+    ui_state_button(UI_BTN_SYSTEM, 1, 1900);
+    f = surf_field(idx);
+    ok = ok && nearf32(f->color[0], 0.25f) && nearf32(f->color[1], 0.5f)
+            && nearf32(f->color[2], 1.0f);
+    ui_state_button(UI_BTN_UNDO, 1, 2000);
+    f = surf_field(idx);
+    ok = ok && nearf32(f->color[0], 0.235f) && nearf32(f->color[2], 0.9f);
+    check("colour intensity, RGB drill, focus, reset and history", ok);
 }
 
 /* ------------------------------------------------------------------ history */
@@ -426,18 +504,220 @@ static void test_affordances_reflect_what_would_happen(void)
     surf_demo_descriptor();
     ui_state_init();
 
-    /* In the overview, none of the per-field buttons can do anything, and saying so is better
-     * than looking live and silently ignoring a press. */
-    int ok = !ui_state_button_enabled(UI_BTN_EXIT)
+    /* In the overview, field-only actions disappear, System remains available, and Previous is
+     * absent on the first page. */
+    int ok = !ui_state_button_enabled(UI_BTN_BACK)
           && !ui_state_button_enabled(UI_BTN_UNDO)
           && !ui_state_button_enabled(UI_BTN_REDO)
-          && !ui_state_button_enabled(UI_BTN_RESET);
+          && ui_state_button_enabled(UI_BTN_SYSTEM)
+          && ui_state_button_enabled(UI_BTN_PAGE_NEXT);
 
     tap(0, 1000);
-    ok = ok && ui_state_button_enabled(UI_BTN_EXIT);
+    ok = ok && !ui_state_button_enabled(UI_BTN_BACK); /* already at the significant bound */
     ok = ok && !ui_state_button_enabled(UI_BTN_UNDO);     /* nothing recorded yet */
     ok = ok && !ui_state_button_enabled(UI_BTN_REDO);
+    ok = ok && !ui_state_button_enabled(UI_BTN_SYSTEM);   /* reset hidden: no declared default */
     check("affordances reflect what would happen", ok);
+}
+
+static void test_system_and_calibration_actions(void)
+{
+    surf_demo_descriptor();
+    ui_state_init();
+
+    ui_state_button(UI_BTN_SYSTEM, 1, 1000);
+    int ok = ui_state()->mode == UI_MODE_SYSTEM
+          && ui_state_button_enabled(UI_BTN_BACK)
+          && ui_state_button_enabled(UI_BTN_SYSTEM)
+          && !ui_state_button_enabled(UI_BTN_PAGE_NEXT);
+
+    /* Default item is Touch Calibration. Pressing a dial opens selection; pressing a dial
+     * there requests exactly that physical channel. */
+    tap(0, 1010);
+    ok = ok && ui_state()->mode == UI_MODE_CAL_SELECT;
+    tap(3, 1020);
+    ui_action_t action;
+    ok = ok && ui_state()->mode == UI_MODE_CAL_RUN
+            && ui_state_take_action(&action)
+            && action.kind == UI_ACTION_CALIBRATE && action.pot_mask == (1u << 3);
+
+    /* Back from the routine emits cancellation and returns to selection. */
+    ui_state_button(UI_BTN_BACK, 1, 1030);
+    ok = ok && ui_state_take_action(&action) && action.kind == UI_ACTION_CAL_CANCEL
+            && ui_state()->mode == UI_MODE_CAL_SELECT;
+    check("system and individual calibration actions", ok);
+}
+
+static void test_system_button_reboots_and_all_calibrates(void)
+{
+    surf_demo_descriptor();
+    ui_state_init();
+    ui_action_t action;
+
+    ui_state_button(UI_BTN_SYSTEM, 1, 1000);
+    ui_state_button(UI_BTN_SYSTEM, 1, 1010);
+    int ok = ui_state()->mode == UI_MODE_REBOOT_WAIT
+          && !ui_state_take_action(&action);       /* a held button must not reset */
+    ui_state_button(UI_BTN_SYSTEM, 0, 1020);
+    ok = ok && ui_state_take_action(&action) && action.kind == UI_ACTION_REBOOT;
+
+    ui_state_init();
+    ui_state_button(UI_BTN_SYSTEM, 1, 1100);
+    tap(0, 1110);                              /* open calibration selection */
+    ui_state_button(UI_BTN_SYSTEM, 1, 1120);  /* button 5 = calibrate all */
+    ok = ok && ui_state_take_action(&action) && action.kind == UI_ACTION_CALIBRATE
+            && action.pot_mask == 0xFFu;
+    check("button 5 reboots or calibrates all by context", ok);
+}
+
+static void test_calibration_phase_actions(void)
+{
+    surf_demo_descriptor();
+    ui_state_init();
+    ui_action_t action;
+
+    ui_state_button(UI_BTN_SYSTEM, 1, 1000);
+    tap(0, 1010);
+    tap(2, 1020);
+    int ok = ui_state_take_action(&action) && action.kind == UI_ACTION_CALIBRATE;
+
+    ui_state_calibration_status(TOUCH_CAL_BASELINE, 2, 0, 0, 0, 1700,
+                                "Keep hands clear - starts automatically");
+    ok = ok && ui_state_button_enabled(UI_BTN_BACK)
+            && !ui_state_button_enabled(UI_BTN_SYSTEM);
+
+    ui_state_calibration_status(TOUCH_CAL_FAILED, 2, 1, 0, 0, 0,
+                                "A different dial was touched");
+    ok = ok && ui_state_button_enabled(UI_BTN_BACK)
+            && ui_state_button_enabled(UI_BTN_SYSTEM);
+    ui_state_button(UI_BTN_SYSTEM, 1, 1030);
+    ok = ok && ui_state_take_action(&action) && action.kind == UI_ACTION_CAL_RETRY
+            && ui_state()->mode == UI_MODE_CAL_RUN;
+
+    ui_state_calibration_status(TOUCH_CAL_COMPLETE, 2, 3, 0x04u, 1, 0,
+                                "Calibration saved");
+    ok = ok && !ui_state_button_enabled(UI_BTN_BACK)
+            && ui_state_button_enabled(UI_BTN_SYSTEM);
+    ui_state_button(UI_BTN_SYSTEM, 1, 1040);
+    ok = ok && ui_state_take_action(&action) && action.kind == UI_ACTION_CAL_DONE
+            && ui_state()->mode == UI_MODE_CAL_SELECT;
+    check("calibration buttons follow phase", ok);
+}
+
+static void enter_brightness(uint8_t saved)
+{
+    ui_state_init();
+    ui_state_brightness_status(saved);
+    ui_state_button(UI_BTN_SYSTEM, 1, 1000);
+    (void)ui_state_rotate(0, 1, 1010);
+    (void)ui_state_rotate(7, 1, 1020);
+    tap(3, 1030);
+}
+
+static void test_brightness_settings_navigation(void)
+{
+    surf_demo_descriptor();
+    ui_state_init();
+    ui_state_brightness_status(60u);
+    ui_state_button(UI_BTN_SYSTEM, 1, 1000);
+    int ok = ui_state()->mode == UI_MODE_SYSTEM
+          && ui_state()->system_selection == 0u
+          && ui_state()->brightness_saved == 60u;
+
+    (void)ui_state_rotate(0, 20, 1010);
+    ok = ok && ui_state()->system_selection == 1u;
+    (void)ui_state_rotate(7, 20, 1020);
+    ok = ok && ui_state()->system_selection == 2u;
+    ok = ok && !ui_state_rotate(2, 1, 1030)
+            && ui_state()->system_selection == 2u;
+    (void)ui_state_rotate(2, -1, 1040);
+    ok = ok && ui_state()->system_selection == 1u;
+    (void)ui_state_rotate(2, -1, 1050);
+    ok = ok && ui_state()->system_selection == 0u
+            && !ui_state_rotate(2, -1, 1060);
+    check("three-item settings navigation clamps", ok);
+}
+
+static void test_brightness_preview_cancel_and_clamps(void)
+{
+    surf_demo_descriptor();
+    enter_brightness(60u);
+    int ok = ui_state()->mode == UI_MODE_BRIGHTNESS
+          && ui_state()->brightness_preview == 60u
+          && ui_state_button_enabled(UI_BTN_BACK)
+          && ui_state_button_enabled(UI_BTN_SYSTEM);
+
+    ui_action_t action;
+    for (unsigned pot = 0; pot < 8u; pot++) {
+        ok = ok && ui_state_rotate(pot, 1, 1100u + pot)
+                && ui_state_take_action(&action)
+                && action.kind == UI_ACTION_BRIGHTNESS_PREVIEW
+                && action.brightness_percent == 61u + pot;
+    }
+    (void)ui_state_rotate(0, 1000, 1200);
+    ok = ok && ui_state()->brightness_preview == 100u
+            && ui_state_take_action(&action)
+            && action.brightness_percent == 100u
+            && !ui_state_rotate(0, 1, 1210);
+    (void)ui_state_rotate(4, -1000, 1220);
+    ok = ok && ui_state()->brightness_preview == 10u
+            && ui_state_take_action(&action)
+            && action.brightness_percent == 10u
+            && !ui_state_rotate(7, -1, 1230);
+
+    ui_state_button(UI_BTN_BACK, 1, 1300);
+    ok = ok && ui_state()->mode == UI_MODE_SYSTEM
+            && ui_state()->brightness_preview == 60u
+            && ui_state_take_action(&action)
+            && action.kind == UI_ACTION_BRIGHTNESS_CANCEL
+            && action.brightness_percent == 60u;
+    check("brightness live preview, any dial, clamps, cancel", ok);
+}
+
+static void test_brightness_save_result(void)
+{
+    surf_demo_descriptor();
+    enter_brightness(75u);
+    ui_action_t action;
+    (void)ui_state_rotate(5, -15, 1100);
+    int ok = ui_state_take_action(&action)
+          && action.kind == UI_ACTION_BRIGHTNESS_PREVIEW
+          && action.brightness_percent == 60u;
+
+    ui_state_button(UI_BTN_SYSTEM, 1, 1200);
+    ok = ok && ui_state()->mode == UI_MODE_BRIGHTNESS
+            && ui_state_take_action(&action)
+            && action.kind == UI_ACTION_BRIGHTNESS_SAVE
+            && action.brightness_percent == 60u;
+    ui_state_brightness_save_result(0);
+    ok = ok && ui_state()->mode == UI_MODE_BRIGHTNESS
+            && ui_state()->brightness_save_error;
+
+    ui_state_button(UI_BTN_SYSTEM, 1, 1300);
+    ok = ok && ui_state_take_action(&action)
+            && action.kind == UI_ACTION_BRIGHTNESS_SAVE;
+    ui_state_brightness_save_result(1);
+    ok = ok && ui_state()->mode == UI_MODE_SYSTEM
+            && ui_state()->brightness_saved == 60u
+            && !ui_state()->brightness_save_error;
+    check("brightness Done persists only after save success", ok);
+}
+
+static void test_brightness_pwm_conversion(void)
+{
+    int ok = ra8876_backlight_compare_for_percent(0u) == 614u
+          && ra8876_backlight_compare_for_percent(10u) == 614u
+          && ra8876_backlight_compare_for_percent(50u) == 3072u
+          && ra8876_backlight_compare_for_percent(100u) == 6144u
+          && ra8876_backlight_compare_for_percent(255u) == 6144u;
+    uint16_t previous = 0;
+    for (unsigned p = 10u; p <= 100u; p++) {
+        uint16_t compare = ra8876_backlight_compare_for_percent((uint8_t)p);
+        ok = ok && compare >= 1u && compare <= RA8876_BACKLIGHT_PERIOD
+                && compare > previous;
+        previous = compare;
+    }
+    check("brightness percent maps monotonically to safe PWM", ok);
 }
 
 /* ------------------------------------------------------------------ runner */
@@ -451,6 +731,7 @@ int ui_run_selftests(ui_report_fn report)
     test_window_bounds();
     test_digit_at();
     test_roundp();
+    test_touch_calibration_policy();
 
     test_row_split_is_not_the_page_size();
 
@@ -462,17 +743,26 @@ int ui_run_selftests(ui_report_fn report)
     test_digit_knobs_follow_the_row();
 
     test_page_buttons();
-    test_paging_leaves_the_drilled_field();
+    test_outer_buttons_zoom_while_drilled();
 
     test_readonly_is_not_editable();
     test_choice_steps_and_clamps();
     test_choice_labels();
     test_top_row_edits_digits_only_when_drilled();
+    test_rotation_feedback_latches_then_expires();
+    test_colour_interaction();
 
     test_history_commits_on_settle();
     test_undo_commits_a_pending_change_first();
     test_exit_commits_history();
     test_affordances_reflect_what_would_happen();
+    test_system_and_calibration_actions();
+    test_system_button_reboots_and_all_calibrates();
+    test_calibration_phase_actions();
+    test_brightness_settings_navigation();
+    test_brightness_preview_cancel_and_clamps();
+    test_brightness_save_result();
+    test_brightness_pwm_conversion();
 
     return failures;
 }

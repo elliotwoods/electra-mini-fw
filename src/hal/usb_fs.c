@@ -626,6 +626,15 @@ uint32_t usb_write(const uint8_t *buf, uint32_t len)
     return n;
 }
 
+uint32_t usb_write_try(const uint8_t *buf, uint32_t len)
+{
+    uint32_t space = sizeof(tx_buf) - tx_tail;
+    if (len > space) return 0;
+    for (uint32_t i = 0; i < len; i++) tx_buf[tx_tail + i] = buf[i];
+    tx_tail += len;
+    return len;
+}
+
 /* How many bytes are queued for the host and not yet collected.
  *
  * On CDC this was never worth asking: usbser.sys reads the IN endpoint continuously, so the
