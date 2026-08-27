@@ -61,6 +61,10 @@ static const char *reason_title(uint32_t reason)
 {
     switch (reason) {
     case BOOT_SCREEN_APP_REQUESTED: return "UPDATE MODE";
+    case BOOT_SCREEN_APP_UPDATE:    return "UPDATE MODE";
+    case BOOT_SCREEN_APP_FAULT:     return "APPLICATION CRASHED";
+    case BOOT_SCREEN_APP_NMI:       return "APPLICATION RAN OUT OF STACK";
+    case BOOT_SCREEN_APP_HANDBACK:  return "NO HOST COULD REACH THE APPLICATION";
     case BOOT_SCREEN_APP_INVALID:   return "NO APPLICATION";
     case BOOT_SCREEN_CRASH_LOOP:    return "APPLICATION KEEPS CRASHING";
     case BOOT_SCREEN_HOST_CLAIMED:  return "HELD BY HOST";
@@ -73,7 +77,18 @@ static const char *reason_detail(uint32_t reason)
 {
     switch (reason) {
     case BOOT_SCREEN_APP_REQUESTED:
+        /* The crumb could not be classified. Kept deliberately vaguer than the case below: this
+         * covers a crash as well as a request, and reading it as "flash a new one" is exactly
+         * the wrong conclusion when it was a crash. */
+        return "The application asked to come back here. The crumb below does not say why.";
+    case BOOT_SCREEN_APP_UPDATE:
         return "The application asked to be replaced. Flash a new one and it will start.";
+    case BOOT_SCREEN_APP_FAULT:
+        return "It hit a fault and came back here so it could be replaced. See the crumb below.";
+    case BOOT_SCREEN_APP_NMI:
+        return "The stack monitor fired repeatedly. See the crumb below for which way it went.";
+    case BOOT_SCREEN_APP_HANDBACK:
+        return "A host enumerated it but never bound a driver, so nothing could open the pipe.";
     case BOOT_SCREEN_APP_INVALID:
         return "There is no launchable image in the application slot.";
     case BOOT_SCREEN_CRASH_LOOP:

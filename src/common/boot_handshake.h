@@ -40,7 +40,19 @@ typedef struct {
     uint32_t magic;         /* BOOT_MAGIC */
     uint32_t magic_inv;     /* ~BOOT_MAGIC — guards against a half-written struct */
     uint32_t request;       /* BOOT_REQ_* */
-    uint32_t detail;        /* free-form; e.g. the app's build id when it asked */
+    /* NOT free-form, whatever this once said. It is the STRAY SYSTICK COUNTER: the absorber in
+     * vectors.c and the one in main.c both increment it, and the app's `id` command prints it as
+     * `stray_systicks` -- evidence about the stock bootloader's handoff that the comment beside
+     * that command says already cost days. An attempt to also carry "why the application asked
+     * to come back" here was written and withdrawn: it would have overwritten that count, and
+     * the absorber could increment the reason code out from under the reader between the request
+     * and the reset. If you need another channel, `app_faults` already carries a classifiable
+     * crumb on every one of those paths -- see boot_screen.c, which reads it.
+     *
+     * `boot_handshake_set_request` still clobbers this with its `detail` argument, which every
+     * caller passes as 0, so a deliberate `boot` zeroes the count. Left alone rather than fixed
+     * silently: changing it is a behaviour change to the recovery path and wants its own reason. */
+    uint32_t detail;
     uint32_t boot_count;    /* incremented by the bootloader every launch */
     uint32_t app_faults;    /* incremented when an app is launched, cleared when it checks in */
     uint32_t health;        /* BOOT_HEALTHY once an app has proven itself; see below */

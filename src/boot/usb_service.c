@@ -96,7 +96,12 @@ static void cmd_id(const char *a)
     (void)a;
     console_write("electra-mini-fw BOOTLOADER @0x00100000\r\n");
     console_hex("boot_reason", g_boot_reason);
-    console_write("  1 app asked  2 app invalid  3 crash loop  4 host claimed\r\n");
+    /* Every code, because this legend is what somebody reads when the panel is the thing being
+     * doubted. It listed four of six for as long as it existed, and the missing 5 -- the
+     * cold-boot default for an image nothing has proven -- is a common one to land on. */
+    console_write("  1 app asked (no reason)  2 app invalid  3 crash loop\r\n");
+    console_write("  4 host claimed  5 unproven app\r\n");
+    console_write("  6 update requested  7 fault  8 stack NMI  9 usb handback\r\n");
     console_hex("app_valid",  (uint32_t)app_image_valid());
     console_hex("app_base",   APP_BASE_ADDR);
     console_hex("app_max",    APP_MAX_BYTES);

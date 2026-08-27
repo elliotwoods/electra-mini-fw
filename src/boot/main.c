@@ -63,6 +63,42 @@ volatile uint32_t g_boot_reason;
 #define REASON_UNPROVEN_APP   5
 #define REASON_LAUNCHED       0
 
+/* The application-requested case, split by WHY it asked. These must equal the BOOT_SCREEN_APP_*
+ * codes; boot_screen.h says why they are additions rather than replacements. */
+#define REASON_APP_UPDATE     6
+#define REASON_APP_FAULT      7
+#define REASON_APP_NMI        8
+#define REASON_APP_HANDBACK   9
+
+/* Four unrelated things write BOOT_REQ_UPDATE -- a deliberate `boot` command, a hard fault, an
+ * NMI storm, and the USB handback -- and this rule is tested first, so all four used to arrive
+ * at one screen saying "The application asked to be replaced. Flash a new one." Three of them are
+ * not that, and an operator handed a crashed device that tells them to flash it goes and fixes
+ * the wrong thing. That is exactly what happened: a device that had handed itself back for want
+ * of a host reported UPDATE MODE, and the reasonable conclusion drawn from it was that something
+ * needed updating.
+ *
+ * The reason needs no new channel, because every one of those paths already writes a crumb, and
+ * the crumbs are already distinguishable by shape:
+ *
+ *   0xBxxxxxxx  handback -- packed by handback_check, top nibble B
+ *   xxxxxxF0    an exception fired -- STAGE_FAULT puts 0xF0 in the low byte and the exception
+ *               number in the next one, so NMI (2) separates itself from the rest
+ *   anything else  a plain STAGE_* code, i.e. the app was running normally and was asked to stop
+ *
+ * Nothing can collide: STAGE_FAULT's top nibble is 0 for a fault and 1-3 for the NMI variant's
+ * direction byte, never B. Reading evidence that is already written beats inventing a second
+ * place for the same fact and then keeping the two in step. */
+static uint32_t reason_for_crumb(uint32_t crumb)
+{
+    if ((crumb & 0xF0000000UL) == 0xB0000000UL) return REASON_APP_HANDBACK;
+    if ((crumb & 0x000000FFUL) == 0x000000F0UL) {
+        uint32_t ipsr = (crumb >> 8) & 0xFFUL;
+        return (ipsr == 2UL) ? REASON_APP_NMI : REASON_APP_FAULT;
+    }
+    return REASON_APP_UPDATE;
+}
+
 /* Placeholder until the USB device stack lands. Returning 0 means "no host claimed us",
  * so the bootloader behaves exactly as if the window had elapsed. */
 __attribute__((weak)) int usb_wait_for_host(uint32_t timeout_ms)
@@ -94,14 +130,16 @@ int main(void)
 
     volatile boot_handshake_t *h = &BOOT_HANDSHAKE;
     uint32_t request = h->request;
+    uint32_t crumb   = h->app_faults;        /* read BEFORE the launch counter below touches it */
 
     h->boot_count++;
     h->request  = BOOT_REQ_NONE;             /* consume it, so it cannot latch us in forever */
     h->checksum = boot_handshake_checksum(h);
 
-    /* 1 — the application asked to be updated. */
+    /* 1 — the application asked to come back here. WHY it asked decides the caption, and the
+     * crumb it left is what says which; see reason_for_crumb. */
     if (request == BOOT_REQ_UPDATE) {
-        g_boot_reason = REASON_APP_REQUESTED;
+        g_boot_reason = reason_for_crumb(crumb);
     }
     /* 2 — no launchable image. */
     else if (!app_image_valid()) {
