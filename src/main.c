@@ -16,6 +16,7 @@
 #include "ra8876.h"
 #include "spi.h"
 #include "usb_fs.h"
+#include "usb_desc.h"
 #include "console.h"
 #include "boot_handshake.h"
 #include "persist.h"
@@ -417,15 +418,29 @@ static void cmd_boot(const char *a)
  * to ask why -- the diagnostic tool and the thing being diagnosed are the same channel. The
  * device would sit there, running perfectly, permanently unreachable.
  *
- * So it gives itself back. Three conditions, and all three matter:
+ * So it gives itself back. The conditions, and why each is there:
  *
- *   A HOST IS PRESENT but has never sent a single bulk packet. Answering SETUP requests means
- *   somebody enumerated us; never receiving bulk means whatever they bound cannot speak to us.
- *   Together those are the driver-binding failure exactly, and nothing else.
+ *   THE MS OS 2.0 EXCHANGE DID NOT COMPLETE. This used to read "a host is present but has never
+ *   sent a single bulk packet", and asserted that those two together "are the driver-binding
+ *   failure exactly, and nothing else". They are not. A Mini plugged into a Windows machine with
+ *   no application running is in exactly that state, permanently and correctly: Windows
+ *   enumerates it, WinUSB binds, and nobody opens the pipe. Under the old rule such a device
+ *   reset itself into the bootloader every 25 seconds forever, and the "UPDATE MODE" screen it
+ *   landed on told the operator something needed flashing. Measured: boot_count 0x20, crumb
+ *   0xB011A200 -- BOS read once, MS OS 2.0 set read once, wLength 162 = the whole set, no
+ *   stalls. That is a completed handshake, and there was nothing to recover from.
  *
- *   THE IMAGE IS NOT PROVEN. A proven image is one somebody has already talked to over the
- *   transport it uses, so this cannot fire on a working instrument -- which matters because the
- *   instrument's whole purpose is to run on a wall socket with no computer attached.
+ *   So silence is no longer the test. What is left is the thing the mechanism was actually
+ *   written for: Windows asked for the BOS, or the descriptor set, and did not finish. Then no
+ *   driver bound, nothing can ever open the pipe, and the device really is unreachable.
+ *   usb_desc_msos20_len() supplies the full length rather than a literal, because a wrong
+ *   constant here silently disarms the check (and a comment in usb_fs.h carried one for as long
+ *   as it existed).
+ *
+ *   THE IMAGE IS NOT PROVEN. A proven image is one that has already run, so this cannot fire on
+ *   a working instrument -- which matters because the instrument's whole purpose is to run on a
+ *   wall socket with no computer attached. That exemption was dead code until prove_image()
+ *   started writing the record; see it for what nothing was doing.
  *
  *   NOTHING AT ALL HAPPENS WITH NO HOST. On a charger there are no SETUP packets, so a device
  *   powered from the wall is untouched by any of this.
@@ -437,6 +452,17 @@ static uint32_t app_image_crc(uint32_t *len_out);
 
 #define HANDBACK_MS  25000u
 
+/* Did the host read the whole MS OS 2.0 descriptor set? That, and not whether anyone has spoken
+ * to us since, is what says a driver bound. A vendor request answered with a shorter wLength is
+ * the 8-byte set header on its own, which Windows reads first and then comes back for the rest --
+ * so only the full length means it came back. */
+static int winusb_handshake_completed(void)
+{
+    return g_usb_setup.bos
+        && g_usb_setup.vendor
+        && g_usb_setup.vendor_asked >= usb_desc_msos20_len();
+}
+
 static void handback_check(void)
 {
     static uint32_t armed_ms;
@@ -445,6 +471,7 @@ static void handback_check(void)
     if (done) return;
     if (!g_usb_setup.total) { armed_ms = bsp_millis(); return; }   /* nobody there yet */
     if (g_usb_setup.bulk_rx) { done = 1; return; }                 /* somebody is talking */
+    if (winusb_handshake_completed()) { done = 1; return; }        /* a driver bound; just idle */
 
     if (!armed_ms) armed_ms = bsp_millis();
     if (bsp_millis() - armed_ms < HANDBACK_MS) return;
@@ -2099,11 +2126,37 @@ static void cmd_pers(const char *a)
                                    : "record is for a DIFFERENT image");
 }
 
+/* What the host asked for during enumeration, and the one verdict drawn from it.
+ *
+ * usb_fs.c has said "`usb` prints them" beside these counters since they were added, and no such
+ * command existed in either image -- so the only way to read them was to hand-decode the packed
+ * crumb on the bootloader's screen, which is exactly what had to be done to diagnose a device
+ * that was handing itself back for want of a host. The counters are the evidence for
+ * handback_check's gate, so the gate should be readable rather than inferred. */
+static void cmd_usb(const char *a)
+{
+    (void)a;
+    console_hex("setup_total",  g_usb_setup.total);
+    console_hex("bos",          g_usb_setup.bos);
+    console_hex("bos_len",      g_usb_setup.bos_len);
+    console_hex("vendor",       g_usb_setup.vendor);
+    console_hex("vendor_asked", g_usb_setup.vendor_asked);
+    console_hex("msos20_len",   usb_desc_msos20_len());
+    console_hex("stalls",       g_usb_setup.stalls);
+    console_hex("last_stall",   g_usb_setup.last_stall_req);
+    console_hex("bulk_rx",      g_usb_setup.bulk_rx);
+    console_hex("tx_dropped",   g_usb_tx_dropped);
+    console_write(winusb_handshake_completed()
+                  ? "WinUSB handshake completed: no handback armed\r\n"
+                  : "handshake INCOMPLETE: handback armed if this image is unproven\r\n");
+}
+
 static const console_cmd_t app_cmds[] = {
     { "help", "list commands",                       console_help },
     { "id",   "identify + startup status",           cmd_id       },
     { "boot", "reboot into the bootloader (update)", cmd_boot     },
     { "pers", "pers [c|l|p|e]  persistent boot record", cmd_pers },
+    { "usb",  "enumeration counters + handback verdict", cmd_usb },
     { "rst",  "bare warm reset, as the RESET button", cmd_rst      },
     { "lcd",  "on|off|r|g|b|t",                      cmd_lcd      },
     { "type", "draw a type specimen",                cmd_type     },
@@ -2192,6 +2245,71 @@ static void report_healthy(void)
     h->health     = BOOT_HEALTHY;
     h->checksum   = boot_handshake_checksum(h);
     reported = 1;
+}
+
+/* Vouch for this image in FLASH, once it has demonstrably worked.
+ *
+ * report_healthy() above makes the same claim to the SRAM handshake, and SRAM does not survive
+ * losing power. So the only thing that ever wrote the persistent record was somebody typing
+ * `pers p` at the console -- and nothing does that: not the deploy tool, not the bootloader,
+ * not the app. Every flashed image was therefore permanently unproven, which has two
+ * consequences with teeth:
+ *
+ *   - persist_trusts_image() is the ONLY rule that launches the application with no host
+ *     attached, so a cold boot landed on the bootloader's "WAITING FOR A HOST" screen.
+ *   - handback_check()'s exemption for a proven image never applied, so a device sitting on a
+ *     desk with nothing running on the computer handed itself back into the bootloader every
+ *     25 seconds, indefinitely.
+ *
+ * Measured on a live device before this existed: boot_count 0x20, crumb 0xB011A200 -- the
+ * handback signature, with the BOS read, the MS OS 2.0 set read, and no stalls. WinUSB had
+ * bound perfectly. Nothing was wrong with it.
+ *
+ * "Demonstrably worked" is deliberately the same bar report_healthy() uses -- reached the main
+ * loop, which is downstream of the display bring-up that historically hung -- plus a settling
+ * period, so a fault arriving moments later is still counted by the crash-loop protection the
+ * bootloader tests BEFORE it tests this record.
+ *
+ * Not gated on usb_configured(). The persistent record exists precisely so the device runs as
+ * an instrument on a wall socket with no computer attached; requiring a host to prove it would
+ * reintroduce the case it was written for. */
+#define PROVE_AFTER_MS  3000u
+
+static void prove_image(void)
+{
+    static uint8_t done;
+    if (done || bsp_millis() < PROVE_AFTER_MS) return;
+    done = 1;
+
+    uint32_t len = 0;
+    uint32_t crc = app_image_crc(&len);
+    (void)persist_mark_proven(crc, len);   /* no-ops when the record already vouches for this */
+}
+
+/* The panel's first second.
+ *
+ * Paced here rather than inside ui.c because the pacing has to service USB. An animation that
+ * stopped answering SETUP for a second would be indistinguishable from the enumeration hang the
+ * startup order in main() exists to avoid -- and would be a splash screen bought at the price of
+ * the debug channel, which is the trade this file refuses everywhere else.
+ *
+ * A host that gets a descriptor in first wins outright. Somebody who plugged the device into a
+ * running system asked for controls, not for an animation. */
+#define BOOT_FRAME_MS  60u
+
+static void boot_ready_animation(void)
+{
+    for (unsigned step = 0; step < UI_BOOT_FRAMES; step++) {
+        ui_boot_ready_frame(step);
+        if (surf_field_count()) return;      /* a real surface arrived: show it, not this */
+
+        uint32_t until = bsp_millis() + BOOT_FRAME_MS;
+        while ((int32_t)(bsp_millis() - until) < 0) {
+            usb_poll();
+            console_poll();
+            emp_session_poll(bsp_millis());
+        }
+    }
 }
 
 int main(void)
@@ -2295,14 +2413,40 @@ int main(void)
      * through a controller that may not be answering is exactly the sort of thing that
      * should be requested deliberately, not done on every boot. */
 
+    /* NOT armed at boot, for now.
+     *
+     * The watchdog is firing on a build that otherwise looks healthy, and an automatic reboot
+     * loop is the worst possible state to debug from — it destroys the evidence it exists to
+     * preserve. Made opt-in via `wdt on` until the reason is understood, so the device stays up
+     * and can be interrogated. The fault handlers still recover from real faults; only the
+     * liveness timer is off. */
+    /* The CLOCK is armed here unconditionally; the liveness watchdog is not.
+     *
+     * The watchdog stays opt-in behind `wdt on` because it once fired on a build that otherwise
+     * looked healthy, and that was never explained. Leaving it off is a defensible caution.
+     * Leaving the clock off was not -- and for a long time they were the same switch.
+     *
+     * Hoisted above the first render, which is a change with a reason rather than tidying: the
+     * power-on animation below is paced in milliseconds, and bsp_millis() returns 0 until this
+     * runs. Nothing between here and the loop depends on the clock being off, and prove_image()
+     * measures its settling period from this point. */
+    clock_start();
+
 #if !LCD_SKIP_INIT
     /* The real surface UI is what the panel shows now. The input monitor is still available
      * behind `panel on` while inputs are being proven, but it is no longer what boots.
      *
-     * A demo descriptor is loaded so the panel says something before a host has ever
-     * connected. It is replaced the moment a real DESC_BEGIN arrives, and it makes the device
-     * useful to look at on a bench with nothing plugged into it. */
-    surf_demo_descriptor();
+     * A demo descriptor USED to be loaded here so the panel said something before a host had
+     * ever connected. It said the wrong thing: eight plausible synth controls that belong to no
+     * host, on a device whose whole contract is that the host owns the surface. Somebody
+     * looking at it had no way to tell a bench placeholder from a live descriptor, which is the
+     * worst property a status display can have. The power-on sequence says what is true instead
+     * -- the panel, the knobs and the surface layer are up -- and then leaves the surface empty,
+     * which is exactly what the device shows again when a host clears it.
+     *
+     * surf_demo_descriptor() itself stays: the simulator scenes, the golden renders and the `ui`
+     * console command are all still built on it. It is just not what boots. */
+    boot_ready_animation();
     ui_state_init();
     ui_state_brightness_status(g_brightness_saved);
     ui_reset();
@@ -2315,25 +2459,13 @@ int main(void)
     g_bss_ballast[0] = 1;                 /* stop the linker discarding the evidence */
 #endif
 
-    /* NOT armed at boot, for now.
-     *
-     * The watchdog is firing on a build that otherwise looks healthy, and an automatic reboot
-     * loop is the worst possible state to debug from — it destroys the evidence it exists to
-     * preserve. Made opt-in via `wdt on` until the reason is understood, so the device stays up
-     * and can be interrogated. The fault handlers still recover from real faults; only the
-     * liveness timer is off. */
-    /* The CLOCK is armed here unconditionally; the liveness watchdog is not.
-     *
-     * The watchdog stays opt-in behind `wdt on` because it once fired on a build that otherwise
-     * looked healthy, and that was never explained. Leaving it off is a defensible caution.
-     * Leaving the clock off was not -- and for a long time they were the same switch. */
-    clock_start();
-
     for (;;) {
         g_loop_beat++;
         usb_poll();
         console_poll();
         report_healthy();       /* one-shot; see above for why not before the loop */
+        prove_image();          /* one-shot, later: the same claim, written where power loss
+                                 * cannot take it back */
 
         emp_session_poll(bsp_millis());
         handback_check();

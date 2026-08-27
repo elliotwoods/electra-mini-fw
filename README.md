@@ -30,7 +30,9 @@ the application.
 - A hardware-free UI simulator and host test suite that compile the same application and
   protocol sources used on the device.
 - Crash-loop protection, image validation, persistent health records, diagnostics, framebuffer
-  capture, and a stock-bootloader recovery route.
+  capture, and a stock-bootloader recovery route. An image that reaches its main loop records
+  that in flash by itself, which is what makes "starts without a computer" true of a freshly
+  flashed build rather than only of one somebody remembered to mark by hand.
 
 ## Control surface for `av-frameworks`
 
@@ -59,6 +61,11 @@ The integration currently provides:
   surface, and session IDs make device resets visible to the host.
 - Device and link diagnostics through EMP/1 heartbeats, counters, and structured diagnostic
   messages.
+- A power-on sequence — the eight cells filling across the panel, an accent sweep, then READY —
+  and after it an **empty** surface. The device never invents controls: everything on the panel
+  came from a host, so a placeholder can never be mistaken for a live descriptor. It used to boot
+  into a demo descriptor of plausible synth parameters, which was useful on a bench and
+  indistinguishable from the real thing anywhere else.
 
 ### UI tour
 

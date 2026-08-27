@@ -396,6 +396,13 @@ plus slack. Three unanswered `PING`s force `Silent` regardless.
 on any path**, and a failed transaction leaves the displayed descriptor untouched — a
 half-arrived descriptor is never visible.
 
+`Idle` shows an **empty** surface, never a placeholder one. Until a `DESC_END` verifies, the
+panel shows eight empty cells, so nothing the host did not send can appear on it and an operator
+can always read the panel as a statement about the host. The firmware reaches `Idle` through a
+short power-on sequence which draws the empty cells and the word READY; a descriptor arriving
+during it cuts it short, so connecting to a device that has just been powered on is never slower
+than connecting to one that has been on for an hour.
+
 **Resync:** a changed `session_id` in any `READY`/`HEARTBEAT` means the device reset; the host
 abandons the transaction **unconditionally** and restarts. A transaction MUST NOT continue
 across a session change. On a transport drop the device **keeps displaying** its descriptor

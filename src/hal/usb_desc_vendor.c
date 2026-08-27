@@ -162,6 +162,7 @@ static const uint8_t bos_desc[BOS_TOTAL_LEN] = {
 const uint8_t *usb_desc_device(uint32_t *len) { *len = sizeof(dev_desc); return dev_desc; }
 const uint8_t *usb_desc_config(uint32_t *len) { *len = sizeof(cfg_desc); return cfg_desc; }
 const uint8_t *usb_desc_bos(uint32_t *len)    { *len = sizeof(bos_desc); return bos_desc; }
+uint16_t usb_desc_msos20_len(void)            { return (uint16_t)MSOS20_TOTAL_LEN; }
 
 uint32_t usb_desc_string(unsigned idx, uint8_t *buf)
 {

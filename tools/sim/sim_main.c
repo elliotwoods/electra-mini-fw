@@ -19,6 +19,7 @@
 #include "ra8876.h"
 #include "font.h"
 #include "text.h"
+#include "ui.h"       /* UI_BOOT_FRAMES: the scene list must not carry its own copy */
 
 static uint16_t fb[LCD_WIDTH * LCD_HEIGHT];
 
@@ -115,6 +116,8 @@ static void write_ppm(const char *path)
 
 /* ------------------------------------------------------------------ scenes */
 
+void ui_render_empty(void);         /* the resting state: no host, no fields */
+void ui_render_boot(unsigned step); /* the power-on sequence, replayed from frame 0 */
 void ui_render_demo(void);          /* in ui.c, shared with the device */
 void ui_render_demo_focused(void);  /* the zoomed readout, mid-edit */
 void ui_render_demo_page2(void);    /* Choice and ReadOnly fields */
@@ -171,7 +174,19 @@ int main(int argc, char **argv)
 
     memset(fb, 0, sizeof(fb));
 
+    /* "boot" alone shows the finished sequence; "boot-N" stops after frame N, so the sweep can
+     * be judged part way rather than only at its end. */
+    if (strncmp(scene, "boot", 4) == 0 && (scene[4] == 0 || scene[4] == '-')) {
+        unsigned step = (scene[4] == '-') ? (unsigned)atoi(scene + 5) : UI_BOOT_FRAMES - 1u;
+        ui_render_boot(step);
+        write_ppm(out);
+        printf("wrote %s (%dx%d) after boot frame %u of %u\n",
+               out, LCD_WIDTH, LCD_HEIGHT, step, UI_BOOT_FRAMES - 1u);
+        return 0;
+    }
+
     if      (strcmp(scene, "specimen") == 0) scene_specimen();
+    else if (strcmp(scene, "empty")    == 0) ui_render_empty();
     else if (strcmp(scene, "focus")    == 0) ui_render_demo_focused();
     else if (strcmp(scene, "page2")    == 0) ui_render_demo_page2();
     else if (strcmp(scene, "focustop") == 0) ui_render_demo_focused_top();

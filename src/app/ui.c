@@ -1170,6 +1170,82 @@ static void render_drilled(int full, const surf_field_t *f)
     }
 }
 
+/* ------------------------------------------------------------------ power-on */
+
+/* Panel order, not knob order. cell_geometry puts knobs 0-3 on the BOTTOM row and 4-7 on the
+ * top, so filling left-to-right down the panel is 4,5,6,7 then 0,1,2,3. Getting this backwards
+ * is invisible in code and obvious on the device, which is why it is a named table. */
+static const uint8_t boot_order[UI_BOOT_CELL_FRAMES] = { 4, 5, 6, 7, 0, 1, 2, 3 };
+
+/* The accent rule lives at the bottom of the band -- the one region no knob points at -- so it
+ * reads as the surface as a whole coming up rather than as anything about a control. */
+#define BOOT_RULE_H   4
+#define BOOT_RULE_Y   ((int16_t)(BAND_Y + BAND_H - 2 * SP))
+#define BOOT_RULE_X   ((int16_t)MARGIN_X)
+#define BOOT_RULE_W   ((int16_t)(LCD_WIDTH - 2 * MARGIN_X))
+
+/* One frame of the power-on sequence.
+ *
+ * Frame-indexed rather than timed, for two reasons that both matter. The simulator has no
+ * millisecond clock -- bsp_millis() is the device's SysTick -- so a self-timed animation could
+ * not be judged without hardware, which is exactly what tools/sim exists to avoid. And the
+ * caller has to own the pacing anyway: it must service USB between frames, because the debug
+ * channel must never be blocked by the thing being debugged (see the enumeration wait in
+ * main.c, and the hang that comment records).
+ *
+ * Every frame is INCREMENTAL. A full-screen repaint measures 56 ms and would set the frame rate
+ * on its own; the cells and the rule are hardware fills, and the one piece of text is drawn
+ * once. So a frame cannot be rendered on its own -- run 0..n to see frame n, which is also
+ * exactly what the device does.
+ *
+ * It deliberately says nothing about a host. The device is an instrument that a computer may or
+ * may not be driving; "READY" is a claim about the panel, the knobs and the surface layer, all
+ * of which are true with nothing plugged in. */
+void ui_boot_ready_frame(unsigned step)
+{
+    if (step == 0) {
+        ra8876_set_fg(C_BG);
+        ra8876_fill_rect(0, 0, LCD_WIDTH, LCD_HEIGHT);
+        return;
+    }
+
+    if (step <= UI_BOOT_CELL_FRAMES) {
+        unsigned i = step - 1u;
+        int16_t x, y;
+        cell_geometry(boot_order[i], &x, &y);
+        ra8876_set_fg(C_CELL);
+        ra8876_fill_rect(x, y, CELL_W, ROW_H);
+        frame(x, y, CELL_W, ROW_H, 2, C_OUTLINE);
+
+        /* The rule advances WITH the cells rather than on a clock of its own, so the two read as
+         * one gesture and the sweep cannot finish early because a frame ran long. */
+        int16_t from = (int16_t)((int32_t)BOOT_RULE_W * (int32_t)i / (int32_t)UI_BOOT_CELL_FRAMES);
+        int16_t to   = (int16_t)((int32_t)BOOT_RULE_W * (int32_t)(i + 1u)
+                                 / (int32_t)UI_BOOT_CELL_FRAMES);
+        ra8876_set_fg(C_ACCENT);
+        ra8876_fill_rect((int16_t)(BOOT_RULE_X + from), BOOT_RULE_Y,
+                         (int16_t)(to - from), BOOT_RULE_H);
+        return;
+    }
+
+    if (step == UI_BOOT_READY_FRAME) {
+        /* Every cell drawn, so lift all eight frames together and say so once. The frames go
+         * back to C_OUTLINE when the real surface paints over this, which is the point: the
+         * accent is the moment, not a state. */
+        for (unsigned k = 0; k < UI_BOOT_CELL_FRAMES; k++) {
+            int16_t x, y;
+            cell_geometry(k, &x, &y);
+            frame(x, y, CELL_W, ROW_H, 2, C_ACCENT);
+        }
+        text_draw_centred(&font_value, LCD_WIDTH / 2,
+                          (int16_t)(BAND_Y + (BAND_H - 2 * SP - text_height(&font_value)) / 2),
+                          "READY", C_VALUE, C_BG);
+    }
+
+    /* Anything after that is the hold, and there is nothing to draw for it. The caller is
+     * pacing; adding ink here would only cost SPI time for no change on the panel. */
+}
+
 /* ------------------------------------------------------------------ entry point */
 
 void ui_render(void)
@@ -1250,6 +1326,31 @@ void ui_render(void)
 }
 
 /* ------------------------------------------------------------------ demo scenes */
+
+/* What the device actually shows when nothing is driving it: eight empty cells and no page map.
+ *
+ * This is now the resting state at both ends of a session -- at power-on, and again when the
+ * host clears the surface -- so it is worth being able to look at without hardware. It used not
+ * to exist on the device at all, because boot loaded a demo descriptor over it. */
+void ui_render_empty(void)
+{
+    surf_init();
+    ui_state_init();
+    ui_reset();
+    ui_render();
+}
+
+/* The power-on sequence up to and including frame `step`.
+ *
+ * Frames are incremental, so this replays from 0 rather than jumping -- which is also exactly
+ * what the device does, and means a scene cannot accidentally show a state the panel never
+ * reaches. */
+void ui_render_boot(unsigned step)
+{
+    surf_init();
+    ui_state_init();
+    for (unsigned i = 0; i <= step && i < UI_BOOT_FRAMES; i++) ui_boot_ready_frame(i);
+}
 
 void ui_render_demo(void)
 {

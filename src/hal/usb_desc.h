@@ -26,6 +26,14 @@ const uint8_t *usb_desc_bos(uint32_t *len);
  * there is no such string -- which the caller must answer with a stall. */
 uint32_t usb_desc_string(unsigned idx, uint8_t *buf);
 
+/* The length of the whole MS OS 2.0 descriptor set, or 0 for an image that has none.
+ *
+ * Exposed so a caller can tell "the host read the entire set" -- which is WinUSB having bound --
+ * from "the host asked for the 8-byte header and never came back", which is enumeration stopping
+ * half way. g_usb_setup.vendor_asked carries the wLength of the last vendor request, and
+ * comparing it against this is the only way to tell those two apart from inside the device. */
+uint16_t usb_desc_msos20_len(void);
+
 /* Class- or vendor-specific SETUP, i.e. anything with bmRequestType type bits non-zero.
  *
  * Returns 1 if handled with a data-in stage, in which case *data and *len describe the reply;

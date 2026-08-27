@@ -229,8 +229,14 @@ static unsigned pipe_of_endpoint(uint16_t ep)
  * A device with no bound driver has no console, so the ordinary way of finding out what a host
  * asked for is unavailable exactly when the descriptors are the thing in question. These
  * counters are the substitute: they are written here and read back through the bootloader,
- * which is still CDC and still reachable. Cheap enough to leave in permanently -- four words,
- * and `usb` prints them. */
+ * which is still CDC and still reachable. Cheap enough to leave in permanently.
+ *
+ * Two ways to read them, and the difference matters. The application's `usb` command prints them
+ * whole, with the verdict handback_check draws from them. The BOOTLOADER has no such command --
+ * it gets only what the application packed into the one crumb word its `id` prints, which is the
+ * lossy path and the only one available when the driver did not bind. This comment claimed
+ * `usb` printed them for as long as the counters existed, and no image had that command until
+ * the application grew one; the bootloader still does not. */
 usb_setup_stats_t g_usb_setup;
 
 static void handle_setup(void)

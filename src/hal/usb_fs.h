@@ -54,7 +54,12 @@ typedef struct {
     uint16_t total;           /* SETUP packets seen at all */
     uint16_t bos;             /* GET_DESCRIPTOR(BOS) -- MS OS 2.0 begins here or not at all */
     uint16_t vendor;          /* vendor requests answered, i.e. the MS OS 2.0 fetch */
-    uint16_t vendor_asked;    /* wLength of the last one; 178 means the host read the BOS */
+    /* wLength of the last vendor request. Compare it against usb_desc_msos20_len() -- 162 for
+     * this application image -- rather than against a number written here: a literal was wrong
+     * (it said 178) for as long as it existed, and a stale constant in a comment about
+     * enumeration is read as evidence about enumeration. A smaller value means the host read
+     * the 8-byte set header and did not come back for the rest. */
+    uint16_t vendor_asked;
     uint16_t stalls;
     uint16_t bulk_rx;         /* bulk OUT packets: a host that has a driver and is using it */
     uint8_t  bos_len;

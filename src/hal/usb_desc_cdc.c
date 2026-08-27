@@ -51,6 +51,7 @@ static const char *const strings[] = { 0, "Kimchi and Chips", "Electra Mini FW",
 const uint8_t *usb_desc_device(uint32_t *len) { *len = sizeof(dev_desc); return dev_desc; }
 const uint8_t *usb_desc_config(uint32_t *len) { *len = sizeof(cfg_desc); return cfg_desc; }
 const uint8_t *usb_desc_bos(uint32_t *len)    { (void)len; return 0; }
+uint16_t usb_desc_msos20_len(void)            { return 0; }   /* CDC, deliberately: see the header */
 
 uint32_t usb_desc_string(unsigned idx, uint8_t *buf)
 {
