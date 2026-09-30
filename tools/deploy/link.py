@@ -25,7 +25,10 @@ def open_app(port=None, required=True):
     """
     if not port:
         try:
-            from winusb import WinUsbDevice, device_paths
+            if sys.platform == "darwin":
+                from macos_usb import WinUsbDevice, device_paths
+            else:
+                from winusb import WinUsbDevice, device_paths
             if device_paths():
                 return WinUsbDevice()
         except Exception:

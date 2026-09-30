@@ -39,16 +39,11 @@
 
 #define QT2120_CHIP_ID   0x3E
 
-/* Pot -> key. The sensor's key order is not the panel's, and neither is the stock firmware's.
- *
- * The stock table (DAT_1FFE14D4) is { 5,7,6,4,3,0,1,2 }. Measured against the real panel it
- * produces a constant rotation of exactly 4 — touching the first knob lit bit 4, the second
- * bit 5, and so on, wrapping. Four is half of eight and the knobs are in two rows of four, so
- * that rotation is a row swap: stock numbers the top row first, while the UI numbers the
- * bottom row first. Apply that row swap here so touch, push, rotation, and displayed fields all
- * use the same physical order.
+/* Canonical top-row-first pot -> QT2120 key. This is the recovered stock table;
+ * the sensor keys themselves are not in panel order. Keep touch, push and rotation
+ * in the same logical order at the driver boundary.
  */
-const unsigned char qt2120_pot_to_key[8] = { 3, 0, 1, 2, 5, 7, 6, 4 };
+const unsigned char qt2120_pot_to_key[8] = { 5, 7, 6, 4, 3, 0, 1, 2 };
 #define pot_to_key qt2120_pot_to_key
 
 static uint8_t pot_threshold[8] = {

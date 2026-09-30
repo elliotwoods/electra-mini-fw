@@ -38,7 +38,7 @@ BAUD = 115200          # ignored by CDC-ACM, but pyserial wants a number
 # At 32 the line was 104 chars and would have been silently truncated, corrupting the image
 # in a way that only a CRC check at the end would catch.
 CHUNK = 24
-ROUTER_APP_NAME = "av-control-surface-router"
+ROUTER_APP_NAME = "av-frameworks-daemon"
 ROUTER_PROVIDER_ID = "av.control-surface.electra-mini-fw"
 
 
@@ -52,6 +52,8 @@ def _router_admin_urls():
     root = os.environ.get("AV_APP_REGISTRY_DIR")
     if not root:
         local = os.environ.get("LOCALAPPDATA")
+        if not local and sys.platform == "darwin":
+            local = os.path.expanduser("~/Library/Application Support")
         if not local:
             return []
         root = os.path.join(local, "AuroraVision", "av-frameworks", "launcher")
@@ -175,8 +177,11 @@ class Device:
 
     def __init__(self, port):
         sys.path.insert(0, __file__.rsplit("\\", 1)[0])
-        from rawcom import RawCom
-        self.c = RawCom(port)
+        if sys.platform == "win32":
+            from rawcom import RawCom
+            self.c = RawCom(port)
+        else:
+            self.c = serial.Serial(port, BAUD, timeout=0.05, write_timeout=2)
         self.drain()
 
     def drain(self, quiet=0.25, limit=3.0):
@@ -209,7 +214,11 @@ class Device:
         end = time.time() + timeout
         quiet_since = None
         while time.time() < end:
-            chunk = self.c.read(65536)
+            try:
+                chunk = self.c.read(65536)
+            except serial.SerialException:
+                if not expect_prompt and line == "run": break  # USB detaches on launch
+                raise
             if chunk:
                 out += chunk
                 quiet_since = None
@@ -411,7 +420,10 @@ def app_present():
     holding the device open itself."""
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from winusb import device_paths
+        if sys.platform == "darwin":
+            from macos_usb import device_paths
+        else:
+            from winusb import device_paths
     except Exception:
         return False
     return bool(device_paths())
@@ -426,7 +438,10 @@ def app_over_winusb():
     the reboot is exactly as it was."""
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from winusb import WinUsbDevice, device_paths
+        if sys.platform == "darwin":
+            from macos_usb import WinUsbDevice, device_paths
+        else:
+            from winusb import WinUsbDevice, device_paths
     except Exception:
         return None
     if not device_paths():

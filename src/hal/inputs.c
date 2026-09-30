@@ -189,7 +189,7 @@ uint16_t inputs_adc_raw(unsigned unit, unsigned ch)
 
 /* Rotation channel order, measured on the panel. See inputs.h for why this differs from the
  * switch mapping. */
-const unsigned char inputs_mux_to_pot_rotation[8] = { 4, 0, 1, 5, 2, 7, 3, 6 };
+const unsigned char inputs_mux_to_pot_rotation[8] = { 0, 4, 5, 1, 6, 3, 7, 2 };
 
 /* Front-panel buttons 1..3 are wired in reverse; 4..6 are in order. */
 const unsigned char inputs_button_map[6] = { 2, 1, 0, 3, 4, 5 };
@@ -314,7 +314,7 @@ void inputs_sample(input_sample_t *out)
         inputs_mux_select(ch);
 
         /* Three different mappings off the same channel, all measured on the panel:
-         * rotation is scrambled, the push switch is a row swap, and the buttons have their
+         * rotation is scrambled, the push switch uses channel identity, and the buttons have their
          * first three reversed. Applying each here means nothing above the HAL ever sees the
          * multiplexer's ordering. */
         inputs_read_phases(&out->phase_a[inputs_mux_to_pot_rotation[ch]],
@@ -328,7 +328,7 @@ void inputs_sample(input_sample_t *out)
 }
 
 /* Rotation: panel pot -> multiplexer channel. The inverse of inputs_mux_to_pot_rotation. */
-static const unsigned char pot_to_mux_rotation[8] = { 1, 2, 4, 6, 0, 3, 7, 5 };
+static const unsigned char pot_to_mux_rotation[8] = { 0, 3, 7, 5, 1, 2, 4, 6 };
 
 /* Digital-only channel select. The strobe gates the ANALOG path, so the button and switch
  * senses need no settling at all — measured identical with the strobe either way. Skipping the

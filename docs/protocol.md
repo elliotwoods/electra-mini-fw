@@ -304,8 +304,12 @@ the heartbeat's page field is the recovery copy if a queued `SCREEN` is missed.
 It is emitted only when HELLO negotiation selects minor version 1 or newer; EMP/1.0 peers keep
 using the heartbeat page field and are never sent an opcode they did not negotiate.
 
-Physical slot order is top-row-first: slots 0â€“3 are left-to-right above the display and 4â€“7
-left-to-right below it. Sparse holes and absolute IDs retain those positions. Drilled Number
+Physical knob numbering is top-row-first: inputs 0–3 run left-to-right above the display,
+4–7 below it. Generic pages with 1–4 occupied controls place them on bottom knobs 4–7,
+left-to-right in ascending descriptor ID order. This includes short final pages and sparse
+pages; unused top knobs have no field assignment. Pages with 5–8 controls use the normal
+top-first slot positions. Descriptor IDs, page boundaries, SCREEN ranges and edit/focus IDs
+remain unchanged. The opt-in operator layout retains its defined action/settings positions. Drilled Number
 fields use the opposite knob row as a four-place digit window; the outer buttons move toward
 more/less-significant places within the value and precision bounds. Choice and Color disable the
 outer pair. Choice traverses without wrapping; Color uses R/G/B/optional-A component knobs while
@@ -460,3 +464,33 @@ harnesses cannot do.
 - Font atlas coverage for non-Latin UTF-8 — the protocol is clean; rendering is an asset call.
 - Whether the USB-C socket is physically FS-only. Very strong inference from the pin table and
   the descriptor; confirm on the PCB before assuming High Speed is unreachable.
+
+
+## EMP/1.2: actions and operator pages
+
+Negotiation remains `min(host_minor, device_minor)`. EMP/1.0 and 1.1 peers retain
+all existing descriptor, input and grid behaviour.
+
+- Field kind 5 is a momentary **Action**, accepted only for negotiated minor >=2.
+  Turning it, resetting it, holding it or releasing it cannot execute it.
+- Input opcode `0x59` on the input channel is **ACTIVATE**: exactly 14 bytes,
+  little endian `revision:u64, activation_sequence:u32, field_id:u16`.
+  A press edge advances the session sequence. Hosts validate revision, field kind
+  and monotonic wrapping sequence; duplicates and old revisions are discarded.
+- The reserved u16 in DESC_BEGIN is now layout flags. Bit 0 opts into the operator
+  layout for minor >=2. Zero retains the established grid. Hosts must send zero
+  to older peers and omit Action fields when actions are unsupported.
+- Text values are retained in a bounded 96-byte field buffer and repainted on
+  VALUES updates. Long UTF-8 values truncate at a character boundary and emit
+  STRING_TRUNCATED diagnostics.
+
+The operator layout is an explicit slot contract, not automatic schema styling.
+This opt-in layout retains its original descriptor slot contract: slots 0–3 correspond
+to bottom knobs; 4–7 correspond to top knobs. Physical input indices remain top-first;
+the layout alone maps its semantic slots to those inputs. Generic descriptors always
+place slot 0 at the top left. Page 0 uses
+0 axis, 1 jog step, 2 speed, 3 observed position text (optionally followed by a newline and operation status), 4 jog minus, 5 jog plus,
+6 home, 7 stop. Press bottom-right for settings. Page 1 uses 8 route,
+9 acceleration, 10 minimum speed, 11 target, 12 move, 13 connection Boolean,
+14 operation text, 15 stop. Button 1 returns to page 0. Settings turn in place;
+they never borrow the action row for digit editing. Other apps opt out by default.

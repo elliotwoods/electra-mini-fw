@@ -19,6 +19,7 @@
 #include "ra8876.h"
 #include "font.h"
 #include "text.h"
+#include "surface.h"
 #include "ui.h"       /* UI_BOOT_FRAMES: the scene list must not carry its own copy */
 
 static uint16_t fb[LCD_WIDTH * LCD_HEIGHT];
@@ -186,6 +187,7 @@ int main(int argc, char **argv)
     }
 
     if      (strcmp(scene, "specimen") == 0) scene_specimen();
+    else if (strcmp(scene, "operator") == 0) { surf_demo_operator(); ui_render(); }
     else if (strcmp(scene, "empty")    == 0) ui_render_empty();
     else if (strcmp(scene, "focus")    == 0) ui_render_demo_focused();
     else if (strcmp(scene, "page2")    == 0) ui_render_demo_page2();

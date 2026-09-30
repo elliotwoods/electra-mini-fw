@@ -41,6 +41,7 @@ void emp_send(uint8_t channel, uint8_t opcode, const uint8_t *payload, uint32_t 
 typedef struct { uint16_t off, len; } surf_choice_t;
 
 typedef struct {
+    uint16_t layout_flags;
     surf_field_t  fields[SURF_MAX_FIELDS];
     char          pool[SURF_STRING_POOL];
     surf_choice_t choices[SURF_MAX_CHOICES];
@@ -182,7 +183,7 @@ static int rd_string(rd_t *r, uint16_t *off_out, uint16_t *len_out)
 #define RDV_NONFINITE   3   /* read correctly, refused on its merits; value left at zero */
 
 static int rd_value(rd_t *r, uint8_t tag, uint8_t *b_out, double *n_out, uint32_t *c_out,
-                    uint8_t *color_count_out, float color_out[4])
+                    uint8_t *color_count_out, float color_out[4], char *text_out)
 {
     switch (tag) {
     case EMP_VAL_BOOL:   *b_out = rd8(r);  return RDV_STORED;
@@ -200,14 +201,16 @@ static int rd_value(rd_t *r, uint8_t tag, uint8_t *b_out, double *n_out, uint32_
     }
 
     case EMP_VAL_TEXT: {
-        /* A String. Skipped rather than pooled: nothing on this panel renders a text value, and
-         * spending pool on one would cost a label somewhere else. */
         uint16_t n = rd16(r);
         if (!rd_avail(r, n)) { r->bad = 1; return RDV_UNDECODABLE; }
+        if (text_out) {
+            uint16_t copy = n < 95u ? n : 95u;
+            while (copy < n && copy && (r->p[r->off + copy] & 0xc0u) == 0x80u) --copy;
+            memcpy(text_out, r->p + r->off, copy); text_out[copy] = 0;
+            if (copy < n) emp_diag(EMP_SEV_WARN, EMP_DIAG_STRING_TRUNCATED, 0, "text readout truncated");
+        }
         r->off += n;
-        emp_diag(EMP_SEV_INFO, EMP_DIAG_UNKNOWN_VALUE_TAG, EMP_VAL_TEXT,
-                 "text values are not rendered");
-        return RDV_SKIPPED;
+        return RDV_STORED;
     }
 
     case EMP_VAL_COLOR: {
@@ -361,7 +364,7 @@ static void desc_begin(const uint8_t *msg, uint32_t len)
 
     staging_revision = rd64(&r);
     staging_expect   = rd16(&r);
-    (void)rd16(&r);                       /* flags */
+    uint16_t layout_flags = rd16(&r);
     (void)rd32(&r);                       /* total_bytes, advisory */
 
     if (r.bad) return;
@@ -384,6 +387,7 @@ static void desc_begin(const uint8_t *msg, uint32_t len)
     /* Clear the SCRATCH arena. The live one is untouched, so the panel keeps showing the
      * descriptor it already has for the whole duration of the transfer -- and keeps it for good
      * if the transfer never completes. */
+    STAGE->layout_flags = emp_session_peer_minor() >= 2u ? layout_flags & 1u : 0u;
     STAGE->pool_used    = 0;
     STAGE->choices_used = 0;
     STAGE->field_count  = 0;
@@ -433,6 +437,9 @@ static void desc_field(const uint8_t *msg, uint32_t len)
     memset(f, 0, sizeof(*f));
     f->id           = slot;
     f->kind         = rd8(&r);
+    if (f->kind > EMP_KIND_ACTION || (f->kind == EMP_KIND_ACTION && emp_session_peer_minor() < 2u)) {
+        staging_open = 0; send_desc_request(EMP_REQ_SEQUENCE_BROKEN); return;
+    }
     f->flags        = rd8(&r);
     f->present      = rd16(&r);
     f->min          = rdf64(&r);
@@ -444,7 +451,7 @@ static void desc_field(const uint8_t *msg, uint32_t len)
 
     f->value_tag = rd8(&r);
     switch (rd_value(&r, f->value_tag, &f->boolean, &f->number, &f->choice,
-                     &f->color_count, f->color)) {
+                     &f->color_count, f->color, f->text)) {
     case RDV_STORED:
         break;
     case RDV_SKIPPED:
@@ -527,7 +534,7 @@ static void desc_field(const uint8_t *msg, uint32_t len)
         f->default_tag = rd8(&r);
         switch (rd_value(&r, f->default_tag, &f->default_boolean,
                          &f->default_number, &f->default_choice,
-                         &f->default_color_count, f->default_color)) {
+                         &f->default_color_count, f->default_color, 0)) {
         case RDV_STORED:
             break;
         case RDV_SKIPPED:
@@ -652,7 +659,8 @@ static void handle_values(const uint8_t *msg, uint32_t len)
         /* A tag we can step over costs one control its update, not the batch. A tag we cannot
          * costs the batch, because every value after it would be read from the wrong offset --
          * which is worse than dropping them, since they would be applied to real controls. */
-        int got = rd_value(&r, tag, &boolean, &number, &choice, &color_count, color);
+        char text[96] = {0};
+        int got = rd_value(&r, tag, &boolean, &number, &choice, &color_count, color, text);
         if (got == RDV_UNDECODABLE) break;
         if (r.bad) break;
 
@@ -677,6 +685,7 @@ static void handle_values(const uint8_t *msg, uint32_t len)
             under_hand = 1;
         if (under_hand && ack_edit < last_edit_seq[idx]) continue;
 
+        memcpy(f->text, text, sizeof(text));
         f->value_tag = tag;
         f->number    = number;
         f->choice    = choice;
@@ -769,7 +778,7 @@ void surf_set_number_cause(uint16_t index, double v, uint8_t cause)
 {
     if (!surf_field(index)) return;
     surf_field_t *f = &LIVE->fields[index];
-    if (f->kind == EMP_KIND_READONLY) return;      /* a read-only field is not ours to change */
+    if ((f->kind == EMP_KIND_READONLY || f->kind == EMP_KIND_ACTION)) return;      /* a read-only field is not ours to change */
 
     /* Nothing on the device should be able to produce this, but the arithmetic that reaches
      * here runs through the digit editor and a host-supplied min/max/step -- a step of zero and
@@ -789,7 +798,7 @@ void surf_set_bool_cause(uint16_t index, uint8_t v, uint8_t cause)
 {
     if (!surf_field(index)) return;
     surf_field_t *f = &LIVE->fields[index];
-    if (f->kind == EMP_KIND_READONLY) return;
+    if ((f->kind == EMP_KIND_READONLY || f->kind == EMP_KIND_ACTION)) return;
     f->boolean   = v ? 1u : 0u;
     f->value_tag = EMP_VAL_BOOL;
     send_edit(index, cause);
@@ -799,7 +808,7 @@ void surf_set_choice_cause(uint16_t index, uint32_t v, uint8_t cause)
 {
     if (!surf_field(index)) return;
     surf_field_t *f = &LIVE->fields[index];
-    if (f->kind == EMP_KIND_READONLY) return;
+    if ((f->kind == EMP_KIND_READONLY || f->kind == EMP_KIND_ACTION)) return;
     f->choice    = v;
     f->value_tag = EMP_VAL_CHOICE;
     send_edit(index, cause);
@@ -809,7 +818,7 @@ void surf_set_color_cause(uint16_t index, const float *v, uint8_t count, uint8_t
 {
     if (!surf_field(index) || !v || (count != 3u && count != 4u)) return;
     surf_field_t *f = &LIVE->fields[index];
-    if (f->kind == EMP_KIND_READONLY) return;
+    if ((f->kind == EMP_KIND_READONLY || f->kind == EMP_KIND_ACTION)) return;
     for (uint8_t i = 0; i < count; i++) if (!finite_f32(v[i])) return;
     memcpy(f->color, v, (uint32_t)count * sizeof(float));
     for (uint8_t i = count; i < 4u; i++) f->color[i] = 0.0f;
@@ -1046,4 +1055,38 @@ void surf_demo_choice_descriptor(uint16_t slot, const char *field_label,
     a->slot_span = (uint16_t)(slot + 1u);
     a->occupied = slot_bit(slot);
     a->revision = 0xDE31;
+}
+
+/* EMP/1.2 action presses are events, never a locally edited persistent value. */
+void surf_activate(uint16_t slot)
+{
+    static uint32_t activation_seq;
+    const surf_field_t *field = surf_field(slot);
+    if (!field || field->kind != EMP_KIND_ACTION || emp_session_peer_minor() < 2u) return;
+    uint8_t buf[14]; wr_t w; wr_init(&w, buf, sizeof(buf));
+    wr64(&w, LIVE->revision); wr32(&w, ++activation_seq); wr16(&w, slot);
+    emp_send(EMP_CH_INPUT, EMP_OP_ACTIVATE, buf, w.len);
+}
+
+int surf_operator_layout(void) { return (LIVE->layout_flags & 1u) != 0; }
+
+void surf_demo_operator(void)
+{
+    surf_demo_descriptor();
+    LIVE->layout_flags = 1;
+    const char *labels[] = {"Axis", "Step / rev", "Speed", "Position", "Jog -", "Jog +", "Home", "Stop"};
+    LIVE->pool_used = 0;
+    for (unsigned i = 0; i < 8; ++i) {
+        surf_field_t *f = &LIVE->fields[i];
+        f->label_off = LIVE->pool_used; f->label_len = (uint16_t)strlen(labels[i]);
+        memcpy(LIVE->pool + LIVE->pool_used, labels[i], f->label_len); LIVE->pool_used += f->label_len;
+        f->kind = i >= 4 ? EMP_KIND_ACTION : EMP_KIND_NUMBER;
+        f->value_tag = EMP_VAL_NUMBER; f->precision = 4; f->present = EMP_PRESENT_PRECISION;
+    }
+    LIVE->fields[0].value_tag = EMP_VAL_TEXT; strcpy(LIVE->fields[0].text, "Axis A");
+    LIVE->fields[1].number = 0.01;
+    LIVE->fields[2].number = 24000; LIVE->fields[2].precision = 0;
+    LIVE->fields[3].kind = EMP_KIND_READONLY; LIVE->fields[3].value_tag = EMP_VAL_TEXT;
+    strcpy(LIVE->fields[3].text, "0.1250");
+    ui_state_surface_changed();
 }

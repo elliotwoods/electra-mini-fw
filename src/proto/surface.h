@@ -37,6 +37,7 @@ typedef struct {
 
     double   min, max, step;
 
+    char text[96]; /* bounded UTF-8 readout, independent of descriptor label pool */
     uint8_t  value_tag;
     double   number;
     uint32_t choice;
@@ -62,6 +63,7 @@ typedef struct {
 } surf_field_t;
 
 void surf_init(void);
+int surf_operator_layout(void);
 
 /* Handle one surface-channel message. Returns nothing: per the design rule, protocol problems
  * become DIAG and DESC_REQUEST on the wire, never an error returned to a caller. */
@@ -115,6 +117,7 @@ void surf_send_delta(uint16_t index, int32_t detents);
 
 /* Focus, reported per lane. `index` < 0 means nothing is focused. */
 void surf_send_focus(int32_t index, uint16_t touch_mask);
+void surf_activate(uint16_t slot);
 void surf_on_push(unsigned pot, int pressed);
 void surf_on_touch(uint16_t touch_mask);
 void surf_on_button(unsigned button, int pressed);
@@ -122,6 +125,7 @@ void surf_on_button(unsigned button, int pressed);
 /* A locally-built descriptor for judging layout with no host attached. Deliberately awkward:
  * a long label, a negative value, a toggle, and a field with no bounds. */
 void surf_demo_descriptor(void);
+void surf_demo_operator(void);
 /* A single Choice field used by simulator layout scenes. Kept separate so the ordinary demo
  * descriptor remains stable while 3/5/7-slot and mirrored drill layouts are exercised. */
 void surf_demo_choice_descriptor(uint16_t slot, const char *field_label,

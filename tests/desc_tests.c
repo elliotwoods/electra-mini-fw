@@ -204,6 +204,53 @@ static int good_is_intact(void)
 
 /* ------------------------------------------------------------------ tests */
 
+static void test_small_pages_use_bottom_row(void)
+{
+    int ok = 1;
+    for (uint16_t count = 1; count <= 8; count++) {
+        xfer_t x;
+        surf_init(); ui_state_init(); sim_wire_reset();
+        xfer_begin(&x, 100 + count, count);
+        for (uint16_t i = 0; i < count; i++) xfer_number(&x, i, i, "Ordered", 0.25);
+        xfer_end(&x, 0, 0);
+        unsigned first = count <= 4 ? 4 : 0;
+        for (unsigned knob = 0; knob < 8; knob++) {
+            int32_t expected = knob >= first && knob < first + count ? (int32_t)(knob - first) : -1;
+            ok = ok && ui_state_field_for(knob) == expected;
+        }
+        if (count <= 4) {
+            ok = ok && !ui_state_rotate(0, 4, 10) && surf_field(0)->number == 0.25;
+            ui_state_push(4, 1, 11); ui_state_push(4, 0, 12);
+            ok = ok && ui_state()->focused == 0 && ui_state()->digit_top
+                    && ui_digit_row_first() == 0 && ui_cell_row_first() == 4;
+            const sim_wire_msg_t *focus = sim_wire_last(EMP_OP_FOCUS);
+            ok = ok && focus && focus->payload[9] == 0; /* ID remains zero, not physical knob 4. */
+            ui_state_push(0, 1, 13); ui_state_push(0, 0, 14);
+            ok = ok && ui_state()->focused < 0;
+            (void)ui_state_rotate(4, 4, 15);
+            const sim_wire_msg_t *edit = sim_wire_last(EMP_OP_EDIT);
+            ok = ok && surf_field(0)->number != 0.25 && edit && edit->payload[12] == 0;
+        }
+    }
+    check("1-4 controls use lower row; 5-8 use reading order; input IDs stay stable", ok);
+}
+
+static void test_sparse_small_pages_keep_order_and_ids(void)
+{
+    xfer_t x;
+    surf_init(); ui_state_init(); sim_wire_reset();
+    xfer_begin(&x, 110, 4);
+    const uint16_t ids[] = { 1, 3, 7, 9 };
+    for (uint16_t i = 0; i < 4; i++) xfer_number(&x, i, ids[i], "Sparse", 0.25);
+    xfer_end(&x, 0, 0);
+    int ok = ui_state_field_for(4) == 1 && ui_state_field_for(5) == 3
+          && ui_state_field_for(6) == 7 && ui_state_field_for(7) < 0;
+    ok = ok && ui_state_reveal(9) && ui_state_field_for(4) == 9 && ui_state_field_for(5) < 0;
+    const sim_wire_msg_t *screen = sim_wire_last(EMP_OP_SCREEN);
+    ok = ok && screen && screen->payload[8] == 8 && screen->payload[10] == 2;
+    check("sparse short pages pack left-to-right without changing IDs or page reports", ok);
+}
+
 static void test_round_trip(void)
 {
     load_good();
@@ -483,7 +530,8 @@ static void check_skippable(const char *name, uint8_t tag, const uint8_t *body, 
           && f && f->id == 0
           && f->unit_len == 2                       /* the unit followed the label, and landed */
           /* Normalised to something renderable, so nothing downstream has to know the tag. */
-          && f->value_tag == EMP_VAL_NUMBER;
+          && f->value_tag == (tag == EMP_VAL_TEXT ? EMP_VAL_TEXT : EMP_VAL_NUMBER)
+          && (tag != EMP_VAL_TEXT || strcmp(f->text, "abc") == 0);
 
     check(name, ok);
 }
@@ -499,8 +547,45 @@ static void test_extension_tag_is_skipped(void)
 static void test_text_tag_is_skipped(void)
 {
     static const uint8_t body[] = { 0x03, 0x00, 'a', 'b', 'c' };
-    check_skippable("a Text value is stepped over, not misread", EMP_VAL_TEXT,
+    check_skippable("a Text value is retained without shifting the next field", EMP_VAL_TEXT,
                     body, (uint16_t)sizeof(body));
+}
+
+static void test_action_press_only(void)
+{
+    surf_init(); surf_demo_descriptor();
+    surf_field_t *field = (surf_field_t *)surf_field(0);
+    field->kind = EMP_KIND_ACTION;
+    field->present = 0;
+    ui_state_surface_changed();
+    sim_wire_reset();
+    ui_state_rotate(0, 10, 1);
+    check("action ignores rotation", sim_wire_last(EMP_OP_ACTIVATE) == 0);
+    ui_state_push(0, 1, 2);
+    const sim_wire_msg_t *m = sim_wire_last(EMP_OP_ACTIVATE);
+    check("action press emits revision/sequence/id", m && m->len == 14u);
+    unsigned before = sim_wire_count();
+    ui_state_push(0, 1, 3);
+    ui_state_push(0, 0, 4);
+    check("action held/released never repeats", sim_wire_count() == before);
+    ui_state_push(0, 1, 5);
+    check("next physical press executes again", sim_wire_count() == before + 1u);
+    ui_state_push(0, 0, 6);
+}
+
+static void test_operator_keeps_action_row(void)
+{
+    surf_init();
+    surf_demo_operator(); ui_state_init(); ui_state_surface_changed();
+    check("operator layout opted in", surf_operator_layout());
+    ui_state_push(4, 1, 10); ui_state_push(4, 0, 11);
+    check("operator setting never drills", ui_state()->focused < 0);
+    sim_wire_reset();
+    ui_state_push(3, 1, 12); ui_state_push(3, 0, 13); /* physical top-right */
+    const sim_wire_msg_t *m = sim_wire_last(EMP_OP_ACTIVATE);
+    check("operator stop retains its physical slot", m && m->len == 14 && m->payload[12] == 7);
+    ui_state_push(7, 1, 14); ui_state_push(7, 0, 15); /* bottom-right More */
+    check("operator More retains bottom-right knob", surf_page() == 8);
 }
 
 static void test_color_tag_is_native(void)
@@ -787,6 +872,8 @@ int desc_run_selftests(desc_report_fn report)
     failures  = 0;
     report_fn = report;
 
+    test_small_pages_use_bottom_row();
+    test_sparse_small_pages_keep_order_and_ids();
     test_round_trip();
     test_sparse_slots_preserve_holes_and_pages();
     test_duplicate_and_out_of_range_slots_keep_live();
@@ -804,6 +891,8 @@ int desc_run_selftests(desc_report_fn report)
 
     test_extension_tag_is_skipped();
     test_text_tag_is_skipped();
+    test_action_press_only();
+    test_operator_keeps_action_row();
     test_color_tag_is_native();
     test_bad_colors_keep_live_descriptor();
     test_reserved_tag_abandons_the_record();

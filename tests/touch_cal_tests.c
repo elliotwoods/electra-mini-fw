@@ -13,10 +13,12 @@ static qt2120_detail_t detail;
 static uint8_t thresholds[8];
 static uint8_t gains[8];
 static int failures;
+static touch_cal_rec_t saved;
+static int have_saved;
 static touch_cal_report_fn report_fn;
 
-int persist_touch_cal_read(touch_cal_rec_t *out) { (void)out; return 0; }
-int persist_touch_cal_write(const touch_cal_rec_t *rec) { (void)rec; return 0; }
+int persist_touch_cal_read(touch_cal_rec_t *out) { *out = saved; return have_saved; }
+int persist_touch_cal_write(const touch_cal_rec_t *rec) { saved = *rec; have_saved = 1; return 0; }
 uint32_t persist_touch_cal_checksum(const touch_cal_rec_t *r)
 {
     return r->magic ^ r->version ^ r->generation ^ r->valid_mask;
@@ -41,6 +43,8 @@ static void check(const char *name, int passed)
 
 static void reset_cal(void)
 {
+    have_saved = 0;
+    memset(&saved, 0, sizeof(saved));
     memset(&detail, 0, sizeof(detail));
     memset(thresholds, QT2120_THRESHOLD, sizeof(thresholds));
     memset(gains, QT2120_DEFAULT_GAIN, sizeof(gains));
@@ -147,12 +151,37 @@ static void test_retry_keeps_all_sequence_and_final_clear(void)
     check("retry advances to next batch baseline", next_baseline);
     check("retry advances from dial 1 to dial 2", next_dial);
     check("retry retains remaining batch mask", batch_kept);
+    check("new top-left calibration saves in legacy physical slot",
+          have_saved && saved.version == TOUCH_CAL_VERSION && saved.valid_mask == 0x10u
+          && saved.threshold[4] == thresholds[0] && saved.gain[4] == gains[0]);
+    uint8_t threshold = thresholds[0], gain = gains[0];
+    touch_cal_init();
+    check("saved calibration round trip retains the same physical dial",
+          touch_cal_status()->valid_mask == 1u && thresholds[0] == threshold && gains[0] == gain);
+
+}
+
+static void test_legacy_calibration_keeps_physical_dials(void)
+{
+    reset_cal();
+    have_saved = 1;
+    saved.valid_mask = 0x92u; /* old bottom-second, top-left and top-right */
+    for (unsigned p = 0; p < 8; p++) {
+        saved.threshold[p] = (uint8_t)(20 + p);
+        saved.gain[p] = (uint8_t)p;
+    }
+    touch_cal_init();
+    check("legacy calibration migrates masks and per-dial settings together",
+          touch_cal_status()->valid_mask == 0x29u && thresholds[0] == 24 && gains[0] == 4
+          && thresholds[3] == 27 && gains[3] == 7 && thresholds[5] == 21 && gains[5] == 1
+          && thresholds[1] == QT2120_THRESHOLD && thresholds[4] == QT2120_THRESHOLD);
 }
 
 int touch_cal_run_selftests(touch_cal_report_fn report)
 {
     failures = 0;
     report_fn = report;
+    test_legacy_calibration_keeps_physical_dials();
     test_clear_interval_restarts_and_advances();
     test_active_wrong_dial_still_fails();
     test_failure_preserves_the_triggering_sample();

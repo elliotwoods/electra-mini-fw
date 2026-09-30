@@ -236,3 +236,25 @@ The DejaVu fonts under `tools/font/vendor/`, and the generated glyph atlas in
 `src/app/font_data.c`, remain covered by the bundled
 [Bitstream Vera/DejaVu license](tools/font/vendor/LICENSE_DEJAVU). That license is separate from
 the project's MIT license and must be retained when redistributing those assets.
+
+
+### macOS host tools
+
+The vendor-bulk application now also opens through IOKit (no kernel extension).
+Install Python `pyserial` and `Pillow`; Xcode command-line tools provide `cc`.
+`python3 tools/host.py test` runs the portable C suites;
+`python3 tools/host.py sim operator` renders the actual operator UI code to PNG.
+The existing `tools/deploy/flash_usb.py build/app.srec` and `screenshot.py`
+commands select IOKit on macOS and WinUSB on Windows. The updater releases the
+av-frameworks daemon handle through maintenance mode, verifies the image CRC,
+and resumes daemon ownership after launch. CDC detachment after `run` is expected.
+
+### Device settings and generic labels (September 2026)
+
+The local settings page groups firmware, serial, build and uptime in two columns,
+with separate calibration, restore and brightness cards. Brightness uses a large
+percentage, a full-width range and explicit Cancel/Save buttons. Local editors
+survive host Reveal, descriptor replacement and disconnect; Back returns to the
+latest application page. Generic cells wrap labels onto two lines so axis suffixes
+remain readable, use brighter units and share the settings palette. Full clears
+use bounded strips to avoid remnants of the previous page.

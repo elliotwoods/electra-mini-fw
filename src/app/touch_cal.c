@@ -71,9 +71,12 @@ static void commit_pot(uint32_t now_ms)
     record.magic = TOUCH_CAL_MAGIC;
     record.version = TOUCH_CAL_VERSION;
     record.generation++;
-    record.valid_mask = st.valid_mask;
-    memcpy(record.threshold, st.threshold, sizeof(record.threshold));
-    memcpy(record.gain, st.gain, sizeof(record.gain));
+    /* Flash v1 stays bottom-first so upgrades and downgrades retain physical calibration. */
+    record.valid_mask = ((st.valid_mask << 4) | (st.valid_mask >> 4)) & 0xffu;
+    for (unsigned p = 0; p < 8; p++) {
+        record.threshold[p ^ 4u] = st.threshold[p];
+        record.gain[p ^ 4u] = st.gain[p];
+    }
     record.checksum = persist_touch_cal_checksum(&record);
     if (persist_touch_cal_write(&record) != 0) { fail("Could not save calibration"); return; }
 
@@ -98,12 +101,12 @@ void touch_cal_init(void)
         st.gain[p] = QT2120_DEFAULT_GAIN;
     }
     if (persist_touch_cal_read(&record)) {
-        st.valid_mask = (uint8_t)(record.valid_mask & 0xFFu);
+        st.valid_mask = (uint8_t)((record.valid_mask << 4) | (record.valid_mask >> 4));
         for (unsigned p = 0; p < 8u; p++) {
             if (!(st.valid_mask & (1u << p))) continue;
-            if (qt2120_apply_pot_config((uint8_t)p, record.threshold[p], record.gain[p]) == 0) {
-                st.threshold[p] = record.threshold[p];
-                st.gain[p] = record.gain[p];
+            if (qt2120_apply_pot_config((uint8_t)p, record.threshold[p ^ 4u], record.gain[p ^ 4u]) == 0) {
+                st.threshold[p] = record.threshold[p ^ 4u];
+                st.gain[p] = record.gain[p ^ 4u];
             } else {
                 st.valid_mask &= (uint8_t)~(1u << p);
             }

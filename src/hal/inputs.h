@@ -14,25 +14,13 @@
 #define INPUT_POTS     8
 #define INPUT_BUTTONS  6
 
-/* Panel pot index (0 = bottom-left) <-> multiplexer channel.
- *
- * There are TWO mappings, and they are genuinely different — which is the single most
- * counter-intuitive thing about this input tree.
- *
- *   - Capacitive touch and the pot push switches use a plain row swap, `(n + 4) mod 8`.
- *   - Pot ROTATION is scrambled: `{4,0,1,5,2,7,3,6}` indexed by multiplexer channel.
- *
- * Both are measured on the panel, not inferred. The rotation table is exactly the stock
- * firmware's `{0,4,5,1,6,3,7,2}` with the same +4 row swap applied, so both paths use the
- * UI's bottom-row-first physical order.
- *
- * An earlier pass here concluded the opposite — that one mapping served both — from noticing
- * that pushes and phase movements appeared on the same channel in an interleaved capture. That
- * was a coincidence of timing, not evidence. Turning each knob and watching which cell moved
- * settled it properly.
+/* Canonical panel order: 0..3 top left-to-right, 4..7 bottom left-to-right.
+ * Push switches use mux channel identity. Rotation has separate wiring, recovered from
+ * stock firmware and checked on the panel: mux -> pot {0,4,5,1,6,3,7,2}.
+ * Do not infer the rotation mapping from push switches: they share a mux but not wiring.
  */
-static inline unsigned inputs_pot_to_mux(unsigned pot) { return (pot + 4u) & 7u; }
-static inline unsigned inputs_mux_to_pot(unsigned ch)  { return (ch  + 4u) & 7u; }
+static inline unsigned inputs_pot_to_mux(unsigned pot) { return pot & 7u; }
+static inline unsigned inputs_mux_to_pot(unsigned ch)  { return ch & 7u; }
 
 /* Rotation only. Not derivable from the switch mapping; see above. */
 extern const unsigned char inputs_mux_to_pot_rotation[8];
@@ -60,7 +48,7 @@ uint32_t inputs_get_settle_us(void);
 uint32_t inputs_get_discards(void);
 
 /* One full pass over the multiplexer. Everything is in PANEL order: index 0 and bit 0 are the
- * bottom-left knob, and button bit 0 is front-panel button 1. Both switch banks are active low
+ * top-left knob, and button bit 0 is front-panel button 1. Both switch banks are active low
  * on the wire and are inverted here, so a set bit always means "pressed". */
 typedef struct {
     uint16_t phase_a[INPUT_POTS];

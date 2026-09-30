@@ -33,12 +33,12 @@
 /* Two numbers that were one, and had to be separated before the page could grow.
  *
  * UI_FIELDS_PER_PAGE used to mean both "how many fields a page holds" and "the knob index where
- * the bottom row ends and the top row begins". Those were equal only by coincidence of a 4+4
+ * the top row ends and the bottom row begins". Those were equal only by coincidence of a 4+4
  * layout. Setting the page size to 8 with them still merged makes `pot >= UI_FIELDS_PER_PAGE`
- * never true, so every knob routes to the bottom-row branch and the entire digit window becomes
+ * never true, so every knob routes to the ordinary-field branch and the entire digit window becomes
  * unreachable code that still compiles. */
 #define UI_FIELDS_PER_PAGE 8u        /* fields visible at once: one per knob */
-#define UI_ROW_SPLIT       4u        /* measured panel order: 0-3 bottom, 4-7 top */
+#define UI_ROW_SPLIT       4u        /* measured panel order: 0-3 top, 4-7 bottom */
 #define UI_DIGITS          4u        /* knobs in whichever row is the drilled editor */
 
 #define UI_DISCRETE_STEP   5         /* detents per step on a Toggle or Choice */
@@ -129,7 +129,7 @@ typedef struct {
 void ui_state_init(void);
 const ui_state_t *ui_state(void);
 
-/* Physical input. `pot` is in measured panel order: 0-3 bottom row, 4-7 top row. */
+/* Physical input. `pot` is in measured panel order: 0-3 top row, 4-7 bottom row. */
 void ui_state_touch(uint16_t touch_mask, uint32_t now_ms);
 void ui_state_push(unsigned pot, int pressed, uint32_t now_ms);
 void ui_state_button(unsigned button, int pressed, uint32_t now_ms);
@@ -149,8 +149,11 @@ int ui_state_reveal(uint16_t slot);
 /* Called every service pass; runs the history settle timer. */
 void ui_state_tick(uint32_t now_ms);
 
-/* Which absolute field a knob addresses, or -1 past the end of a short last page. */
+/* Logical descriptor IDs stay stable; these are the authoritative layout mappings.
+ * Generic pages with 1..4 occupied controls use bottom knobs 4..7, in ID order. */
 int32_t ui_state_field_for(unsigned knob);
+int32_t ui_state_field_for_page(uint16_t first, unsigned knob);
+int32_t ui_state_knob_for(uint16_t slot);
 
 /* First knob index of the row currently acting as the digit editor, and of the row still
  * showing cells. Both are UI_DIGITS wide. Meaningless unless something is drilled. */

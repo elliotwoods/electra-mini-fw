@@ -36,21 +36,21 @@
 
 /* A restrained palette: dark ground, one accent, grey for anything secondary. Colour is reserved
  * for state that matters rather than spent on decoration. */
-#define C_BG        0x0000
-#define C_CELL      0x1082      /* very dark grey: separates a cell from the ground */
+#define C_BG        0x0862
+#define C_CELL      0x18C4      /* very dark grey: separates a cell from the ground */
 #define C_CELL_HOT  0x2124      /* under a finger */
 #define C_CELL_DOWN 0x3186      /* switch held: brighter than touched, because it is deliberate */
 #define C_OUTLINE   0x39E7      /* quiet idle frames and separators */
 #define C_TITLE     0xBDF7      /* headings and field names */
 #define C_ICON      0xCE79      /* enabled button glyphs */
-#define C_NAV       0xA45E      /* current page and navigation selection */
+#define C_NAV       0x4DD6      /* current page and navigation selection */
 #define C_VALUE     0xFFFF
-#define C_UNIT      0x6B4D
-#define C_ACCENT    0x07FF      /* cyan: bars, the drilled cell, the live digit */
+#define C_UNIT      0xBDF7
+#define C_ACCENT    0x4DD6      /* cyan: bars, the drilled cell, the live digit */
 #define C_TRACK     0x18E3      /* the EMPTY part of a bar */
 #define C_DIM       0x4208      /* a digit outside the value's magnitude */
 #define C_DISABLED  0x2965      /* an affordance that would do nothing */
-#define C_TOGGLE_ON 0x07E0
+#define C_TOGGLE_ON 0x4DD6
 #define C_ALERT     0xFBE0      /* amber: faults and failed calibration */
 #define C_LINK      0x4C7F      /* knob-to-digit link lines */
 
@@ -109,6 +109,14 @@
 
 /* ------------------------------------------------------------------ helpers */
 
+/* Short fills finish within the controller's bounded busy wait, including on view changes. */
+static void clear_screen(void)
+{
+    ra8876_set_fg(C_BG);
+    for (int16_t y = 0; y < LCD_HEIGHT; y += 80)
+        ra8876_fill_rect(0, y, LCD_WIDTH, 80);
+}
+
 /* Scale an RGB565 towards black, for the "everything but the digit under your finger fades
  * back" emphasis that makes the drilled view readable at a glance. */
 static uint16_t dim(uint16_t c, uint8_t pct)
@@ -129,7 +137,7 @@ static void frame(int16_t x, int16_t y, int16_t w, int16_t h, int16_t t, uint16_
 }
 
 /* A boolean is a state, not a tiny two-button menu. One strong tile reads cleanly at a glance:
- * green means ON, while OFF stays neutral and relies on its word rather than inverse chrome. */
+ * the accent means ON, while OFF stays neutral and relies on its word rather than inverse chrome. */
 static void draw_bool_tile(int16_t x, int16_t y, int16_t w, int16_t h, int on,
                            const font_t *face)
 {
@@ -197,6 +205,11 @@ static uint16_t color565(const surf_field_t *f)
  * "Mode: 2" instead of "Mode: Additive". */
 static void value_text(const surf_field_t *f, char *out, uint32_t cap)
 {
+    if (f->kind == EMP_KIND_ACTION) { if (cap >= 6u) memcpy(out, "PRESS", 6u); return; }
+    if (f->value_tag == EMP_VAL_TEXT) {
+        uint32_t n = (uint32_t)strlen(f->text); if (n >= cap) n = cap - 1u;
+        memcpy(out, f->text, n); out[n] = 0; return;
+    }
     switch (f->value_tag) {
     case EMP_VAL_BOOL:
         if (cap > 4) memcpy(out, f->boolean ? "ON" : "OFF", f->boolean ? 3u : 4u);
@@ -305,8 +318,7 @@ static void forget_everything(void)
 void ui_reset(void)
 {
     forget_everything();
-    ra8876_set_fg(C_BG);
-    ra8876_fill_rect(0, 0, LCD_WIDTH, LCD_HEIGHT);
+    clear_screen();
 }
 
 /* ------------------------------------------------------------------ page position */
@@ -331,12 +343,12 @@ static void draw_page_strip(int16_t y)
         int16_t map_w = (int16_t)(pages * group_w + (pages - 1u) * page_gap);
         int16_t x0 = (int16_t)((LCD_WIDTH - map_w) / 2);
         int16_t y0 = (int16_t)(y + (32 - (2 * block + gap)) / 2);
-        for (uint16_t i = 0; i < total; i++) {
-            if (!surf_field(i)) continue;
+        for (uint16_t i = 0; i < pages * UI_FIELDS_PER_PAGE; i++) {
             uint16_t pg = (uint16_t)(i / UI_FIELDS_PER_PAGE);
             uint16_t lane = (uint16_t)(i % UI_FIELDS_PER_PAGE);
+            if (ui_state_field_for_page((uint16_t)(pg * UI_FIELDS_PER_PAGE), lane) < 0) continue;
             int16_t col = (int16_t)(lane % UI_ROW_SPLIT);
-            int16_t row = lane < UI_ROW_SPLIT ? 1 : 0;
+            int16_t row = lane < UI_ROW_SPLIT ? 0 : 1;
             int16_t x = (int16_t)(x0 + pg * (group_w + page_gap) + col * (block + gap));
             ra8876_set_fg(pg == page / UI_FIELDS_PER_PAGE ? C_NAV : C_OUTLINE);
             ra8876_fill_rect(x, (int16_t)(y0 + row * (block + gap)), block, block);
@@ -417,7 +429,7 @@ static void draw_legend(int full)
 static void cell_geometry(unsigned knob, int16_t *x, int16_t *y)
 {
     *x = CELL_X(knob % COLS);
-    *y = (knob < UI_ROW_SPLIT) ? ROW_BOT_Y : ROW_TOP_Y;
+    *y = (knob < UI_ROW_SPLIT) ? ROW_TOP_Y : ROW_BOT_Y;
 }
 
 static uint16_t cell_frame_color(int touched, int pressed, int drilled, int active)
@@ -444,8 +456,8 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
     const uint16_t bg = C_CELL;
 
     ra8876_set_fg(bg);
-    ra8876_fill_rect((int16_t)(x + 2), (int16_t)(y + 48),
-                     (int16_t)(CELL_W - 4), (int16_t)(h - 50));
+    ra8876_fill_rect((int16_t)(x + 2), (int16_t)(y + 70),
+                     (int16_t)(CELL_W - 4), (int16_t)(h - 72));
 
     if (!f) {
         text_draw_centred(&font_ui, (int16_t)(x + CELL_W / 2),
@@ -460,7 +472,7 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
 
     /* The value on the cell's centre line, left-aligned: a column of numbers sharing a left edge
      * is far easier to compare down the panel than one that shifts with every digit count. */
-    int16_t vy = (int16_t)(y + h / 2 - text_height(&font_value) / 2);
+    int16_t vy = (int16_t)(y + 14 + h / 2 - text_height(&font_value) / 2);
     value_text(f, buf, sizeof(buf));
 
     if (f->value_tag == EMP_VAL_BOOL) {
@@ -485,6 +497,7 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
     /* Numbers get the monospaced face so digits do not shift as they change; words get the
      * proportional one, since monospacing "Sawtooth" buys nothing and costs the width. */
     const font_t *vf = (f->value_tag == EMP_VAL_NUMBER) ? &font_value : &font_ui;
+    if (text_width(vf, buf) > avail) vf = &font_ui;
     fit_text(vf, buf, avail);
 
     uint16_t vc = C_VALUE;
@@ -500,8 +513,8 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
 
     /* A fader down the cell's right edge: it uses the height, four of them side by side read as
      * a set, and it matches the range bar in the drilled view. */
-    int16_t by = (int16_t)(y + 48);
-    int16_t bh = (int16_t)(h - 48 - 2 * SP);
+    int16_t by = (int16_t)(y + 70);
+    int16_t bh = (int16_t)(h - 70 - 2 * SP);
     int16_t ext = bar_extent(f, bh);
 
     ra8876_set_fg(C_TRACK);
@@ -513,6 +526,35 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
         ra8876_set_fg(C_OUTLINE);
         ra8876_fill_rect(bx, (int16_t)(by + bh / 2 - 2), bw, 4);
     }
+}
+
+/* Preserve identifying suffixes (Offset X/Y, frequency units) before truncating a title.
+ * Labels get two lines, independent of the value repaint region below y+70. */
+static void draw_cell_label(int16_t x, int16_t y, char *label)
+{
+    const int16_t width = CELL_W - 4 * SP;
+    const font_t *faces[] = { &font_ui, &font_small };
+    for (unsigned face = 0; face < 2; face++) {
+        const font_t *font = faces[face];
+        if (text_width(font, label) <= width) {
+            text_draw(font, x, y, label, C_TITLE, C_CELL);
+            return;
+        }
+        for (unsigned split = (unsigned)strlen(label); split > 0; split--) {
+            if (label[split] != ' ') continue;
+            label[split] = 0;
+            int fits = text_width(font, label) <= width
+                    && text_width(font, label + split + 1) <= width;
+            if (fits) {
+                text_draw(font, x, y, label, C_TITLE, C_CELL);
+                text_draw(font, x, y + text_height(font), label + split + 1, C_TITLE, C_CELL);
+                return;
+            }
+            label[split] = ' ';
+        }
+    }
+    fit_text(&font_small, label, width);
+    text_draw(&font_small, x, y, label, C_TITLE, C_CELL);
 }
 
 static void draw_cell(unsigned knob, const surf_field_t *f,
@@ -527,9 +569,7 @@ static void draw_cell(unsigned knob, const surf_field_t *f,
     if (f) {
         char label[48];
         str_of(label, sizeof(label), f->label_off, f->label_len);
-        fit_text(&font_ui, label, (int16_t)(CELL_W - 4 * SP));
-        text_draw(&font_ui, (int16_t)(x + 2 * SP), (int16_t)(y + SP),
-                  label, C_TITLE, C_CELL);
+        draw_cell_label((int16_t)(x + 2 * SP), (int16_t)(y + SP), label);
     }
     draw_cell_dynamic(knob, f);
 }
@@ -538,6 +578,7 @@ static void draw_cell(unsigned knob, const surf_field_t *f,
  * that still owns ordinary fields while the opposite row edits the focused value. */
 static void render_cells(int full, unsigned first, unsigned last)
 {
+    static char last_text[8][96];
     const ui_state_t *st = ui_state();
 
     for (unsigned k = first; k < last; k++) {
@@ -560,7 +601,7 @@ static void render_cells(int full, unsigned first, unsigned last)
         int16_t bh = (int16_t)(ROW_H - 48 - 2 * SP);
         int value_dirty = static_dirty;
         if (f && !value_dirty) {
-            value_dirty = last_cell[k].boolean != f->boolean
+            value_dirty = strcmp(last_text[k], f->text) != 0 || last_cell[k].boolean != f->boolean
                        || last_cell[k].choice  != f->choice
                        || last_cell[k].number  != f->number
                        || last_cell[k].color_count != f->color_count
@@ -582,6 +623,7 @@ static void render_cells(int full, unsigned first, unsigned last)
         last_cell[k].drilled = drilled;
         last_cell[k].active  = (uint8_t)active;
         last_cell[k].id      = f ? f->id : 0xFFFF;
+        if (f) memcpy(last_text[k], f->text, sizeof(f->text)); else last_text[k][0] = 0;
         last_cell[k].tag     = f ? f->value_tag : 0;
         last_cell[k].number  = f ? f->number : 0;
         last_cell[k].choice  = f ? f->choice : 0;
@@ -593,13 +635,136 @@ static void render_cells(int full, unsigned first, unsigned last)
     }
 }
 
+/* Operator overview: commands at the physical top knobs, large observed readout,
+ * settings at the bottom knobs. Opt-in descriptor flag; other applications keep the grid.
+ * Each region repaints only on change, so telemetry never flashes the whole panel. */
+static void render_operator(int full)
+{
+    static char previous[8][96];
+    static uint16_t previous_press;
+    const ui_state_t *st = ui_state();
+    const uint16_t ground = 0x0862, panel = 0x18c4, ink = 0xffff, muted = 0xbdd7;
+    const uint16_t stop_bg = 0x9808;
+    if (full) {
+        ra8876_set_fg(ground);
+        for (int16_t y = 0; y < 480; y += 80) ra8876_fill_rect(0, y, 800, 80);
+        memset(previous, 0xff, sizeof(previous)); previous_press = 0xffff;
+        text_draw(&font_small, 24, 114, "MANUAL CONTROL", muted, ground);
+        text_draw_right(&font_small, 776, 114, "1 / 2", muted, ground);
+        text_draw(&font_small, 24, 318, "ACTUAL POSITION / rev", muted, ground);
+    }
+    for (unsigned k = 0; k < 8; ++k) {
+        const surf_field_t *f = surf_field((uint16_t)k);
+        char value[96] = {0}; if (f) value_text(f, value, sizeof(value));
+        int pressed = (st->press_mask & (1u << (k ^ 4u))) != 0;
+        if (!full && strcmp(previous[k], value) == 0 &&
+            ((previous_press ^ st->press_mask) & (1u << (k ^ 4u))) == 0) continue;
+        memcpy(previous[k], value, sizeof(value));
+        if (k >= 4) {
+            int16_t x = (int16_t)(16 + (k - 4) * 196);
+            uint16_t bg = k == 7 ? stop_bg : panel;
+            if (pressed) bg = k == 7 ? 0xc108 : 0x3269;
+            ra8876_set_fg(bg); ra8876_fill_rect(x, 12, 184, 88);
+            char label[48] = {0}; if (f) str_of(label, sizeof(label), f->label_off, f->label_len);
+            /* Whole words on two lines beat truncating the action an operator will execute. */
+            if (k == 7) { text_draw_centred(&font_ui, x + 92, 22, "STOP", ink, bg);
+                text_draw_centred(&font_small, x + 92, 60, "PRESS / ESCAPE", ink, bg); }
+            else { fit_text(&font_ui, label, 164);
+                text_draw_centred(&font_ui, x + 92, 22, label, ink, bg);
+                text_draw_centred(&font_small, x + 92, 60, "PRESS", muted, bg); }
+        } else if (k == 3) {
+            char *status = strchr(value, '\n');
+            if (status) {
+                *status++ = 0;
+                ra8876_set_fg(ground); ra8876_fill_rect(24, 114, 660, 30);
+                fit_text(&font_small, status, 660);
+                text_draw(&font_small, 24, 114, status, muted, ground);
+            }
+            ra8876_set_fg(ground); ra8876_fill_rect(24, 157, 752, 154);
+            int numeric = value[0] && (value[0] == '-' || (value[0] >= '0' && value[0] <= '9'));
+            const font_t *face = numeric ? &font_display : &font_ui;
+            if (text_width(face, value) > 740) face = &font_value;
+            fit_text(face, value, 740);
+            text_draw(face, 24, numeric ? 158 : 208, value, ink, ground);
+        } else {
+            int16_t x = (int16_t)(16 + k * 196);
+            ra8876_set_fg(panel); ra8876_fill_rect(x, 366, 184, 102);
+            const char *label = k == 0 ? "AXIS" : k == 1 ? "STEP / rev" : "SPEED / ustep/s";
+            text_draw(&font_small, x + 12, 374, label, muted, panel);
+            const font_t *face = k == 0 ? &font_ui : &font_value;
+            fit_text(face, value, 160);
+            text_draw(face, x + 12, 411, value, ink, panel);
+        }
+    }
+    if (full) {
+        ra8876_set_fg(panel); ra8876_fill_rect(604, 366, 180, 102);
+        text_draw(&font_small, 616, 374, "MORE SETTINGS", muted, panel);
+        text_draw(&font_ui, 616, 414, "PRESS  >", ink, panel);
+    }
+    previous_press = st->press_mask;
+}
+
+/* Settings stay on the same visual scale and never take over the Stop knob. */
+static void render_operator_settings(int full)
+{
+    static char previous[8][96];
+    static uint16_t previous_press;
+    const ui_state_t *st = ui_state();
+    const uint16_t ground = 0x0862, panel = 0x18c4, ink = 0xffff, muted = 0xbdd7;
+    if (full) {
+        ra8876_set_fg(ground);
+        for (int16_t y = 0; y < 480; y += 80) ra8876_fill_rect(0, y, 800, 80);
+        memset(previous, 0xff, sizeof(previous)); previous_press = 0xffff;
+        text_draw(&font_small, 24, 114, "MOTION SETTINGS", muted, ground);
+        text_draw_right(&font_small, 776, 114, "2 / 2", muted, ground);
+        text_draw(&font_small, 24, 318, "BUTTON 1: BACK TO MANUAL CONTROL", muted, ground);
+    }
+    for (unsigned k = 0; k < 8; ++k) {
+        const surf_field_t *f = surf_field((uint16_t)(8 + k));
+        char value[96] = {0}; if (f) value_text(f, value, sizeof(value));
+        if (!full && strcmp(previous[k], value) == 0 && !((previous_press ^ st->press_mask) & (1u << (k ^ 4u)))) continue;
+        memcpy(previous[k], value, sizeof(value));
+        if (k < 4) {
+            int16_t x = (int16_t)(16 + k * 196);
+            const char *labels[] = { "COMMAND VIA", "ACCEL / ustep/s2", "MIN SPEED", "TARGET / rev" };
+            ra8876_set_fg(panel); ra8876_fill_rect(x, 366, 184, 102);
+            text_draw(&font_small, x + 12, 374, labels[k], muted, panel);
+            const font_t *face = k == 0 ? &font_ui : &font_value;
+            fit_text(face, value, 160); text_draw(face, x + 12, 411, value, ink, panel);
+        } else if (k == 4 || k == 7) {
+            int16_t x = k == 4 ? 16 : 604;
+            uint16_t bg = k == 7 ? 0x9808 : panel;
+            if (st->press_mask & (1u << (k ^ 4u))) bg = k == 7 ? 0xc108 : 0x3269;
+            ra8876_set_fg(bg); ra8876_fill_rect(x, 12, 184, 88);
+            text_draw_centred(&font_ui, x + 92, 22, k == 4 ? "Move" : "STOP", ink, bg);
+            text_draw_centred(&font_small, x + 92, 60, k == 4 ? "TO TARGET" : "PRESS / ESCAPE", ink, bg);
+        } else if (k == 5) {
+            ra8876_set_fg(ground); ra8876_fill_rect(212, 12, 380, 88);
+            text_draw(&font_small, 224, 24, "COMMAND ROUTE", muted, ground);
+            int connected = f && ((f->value_tag == EMP_VAL_BOOL && f->boolean) ||
+                (f->value_tag == EMP_VAL_TEXT && strcmp(f->text, "true") == 0));
+            text_draw(&font_ui, 224, 56, connected ? "Connected" : "Disconnected", ink, ground);
+        } else {
+            ra8876_set_fg(ground); ra8876_fill_rect(24, 170, 752, 124);
+            text_draw(&font_small, 24, 170, "OPERATION", muted, ground);
+            fit_text(&font_ui, value, 744); text_draw(&font_ui, 24, 218, value, ink, ground);
+        }
+    }
+    previous_press = st->press_mask;
+}
+
 static void render_overview(int full)
 {
     const ui_state_t *st = ui_state();
+    static int was_operator = -1;
+    int operator_page = surf_operator_layout() && st->page < 16 ? (int)(st->page / 8 + 1) : 0;
+    if (operator_page != was_operator) full = 1;
+    was_operator = operator_page;
+    if (operator_page == 1) { render_operator(full); return; }
+    if (operator_page == 2) { render_operator_settings(full); return; }
 
     if (full) {
-        ra8876_set_fg(C_BG);
-        ra8876_fill_rect(0, 0, LCD_WIDTH, LCD_HEIGHT);
+        clear_screen();
     }
     if (full || st->page != last_page) {
         draw_page_strip(PAGE_Y);
@@ -611,10 +776,34 @@ static void render_overview(int full)
 
 /* ------------------------------------------------------------------ local system views */
 
-static void draw_info_line(int16_t y, const char *label, const char *value, uint16_t colour)
+static void system_fact(int16_t x, int16_t y, const char *label, const char *value, const font_t *face)
 {
-    text_draw(&font_small, MARGIN_X, y, label, C_TITLE, C_BG);
-    text_draw(&font_ui, 250, (int16_t)(y - 5), value, colour, C_BG);
+    text_draw(&font_small, x, y, label, C_TITLE, C_BG);
+    char copy[80];
+    strncpy(copy, value, sizeof(copy) - 1); copy[sizeof(copy) - 1] = 0;
+    fit_text(face, copy, 352);
+    text_draw(face, x, (int16_t)(y + 28), copy, C_VALUE, C_BG);
+}
+
+static void draw_system_footer(int full)
+{
+    const ui_state_t *s = ui_state();
+    static uint16_t old_buttons = 0xffff;
+    static int old_mode = -1;
+    if (!full && old_buttons == s->btn_mask && old_mode == (int)s->mode) return;
+    old_buttons = s->btn_mask; old_mode = s->mode;
+    const char *back = s->mode == UI_MODE_BRIGHTNESS ? "1  Cancel" : "1  Back";
+    const char *next = s->mode == UI_MODE_SYSTEM ? "5  Restart"
+        : s->mode == UI_MODE_BRIGHTNESS ? "5  Save brightness"
+        : s->mode == UI_MODE_CAL_SELECT ? "5  Calibrate all"
+        : s->mode == UI_MODE_RESTORE_CONFIRM ? "5  Restore defaults"
+        : s->mode == UI_MODE_CAL_RUN ? (s->cal_phase == 7 ? "5  Retry" : "5  Done") : "5  Release to restart";
+    ra8876_set_fg(C_BG); ra8876_fill_rect(0, 418, LCD_WIDTH, 62);
+    ra8876_set_fg(C_OUTLINE); ra8876_fill_rect(24, 418, 752, 1);
+    if (ui_state_button_enabled(UI_BTN_BACK))
+        text_draw(&font_small, 24, 442, back, s->btn_mask & 1 ? C_ACCENT : C_TITLE, C_BG);
+    if (ui_state_button_enabled(UI_BTN_SYSTEM))
+        text_draw_right(&font_small, 776, 442, next, s->btn_mask & (1u << UI_BTN_SYSTEM) ? C_ACCENT : C_TITLE, C_BG);
 }
 
 /* The drawing order deliberately mirrors the enclosure: dials 5-8 above the screen and 1-4
@@ -625,7 +814,7 @@ static void draw_cal_dial_map(int active, int selection)
     const ui_state_t *s = ui_state();
     for (unsigned p = 0; p < 8u; p++) {
         int16_t x = CELL_X(p % UI_ROW_SPLIT);
-        int16_t y = p < UI_ROW_SPLIT ? (selection ? 302 : 338) : (selection ? 116 : 72);
+        int16_t y = p < UI_ROW_SPLIT ? (selection ? 116 : 72) : (selection ? 302 : 338);
         int16_t h = selection ? 92 : 58;
         uint16_t bg = active == (int)p ? C_CELL_DOWN
                     : ((s->cal_valid_mask & (1u << p)) ? C_CELL_HOT : C_CELL);
@@ -662,54 +851,33 @@ static void render_brightness_editor(void)
     const ui_state_t *s = ui_state();
     char value[16];
     (void)text_format(value, sizeof(value), (double)s->brightness_preview, 0);
-    unsigned n = 0;
-    while (value[n]) n++;
-    if (n + 1u < sizeof(value)) { value[n++] = '%'; value[n] = 0; }
-
-    text_draw_centred(&font_display, LCD_WIDTH / 2, 92, value, C_VALUE, C_BG);
-    text_draw_centred(&font_ui, LCD_WIDTH / 2, 178,
-                      "Turn any dial to adjust", C_TITLE, C_BG);
-
-    const int16_t bx = 100, by = 330, bw = 600, bh = 34;
-    ra8876_set_fg(C_TRACK);
-    ra8876_fill_rect(bx, by, bw, bh);
+    unsigned n = (unsigned)strlen(value); value[n++] = '%'; value[n] = 0;
+    text_draw_centred(&font_display, 400, 94, value, C_VALUE, C_BG);
+    text_draw_centred(&font_small, 400, 246, "Turn any dial to adjust", C_TITLE, C_BG);
+    const int16_t bx = 96, by = 306, bw = 608;
+    ra8876_set_fg(C_TRACK); ra8876_fill_rect(bx, by, bw, 12);
     int16_t fill = (int16_t)(((uint32_t)(s->brightness_preview - 10u) * bw) / 90u);
-    if (fill > 0) {
-        ra8876_set_fg(C_ACCENT);
-        ra8876_fill_rect(bx, by, fill, bh);
-    }
-    frame(bx, by, bw, bh, 2, C_OUTLINE);
-
-    for (unsigned i = 0; i <= 9u; i++) {
-        int16_t x = (int16_t)(bx + (int32_t)bw * i / 9);
-        ra8876_set_fg(C_OUTLINE);
-        ra8876_fill_rect((int16_t)(x - 1), (int16_t)(by + bh + 8), 2,
-                         i == 0u || i == 9u ? 12 : 7);
-    }
-    text_draw(&font_small, bx, (int16_t)(by + bh + 28), "10%", C_TITLE, C_BG);
-    text_draw(&font_small, (int16_t)(bx + bw - text_width(&font_small, "100%")),
-              (int16_t)(by + bh + 28), "100%", C_TITLE, C_BG);
-
+    if (fill > 0) { ra8876_set_fg(C_ACCENT); ra8876_fill_rect(bx, by, fill, 12); }
+    text_draw(&font_small, bx, 332, "10%", C_TITLE, C_BG);
+    text_draw_right(&font_small, bx + bw, 332, "100%", C_TITLE, C_BG);
     if (s->brightness_save_error)
-        text_draw_centred(&font_small, LCD_WIDTH / 2, 418,
-                          "Could not save brightness. Try Done again.", C_ALERT, C_BG);
+        text_draw_centred(&font_small, 400, 378, "Could not save. Press button 5 to retry.", C_ALERT, C_BG);
 }
 
 static void render_system_view(int full)
 {
     const ui_state_t *s = ui_state();
     if (full) {
-        ra8876_set_fg(C_BG);
-        ra8876_fill_rect(0, 0, LCD_WIDTH, LCD_HEIGHT);
+        clear_screen();
     }
 
-    const char *title = "SYSTEM / SETTINGS";
+    const char *title = "Device settings";
     if (s->mode == UI_MODE_REBOOT_WAIT) title = "RESTARTING";
     else if (s->mode == UI_MODE_CAL_SELECT) title = "TOUCH CALIBRATION";
     else if (s->mode == UI_MODE_CAL_RUN) title = "CALIBRATING TOUCH";
     else if (s->mode == UI_MODE_RESTORE_CONFIRM) title = "RESTORE TOUCH DEFAULTS";
-    else if (s->mode == UI_MODE_BRIGHTNESS) title = "BRIGHTNESS";
-    text_draw(&font_ui, MARGIN_X, 18, title, C_TITLE, C_BG);
+    else if (s->mode == UI_MODE_BRIGHTNESS) title = "Brightness";
+    text_draw(&font_ui, 24, 20, title, C_VALUE, C_BG);
     ra8876_set_fg(C_OUTLINE);
     ra8876_fill_rect(MARGIN_X, 58, LCD_WIDTH - 2 * MARGIN_X, 2);
     if (s->mode == UI_MODE_REBOOT_WAIT) {
@@ -735,50 +903,35 @@ static void render_system_view(int full)
         version[k++] = (char)('0' + EMP_VERSION_MAJOR); version[k++] = '.';
         version[k++] = (char)('0' + EMP_VERSION_MINOR); version[k] = 0;
 
-        draw_info_line(76,  "MODEL", emp_device_model(), C_VALUE);
-        draw_info_line(108, "FIRMWARE", version, C_VALUE);
-        draw_info_line(140, "BUILD", emp_device_build_id(), C_VALUE);
-        draw_info_line(172, "SERIAL", emp_device_serial(), C_VALUE);
-        (void)text_format(n, sizeof(n), (double)(s->uptime_ms / 1000u), 0);
-        draw_info_line(204, "UPTIME (S)", n, C_VALUE);
-        draw_info_line(310, "TOUCH / CAL", s->touch_status == 0
-                       ? (s->cal_custom ? "READY / CUSTOM" : "READY / DEFAULT")
-                       : "FAULT", s->touch_status == 0 ? C_TOGGLE_ON : C_ALERT);
-
-        const char *items[3] = {
-            "Touch calibration", "Restore touch defaults", "Brightness"
-        };
-        const int16_t card_gap = SP;
-        const int16_t card_w = (int16_t)((LCD_WIDTH - 2 * MARGIN_X - 2 * card_gap) / 3);
+        text_draw_right(&font_small, 776, 27, emp_device_model(), C_TITLE, C_BG);
+        system_fact(24, 84, "FIRMWARE", version, &font_ui);
+        system_fact(424, 84, "SERIAL NUMBER", emp_device_serial(), &font_ui);
+        system_fact(24, 166, "BUILD", emp_device_build_id(), &font_small);
+        (void)text_format(n, sizeof(n), (double)(s->uptime_ms / 3600000u), 0);
+        unsigned used = (unsigned)strlen(n); n[used++] = 'h'; n[used++] = ' ';
+        (void)text_format(n + used, sizeof(n) - used, (double)((s->uptime_ms / 60000u) % 60u), 0);
+        used = (unsigned)strlen(n); n[used++] = 'm'; n[used] = 0;
+        system_fact(424, 166, "UPTIME", n, &font_small);
+        text_draw(&font_small, 24, 238, "Touch sensors", C_TITLE, C_BG);
+        text_draw(&font_small, 208, 238, s->touch_status == 0
+            ? (s->cal_custom ? "Ready / custom calibration" : "Ready / factory defaults") : "Sensor fault",
+            s->touch_status == 0 ? C_ACCENT : C_ALERT, C_BG);
+        text_draw(&font_small, 24, 276, "Turn any dial to choose / press to open", C_TITLE, C_BG);
+        const char *items[3] = { "Calibrate", "Restore", "Brightness" };
+        const char *details[3] = { "Touch sensors", "Touch defaults", "" };
         for (unsigned i = 0; i < 3; i++) {
-            int16_t x = (int16_t)(MARGIN_X + i * (card_w + card_gap));
-            uint16_t bg = s->system_selection == i ? C_CELL_HOT : C_CELL;
-            ra8876_set_fg(bg);
-            ra8876_fill_rect(x, 342, card_w, 70);
-            frame(x, 342, card_w, 70,
-                  s->system_selection == i ? 3 : 2,
-                  s->system_selection == i ? C_NAV : C_OUTLINE);
-            char label[32];
-            unsigned j = 0;
-            while (items[i][j] && j + 1u < sizeof(label)) {
-                label[j] = items[i][j]; j++;
+            int16_t x = (int16_t)(24 + i * 256);
+            int selected = s->system_selection == i;
+            uint16_t bg = selected ? C_CELL_HOT : C_CELL;
+            ra8876_set_fg(bg); ra8876_fill_rect(x, 310, 240, 92);
+            if (selected) { ra8876_set_fg(C_ACCENT); ra8876_fill_rect(x, 310, 3, 92); }
+            text_draw(&font_ui, x + 16, 322, items[i], C_VALUE, bg);
+            char pct[12];
+            if (i == 2) {
+                (void)text_format(pct, sizeof(pct), s->brightness_saved, 0);
+                unsigned len = (unsigned)strlen(pct); pct[len++] = '%'; pct[len] = 0;
             }
-            label[j] = 0;
-            fit_text(&font_small, label, (int16_t)(card_w - 2 * SP));
-            text_draw(&font_small, (int16_t)(x + SP), 352, label, C_TITLE, bg);
-            if (i == 2u) {
-                char pct[12];
-                (void)text_format(pct, sizeof(pct), (double)s->brightness_saved, 0);
-                unsigned p = 0; while (pct[p]) p++;
-                if (p + 1u < sizeof(pct)) { pct[p++] = '%'; pct[p] = 0; }
-                text_draw(&font_small, (int16_t)(x + SP), 382, pct, C_VALUE, bg);
-                int16_t bar_x = (int16_t)(x + 58), bar_y = 388;
-                int16_t bar_w = (int16_t)(card_w - 58 - SP), bar_h = 8;
-                ra8876_set_fg(C_TRACK); ra8876_fill_rect(bar_x, bar_y, bar_w, bar_h);
-                ra8876_set_fg(C_ACCENT);
-                ra8876_fill_rect(bar_x, bar_y,
-                    (int16_t)((uint32_t)bar_w * s->brightness_saved / 100u), bar_h);
-            }
+            text_draw(&font_small, x + 16, 366, i == 2 ? pct : details[i], C_TITLE, bg);
         }
     } else if (s->mode == UI_MODE_BRIGHTNESS) {
         render_brightness_editor();
@@ -791,7 +944,7 @@ static void render_system_view(int full)
         if (s->cal_phase == 6u) {
             text_draw_centred(&font_value, LCD_WIDTH / 2, 166,
                               "CALIBRATION COMPLETE", C_TOGGLE_ON, C_BG);
-            text_draw_centred(&font_ui, LCD_WIDTH / 2, 310,
+            text_draw_centred(&font_ui, LCD_WIDTH / 2, 264,
                               "Calibration saved", C_VALUE, C_BG);
         } else {
             char dial[16] = { 'D','I','A','L',' ',(char)('1' + s->cal_pot),0 };
@@ -822,7 +975,7 @@ static void render_system_view(int full)
             /* The two-line alert is the widest calibration status. Restore the surrounding
              * chrome afterwards so its background can never leave holes at the card edges. */
             draw_cal_dial_map((int)s->cal_pot, 0);
-            text_draw(&font_ui, MARGIN_X, 18, title, C_TITLE, C_BG);
+            text_draw(&font_ui, 24, 20, title, C_VALUE, C_BG);
             ra8876_set_fg(C_OUTLINE);
             ra8876_fill_rect(MARGIN_X, 58, LCD_WIDTH - 2 * MARGIN_X, 2);
         }
@@ -832,7 +985,7 @@ static void render_system_view(int full)
         text_draw_centred(&font_small, LCD_WIDTH / 2, 225,
                           "Button 1 cancels. Button 5 confirms.", C_TITLE, C_BG);
     }
-    draw_legend(full);
+    draw_system_footer(full);
 }
 
 /* ------------------------------------------------------------------ drilled readout */
@@ -1172,10 +1325,8 @@ static void render_drilled(int full, const surf_field_t *f)
 
 /* ------------------------------------------------------------------ power-on */
 
-/* Panel order, not knob order. cell_geometry puts knobs 0-3 on the BOTTOM row and 4-7 on the
- * top, so filling left-to-right down the panel is 4,5,6,7 then 0,1,2,3. Getting this backwards
- * is invisible in code and obvious on the device, which is why it is a named table. */
-static const uint8_t boot_order[UI_BOOT_CELL_FRAMES] = { 4, 5, 6, 7, 0, 1, 2, 3 };
+/* Boot fills in canonical reading order, the same order used by fields and inputs. */
+static const uint8_t boot_order[UI_BOOT_CELL_FRAMES] = { 0, 1, 2, 3, 4, 5, 6, 7 };
 
 /* The accent rule lives at the bottom of the band -- the one region no knob points at -- so it
  * reads as the surface as a whole coming up rather than as anything about a control. */
@@ -1204,8 +1355,7 @@ static const uint8_t boot_order[UI_BOOT_CELL_FRAMES] = { 4, 5, 6, 7, 0, 1, 2, 3 
 void ui_boot_ready_frame(unsigned step)
 {
     if (step == 0) {
-        ra8876_set_fg(C_BG);
-        ra8876_fill_rect(0, 0, LCD_WIDTH, LCD_HEIGHT);
+        clear_screen();
         return;
     }
 
@@ -1253,7 +1403,9 @@ void ui_render(void)
     const ui_state_t *st = ui_state();
     int view = st->mode == UI_MODE_SURFACE ? ((st->focused >= 0) ? 1 : 0)
                                            : (2 + (int)st->mode);
-    int full = (view != last_view);
+    static uint64_t previous_revision = UINT64_MAX;
+    int full = (view != last_view) || previous_revision != surf_applied_revision();
+    previous_revision = surf_applied_revision();
 
     if (st->mode != UI_MODE_SURFACE) {
         static uint8_t old_phase = 0xFFu, old_pot = 0xFFu, old_cycle = 0xFFu;
@@ -1267,7 +1419,7 @@ void ui_render(void)
                     || old_clear_ds != clear_ds
                     || old_brightness != st->brightness_preview
                     || old_save_error != st->brightness_save_error;
-        if (changed) render_system_view(1); else draw_legend(0);
+        if (changed) render_system_view(1); else draw_system_footer(0);
         old_phase = st->cal_phase; old_pot = st->cal_pot; old_cycle = st->cal_cycle;
         old_sel = st->system_selection; old_valid = st->cal_valid_mask; old_custom = st->cal_custom;
         old_brightness = st->brightness_preview;
@@ -1365,9 +1517,9 @@ void ui_render_demo_focused(void)
     surf_demo_descriptor();
     ui_state_init();
     ui_reset();
-    ui_state_push(0, 1, 1000);       /* press the first bottom-row knob: drill in */
-    ui_state_push(0, 0, 1010);
-    ui_state_touch(0x20, 1020);      /* a finger resting on a top-row digit knob */
+    ui_state_push(UI_ROW_SPLIT, 1, 1000);       /* press the first bottom-row knob: drill in */
+    ui_state_push(UI_ROW_SPLIT, 0, 1010);
+    ui_state_touch(0x02, 1020);      /* a finger resting on a top-row digit knob */
     ui_render();
 }
 
@@ -1380,9 +1532,9 @@ void ui_render_demo_focused_top(void)
     surf_demo_descriptor();
     ui_state_init();
     ui_reset();
-    ui_state_push(UI_ROW_SPLIT, 1, 1000);      /* press the first top-row knob */
-    ui_state_push(UI_ROW_SPLIT, 0, 1010);
-    ui_state_touch(0x02, 1020);                /* a finger on bottom knob 1, now a digit knob */
+    ui_state_push(0, 1, 1000);      /* press the first top-row knob */
+    ui_state_push(0, 0, 1010);
+    ui_state_touch(0x20, 1020);                /* a finger on bottom knob 1, now a digit knob */
     ui_render();
 }
 
@@ -1392,6 +1544,7 @@ static void demo_focus_on_page(uint8_t page, uint8_t knob)
     ui_state_init();
     ui_reset();
     if (page) ui_state_button(UI_BTN_PAGE_NEXT, 1, 1000);
+    knob = (uint8_t)ui_state_knob_for((uint16_t)(page * UI_FIELDS_PER_PAGE + knob));
     ui_state_push(knob, 1, 1010);
     ui_state_push(knob, 0, 1020);
     ui_render();
@@ -1410,8 +1563,8 @@ void ui_render_demo_choice_waveform(uint16_t selected)
     ui_state_init();
     ui_reset();
     ui_state_button(UI_BTN_PAGE_NEXT, 1, 1000);
-    ui_state_push(0, 1, 1010);
-    ui_state_push(0, 0, 1020);
+    ui_state_push((unsigned)ui_state_knob_for(8u), 1, 1010);
+    ui_state_push((unsigned)ui_state_knob_for(8u), 0, 1020);
     ui_render();
 }
 
@@ -1421,15 +1574,16 @@ static void demo_choice_labels(const char *const *labels, uint16_t count,
     surf_demo_choice_descriptor(slot, "Choice Width", labels, count, selected);
     ui_state_init();
     ui_reset();
-    ui_state_push(slot, 1, 1000);
-    ui_state_push(slot, 0, 1010);
+    unsigned knob = (unsigned)ui_state_knob_for(slot);
+    ui_state_push(knob, 1, 1000);
+    ui_state_push(knob, 0, 1010);
     ui_render();
 }
 
 void ui_render_demo_choice_short(void)
 {
     static const char *const labels[] = { "A", "B", "C", "D", "E", "F", "G", "H", "I" };
-    demo_choice_labels(labels, 9u, 4u, 0u);
+    demo_choice_labels(labels, 9u, 4u, UI_ROW_SPLIT);
 }
 
 void ui_render_demo_choice_medium(void)
@@ -1437,7 +1591,7 @@ void ui_render_demo_choice_medium(void)
     static const char *const labels[] = {
         "Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf"
     };
-    demo_choice_labels(labels, 7u, 3u, 0u);
+    demo_choice_labels(labels, 7u, 3u, UI_ROW_SPLIT);
 }
 
 void ui_render_demo_choice_long_top(void)
@@ -1445,7 +1599,7 @@ void ui_render_demo_choice_long_top(void)
     static const char *const labels[] = {
         "Resonant Low Pass", "Pulse Width Mod", "Envelope Follower", "Stereo Crossfeed", "Granular Position"
     };
-    demo_choice_labels(labels, 5u, 2u, UI_ROW_SPLIT);
+    demo_choice_labels(labels, 5u, 2u, 0u);
 }
 
 void ui_render_demo_page2(void)

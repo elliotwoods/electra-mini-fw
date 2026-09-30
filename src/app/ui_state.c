@@ -106,7 +106,7 @@ static void enter_focus(int32_t idx)
     /* The digit editor is the OTHER row. See ui_state.h: this is what makes drilling symmetric,
      * so a knob on either row behaves the same way and the readout always appears beside the
      * knobs that edit it rather than always at the top. */
-    st.digit_top = (uint8_t)(((uint32_t)idx - st.page) < UI_ROW_SPLIT);
+    st.digit_top = (uint8_t)(ui_state_knob_for((uint16_t)idx) >= (int32_t)UI_ROW_SPLIT);
     memset(digit_accum, 0, sizeof(digit_accum));
     rebuild_window();
     surf_send_focus(idx, st.touch_mask);
@@ -131,14 +131,43 @@ void ui_state_init(void)
 
 const ui_state_t *ui_state(void) { return &st; }
 
-unsigned ui_digit_row_first(void) { return st.digit_top ? UI_ROW_SPLIT : 0u; }
-unsigned ui_cell_row_first(void)  { return st.digit_top ? 0u : UI_ROW_SPLIT; }
+unsigned ui_digit_row_first(void) { return st.digit_top ? 0u : UI_ROW_SPLIT; }
+unsigned ui_cell_row_first(void)  { return st.digit_top ? UI_ROW_SPLIT : 0u; }
+
+int32_t ui_state_field_for_page(uint16_t first, unsigned knob)
+{
+    if (knob >= UI_FIELDS_PER_PAGE || first >= SURF_MAX_FIELDS) return -1;
+    /* The operator layout keeps its published action/settings positions. Generic pages with
+     * one to four fields use the nearer row in descriptor order. IDs and page boundaries do
+     * not change; even sparse fields are packed only within their existing page. */
+    if (!surf_operator_layout()) {
+        unsigned count = 0;
+        for (unsigned offset = 0; offset < UI_FIELDS_PER_PAGE; offset++)
+            if (surf_field((uint16_t)(first + offset))) count++;
+        if (count <= UI_ROW_SPLIT) {
+            if (knob < UI_ROW_SPLIT) return -1;
+            unsigned wanted = knob - UI_ROW_SPLIT;
+            for (unsigned offset = 0; offset < UI_FIELDS_PER_PAGE; offset++) {
+                if (!surf_field((uint16_t)(first + offset))) continue;
+                if (wanted-- == 0) return (int32_t)(first + offset);
+            }
+            return -1;
+        }
+    }
+    uint16_t slot = (uint16_t)(first + (knob ^ (surf_operator_layout() ? 4u : 0u)));
+    return surf_field(slot) ? (int32_t)slot : -1;
+}
 
 int32_t ui_state_field_for(unsigned knob)
 {
-    if (knob >= UI_FIELDS_PER_PAGE) return -1;
-    uint32_t idx = (uint32_t)st.page + knob;
-    return (idx < SURF_MAX_FIELDS && surf_field((uint16_t)idx)) ? (int32_t)idx : -1;
+    return ui_state_field_for_page(st.page, knob);
+}
+
+int32_t ui_state_knob_for(uint16_t slot)
+{
+    for (unsigned knob = 0; knob < UI_FIELDS_PER_PAGE; knob++)
+        if (ui_state_field_for(knob) == (int32_t)slot) return (int32_t)knob;
+    return -1;
 }
 
 static uint16_t last_page_start(void)
@@ -174,6 +203,11 @@ void ui_state_surface_changed(void)
 
 void ui_state_surface_cleared(void)
 {
+    /* App disconnects must not abandon a local brightness preview or calibration. */
+    if (st.mode != UI_MODE_SURFACE) {
+        ui_state_surface_changed();
+        return;
+    }
     ui_state_init();
     surf_set_page(0);
 }
@@ -182,7 +216,8 @@ int ui_state_reveal(uint16_t slot)
 {
     if (!surf_field(slot)) return 0;
     leave_focus();
-    st.mode = UI_MODE_SURFACE;
+    /* Queue the host page underneath local settings; Back returns to the latest app.
+     * Browser hover is navigation, not permission to close a device editor. */
     uint16_t target = (uint16_t)((slot / UI_FIELDS_PER_PAGE) * UI_FIELDS_PER_PAGE);
     if (st.page == target) surf_set_page(target);
     else set_page(target);
@@ -226,10 +261,11 @@ void ui_state_push(unsigned pot, int pressed, uint32_t now_ms)
     if (pot >= UI_FIELDS_PER_PAGE) return;
 
     uint16_t bit = (uint16_t)(1u << pot);
+    int was_pressed = (st.press_mask & bit) != 0;
     if (pressed) st.press_mask |= bit;
     else         st.press_mask = (uint16_t)(st.press_mask & ~bit);
 
-    if (!pressed) return;               /* act on the press edge; release is only an affordance */
+    if (!pressed || was_pressed) return;               /* act on the press edge; release is only an affordance */
 
     if (st.mode == UI_MODE_SYSTEM) {
         if (st.system_selection == 0u) st.mode = UI_MODE_CAL_SELECT;
@@ -249,6 +285,14 @@ void ui_state_push(unsigned pot, int pressed, uint32_t now_ms)
     }
     if (st.mode != UI_MODE_SURFACE) return;
 
+    if (surf_operator_layout()) {
+        if (st.page == 0 && pot == 7u) { set_page(8); return; }
+        int32_t slot = ui_state_field_for(pot);
+        const surf_field_t *field = slot >= 0 ? surf_field((uint16_t)slot) : 0;
+        if (field && field->kind == EMP_KIND_ACTION) surf_activate((uint16_t)slot);
+        /* Operator settings turn in place; never borrow the action row for digits. */
+        return;
+    }
     if (st.focused >= 0) {
         /* While drilled, the digit row's knobs are digit controls, so pressing one means "done
          * here". The other row still addresses its own fields, so pressing one of those moves
@@ -263,7 +307,10 @@ void ui_state_push(unsigned pot, int pressed, uint32_t now_ms)
         return;
     }
 
-    enter_focus(ui_state_field_for(pot));
+    int32_t slot = ui_state_field_for(pot);
+    const surf_field_t *field = slot >= 0 ? surf_field((uint16_t)slot) : 0;
+    if (field && field->kind == EMP_KIND_ACTION) { surf_activate((uint16_t)slot); return; }
+    enter_focus(slot);
 }
 
 /* ------------------------------------------------------------------ buttons */
@@ -458,12 +505,12 @@ static double clamp_to_bounds(const surf_field_t *f, double v)
     return v;
 }
 
-/* A top knob edits one decimal place of the focused value. Only while drilled: in the overview
+/* An opposite-row knob edits one decimal place of the focused value. Only while drilled: in the overview
  * that same knob is an ordinary field control. */
 static int rotate_digit(unsigned pot, int32_t detents, uint32_t now_ms)
 {
     const surf_field_t *f = surf_field((uint16_t)st.focused);
-    if (!f || f->kind == EMP_KIND_READONLY) return 0;
+    if (!f || (f->kind == EMP_KIND_READONLY || f->kind == EMP_KIND_ACTION)) return 0;
     if (f->kind == EMP_KIND_COLOR) {
         unsigned k = pot - ui_digit_row_first();
         if (k >= f->color_count) return 0;
@@ -538,7 +585,7 @@ int ui_state_rotate(unsigned pot, int32_t detents, uint32_t now_ms)
     if (idx < 0) return 0;
 
     const surf_field_t *f = surf_field((uint16_t)idx);
-    if (!f || f->kind == EMP_KIND_READONLY) return 0;
+    if (!f || (f->kind == EMP_KIND_READONLY || f->kind == EMP_KIND_ACTION)) return 0;
 
     if (f->kind == EMP_KIND_COLOR && f->color_count >= 3u) {
         float color[4];

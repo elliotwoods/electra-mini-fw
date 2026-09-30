@@ -113,6 +113,18 @@ static void test_touch_calibration_policy(void)
 
 /* ------------------------------------------------------------------ the row split */
 
+static void test_generic_slots_follow_reading_order(void)
+{
+    surf_demo_descriptor(); ui_state_init();
+    int ok = 1;
+    for (unsigned physical = 0; physical < 8; physical++)
+        ok = ok && ui_state_field_for(physical) == (int32_t)physical;
+    ui_state_button(UI_BTN_PAGE_NEXT, 1, 1000);
+    for (unsigned physical = 0; physical < 4; physical++)
+        ok = ok && ui_state_field_for(physical + UI_ROW_SPLIT) == (int32_t)(8 + physical);
+    check("full pages use reading order, short pages use bottom row", ok);
+}
+
 static void test_row_split_is_not_the_page_size(void)
 {
     /* These two numbers used to be one constant, and were equal only by coincidence of a 4+4
@@ -137,10 +149,10 @@ static void test_press_drills_and_exits(void)
     tap(0, 1000);
     ok = ok && ui_state()->focused == 0;
 
-    /* A top knob is a digit control while drilled, so pressing one means "done here". */
+    /* A bottom knob is a digit control while drilled, so pressing one means "done here". */
     tap(UI_ROW_SPLIT, 1100);
     ok = ok && ui_state()->focused < 0;
-    check("press drills in, top press exits", ok);
+    check("press drills in, bottom press exits", ok);
 }
 
 static void test_press_is_edge_not_level(void)
@@ -162,7 +174,7 @@ static void test_press_is_edge_not_level(void)
     check("press acts on the edge, not the level", ok);
 }
 
-static void test_bottom_press_moves_between_fields(void)
+static void test_top_press_moves_between_fields(void)
 {
     surf_demo_descriptor();
     ui_state_init();
@@ -170,16 +182,16 @@ static void test_bottom_press_moves_between_fields(void)
     tap(0, 1000);
     int ok = ui_state()->focused == 0;
 
-    /* Pressing a different bottom knob moves to that field rather than leaving, which is what
+    /* Pressing a different top knob moves to that field rather than leaving, which is what
      * you want when comparing two parameters. */
     tap(1, 1100);
     ok = ok && ui_state()->focused == 1;
 
     /* Pressing the SAME knob again leaves — otherwise there would be no way out from the row
-     * you are already on without reaching for the top. */
+     * you are already on without reaching for the bottom. */
     tap(1, 1200);
     ok = ok && ui_state()->focused < 0;
-    check("bottom press moves between fields, repeat exits", ok);
+    check("top press moves between fields, repeat exits", ok);
 }
 
 static void test_drill_is_symmetric(void)
@@ -187,25 +199,25 @@ static void test_drill_is_symmetric(void)
     surf_demo_descriptor();
     ui_state_init();
 
-    /* Drill a BOTTOM field: the TOP row becomes the digit editor. */
+    /* Drill a TOP field: the BOTTOM row becomes the digit editor. */
     tap(0, 1000);
     int ok = ui_state()->focused == 0
-          && ui_state()->digit_top == 1
+          && ui_state()->digit_top == 0
           && ui_digit_row_first() == UI_ROW_SPLIT
           && ui_cell_row_first() == 0;
 
-    /* And a top press exits, because the top row is what is editing digits. */
+    /* And a bottom press exits, because the bottom row is what is editing digits. */
     tap(UI_ROW_SPLIT, 1100);
     ok = ok && ui_state()->focused < 0;
 
-    /* Drill a TOP field: the BOTTOM row becomes the digit editor, mirrored. */
+    /* Drill a BOTTOM field: the TOP row becomes the digit editor, mirrored. */
     tap(UI_ROW_SPLIT, 1200);
     ok = ok && ui_state()->focused == (int32_t)UI_ROW_SPLIT
-            && ui_state()->digit_top == 0
+            && ui_state()->digit_top == 1
             && ui_digit_row_first() == 0
             && ui_cell_row_first() == UI_ROW_SPLIT;
 
-    /* Now it is a BOTTOM press that exits, for the same reason reversed. */
+    /* Now it is a TOP press that exits, for the same reason reversed. */
     tap(0, 1300);
     ok = ok && ui_state()->focused < 0;
     check("drilling is symmetric between the rows", ok);
@@ -216,7 +228,7 @@ static void test_digit_knobs_follow_the_row(void)
     surf_demo_descriptor();
     ui_state_init();
 
-    /* Drilled into a bottom field, the TOP knobs edit digits and the BOTTOM knobs edit fields. */
+    /* Drilled into a top field, the BOTTOM knobs edit digits and the TOP knobs edit fields. */
     tap(0, 1000);
     double drilled = surf_field(0)->number;
     double neighbour = surf_field(1)->number;
@@ -225,7 +237,7 @@ static void test_digit_knobs_follow_the_row(void)
     int ok = !near(surf_field(0)->number, drilled);
     ok = ok && near(surf_field(1)->number, neighbour);  /* and it did NOT edit its own field */
 
-    /* while a bottom knob still edits its own field */
+    /* while a top knob still edits its own field */
     double other = surf_field(1)->number;
     (void)ui_state_rotate(1, 4, 1200);
     ok = ok && !near(surf_field(1)->number, other);
@@ -243,7 +255,7 @@ static void test_touch_only_highlights(void)
     int ok = ui_state()->focused < 0;
 
     tap(0, 1100);
-    ui_state_touch(0x20, 1200);                       /* a finger on top knob index 1 */
+    ui_state_touch(0x20, 1200);                       /* a finger on bottom knob index 1 */
     ok = ok && ui_state()->held_digit == 1;
 
     ui_state_touch(0x00, 1300);
@@ -265,7 +277,7 @@ static void test_page_buttons(void)
 
     ui_state_button(UI_BTN_PAGE_NEXT, 1, 1000);
     ok = ok && ui_state()->page == UI_FIELDS_PER_PAGE;
-    ok = ok && ui_state_field_for(0) == (int32_t)UI_FIELDS_PER_PAGE;
+    ok = ok && ui_state_field_for(4) == (int32_t)UI_FIELDS_PER_PAGE;
     const sim_wire_msg_t *screen = sim_wire_last(EMP_OP_SCREEN);
     ok = ok && screen && screen->len == 12 && screen->payload[8] == UI_FIELDS_PER_PAGE
             && screen->payload[10] == 4u;     /* the demo's final page is short */
@@ -315,7 +327,7 @@ static void test_readonly_is_not_editable(void)
     int ok = (f != 0) && f->kind == EMP_KIND_READONLY;
     if (ok) {
         double before = f->number;
-        (void)ui_state_rotate(idx - UI_FIELDS_PER_PAGE, 5, 1100);
+        (void)ui_state_rotate((unsigned)ui_state_knob_for(idx), 5, 1100);
         ok = near(surf_field(idx)->number, before);
     }
     check("a read-only field ignores its knob", ok);
@@ -328,7 +340,7 @@ static void test_choice_steps_and_clamps(void)
     ui_state_button(UI_BTN_PAGE_NEXT, 1, 1000);
 
     uint16_t idx = 8;
-    unsigned knob = idx - UI_FIELDS_PER_PAGE;
+    unsigned knob = (unsigned)ui_state_knob_for(idx);
     const surf_field_t *f = surf_field(idx);
     int ok = (f != 0) && f->kind == EMP_KIND_CHOICE && f->choice_count == 5;
 
@@ -367,12 +379,12 @@ static void test_choice_labels(void)
     check("choice labels are stored and readable", ok);
 }
 
-static void test_top_row_edits_digits_only_when_drilled(void)
+static void test_bottom_row_edits_digits_only_when_drilled(void)
 {
     surf_demo_descriptor();
     ui_state_init();
 
-    /* Not drilled: a top knob is an ordinary field control for its own field. */
+    /* Not drilled: a bottom knob is an ordinary field control for its own field. */
     double before = surf_field(UI_ROW_SPLIT)->number;
     (void)ui_state_rotate(UI_ROW_SPLIT, 4, 1000);
     int ok = !near(surf_field(UI_ROW_SPLIT)->number, before);
@@ -384,7 +396,7 @@ static void test_top_row_edits_digits_only_when_drilled(void)
     (void)ui_state_rotate(UI_ROW_SPLIT, UI_DIGIT_STEP, 1200);
     ok = ok && near(surf_field(UI_ROW_SPLIT)->number, other);
     ok = ok && !near(surf_field(0)->number, mine);
-    check("top row edits digits only while drilled", ok);
+    check("bottom row edits digits only while drilled", ok);
 }
 
 static void test_rotation_feedback_latches_then_expires(void)
@@ -407,20 +419,20 @@ static void test_colour_interaction(void)
     surf_demo_descriptor(); ui_state_init();
     ui_state_button(UI_BTN_PAGE_NEXT, 1, 1000);
     const uint16_t idx = 11u;
-    (void)ui_state_rotate(3, -10, 1100);
+    (void)ui_state_rotate(7, -10, 1100);
     const surf_field_t *f = surf_field(idx);
     int ok = f && f->color_count == 3u
           && nearf32(f->color[0], 0.225f) && nearf32(f->color[1], 0.45f)
           && nearf32(f->color[2], 0.9f);
 
-    tap(3, 1200);
-    (void)ui_state_rotate(UI_ROW_SPLIT, 1, 1300);
+    tap(7, 1200);
+    (void)ui_state_rotate(0, 1, 1300);
     f = surf_field(idx);
     ok = ok && nearf32(f->color[0], 0.235f)
-            && !ui_state_rotate(UI_ROW_SPLIT + 3u, 1, 1310);
+            && !ui_state_rotate(3u, 1, 1310);
 
     sim_wire_reset();
-    ui_state_touch((uint16_t)(1u << UI_ROW_SPLIT), 1400);
+    ui_state_touch((uint16_t)(1u << 0), 1400);
     const sim_wire_msg_t *focus = sim_wire_last(EMP_OP_FOCUS);
     ok = ok && focus && focus->len == 14u && focus->payload[8] == 1u
             && focus->payload[9] == idx;
@@ -638,6 +650,31 @@ static void test_brightness_settings_navigation(void)
     check("three-item settings navigation clamps", ok);
 }
 
+static void test_host_navigation_preserves_local_settings(void)
+{
+    surf_demo_descriptor();
+    enter_brightness(60u);
+    (void)ui_state_rotate(0, 5, 1050);
+    uint8_t preview = ui_state()->brightness_preview;
+    int ok = ui_state_reveal(8) && ui_state()->page == 8
+          && ui_state()->mode == UI_MODE_BRIGHTNESS
+          && ui_state()->brightness_preview == preview;
+    ui_state_surface_changed();
+    ok = ok && ui_state()->mode == UI_MODE_BRIGHTNESS
+            && ui_state()->brightness_preview == preview;
+    ui_state_surface_cleared();
+    ok = ok && ui_state()->mode == UI_MODE_BRIGHTNESS
+            && ui_state()->brightness_saved == 60u
+            && ui_state()->brightness_preview == preview;
+    ui_state_button(UI_BTN_BACK, 1, 1100);
+    ok = ok && ui_state()->mode == UI_MODE_SYSTEM
+            && ui_state()->brightness_preview == 60u;
+    ui_state_button(UI_BTN_BACK, 0, 1105);
+    ui_state_button(UI_BTN_BACK, 1, 1110);
+    ok = ok && ui_state()->mode == UI_MODE_SURFACE;
+    check("host reveal, replace and disconnect preserve local settings and cancel", ok);
+}
+
 static void test_brightness_preview_cancel_and_clamps(void)
 {
     surf_demo_descriptor();
@@ -733,11 +770,12 @@ int ui_run_selftests(ui_report_fn report)
     test_roundp();
     test_touch_calibration_policy();
 
+    test_generic_slots_follow_reading_order();
     test_row_split_is_not_the_page_size();
 
     test_press_drills_and_exits();
     test_press_is_edge_not_level();
-    test_bottom_press_moves_between_fields();
+    test_top_press_moves_between_fields();
     test_touch_only_highlights();
     test_drill_is_symmetric();
     test_digit_knobs_follow_the_row();
@@ -748,7 +786,7 @@ int ui_run_selftests(ui_report_fn report)
     test_readonly_is_not_editable();
     test_choice_steps_and_clamps();
     test_choice_labels();
-    test_top_row_edits_digits_only_when_drilled();
+    test_bottom_row_edits_digits_only_when_drilled();
     test_rotation_feedback_latches_then_expires();
     test_colour_interaction();
 
@@ -760,6 +798,7 @@ int ui_run_selftests(ui_report_fn report)
     test_system_button_reboots_and_all_calibrates();
     test_calibration_phase_actions();
     test_brightness_settings_navigation();
+    test_host_navigation_preserves_local_settings();
     test_brightness_preview_cancel_and_clamps();
     test_brightness_save_result();
     test_brightness_pwm_conversion();
