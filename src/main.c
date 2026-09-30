@@ -1772,7 +1772,12 @@ static void cmd_gscene(const char *name)
     else if(strcmp(name,"cal")==0) ui_render_demo_calibration();
     else if(strcmp(name,"cal-failed")==0) ui_render_demo_calibration_failed();
     else if(strcmp(name,"operator")==0) {surf_demo_operator();ui_state_init();ui_reset();ui_render();}
-    else if(strcmp(name,"color")==0) {surf_demo_descriptor();ui_state_init();ui_state_reveal(11);ui_state_push(3,1,1000);ui_state_push(3,0,1010);ui_reset();ui_render();}
+    else if(strcmp(name,"color")==0) {
+        surf_demo_descriptor();ui_state_init();ui_state_reveal(11);
+        float rgba[4]={.25f,.5f,1.f,.5f};surf_set_color(11,rgba,4);
+        unsigned knob=(unsigned)ui_state_knob_for(11);
+        ui_state_push(knob,1,1000);ui_state_push(knob,0,1010);ui_reset();ui_render();
+    }
     else if(strcmp(name,"page2")==0) ui_render_demo_page2();
     else if(strcmp(name,"empty")==0) ui_render_empty();
     else if(strcmp(name,"boot")==0) ui_render_boot(UI_BOOT_FRAMES-1);
