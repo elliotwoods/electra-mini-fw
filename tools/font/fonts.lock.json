@@ -1,14 +1,7 @@
 {
   "_comment": [
-    "The two typefaces web/tokens/src/tokens.ts declares, pinned by tag and SHA-256.",
-    "Same discipline as cef.lock: the binaries are gitignored, this file is the pin, and",
-    "tools/fetch-fonts.ps1 reproduces the tree. tokens.ts says an external font request is",
-    "a hard failure -- av-gui runs inside a Rust-hosted webview with no network egress -- so",
-    "these are embedded at build time and never fetched at run time.",
-    "",
-    "Only the weights the stylesheet actually uses. Inter is a variable font and covers its",
-    "whole range in one file; JetBrains Mono is not, and only Regular and Medium are asked",
-    "for (Medium is the 0.08em-tracked uppercase micro-label that is the visual identity)."
+    "Firmware font sources copied from the pinned av-frameworks font lock; licences and source binaries are retained in vendor/.",
+    "Generation must use the pinned Pillow/FreeType pair to keep coverage and metrics reproducible."
   ],
   "fonts": [
     {
@@ -32,5 +25,14 @@
       "weight": "400"
     }
   ],
-  "av_revision": "bb279c5d689b3be85044b75e7558d7863b6045d3"
+  "av_revision": "bb279c5d689b3be85044b75e7558d7863b6045d3",
+  "generator": {
+    "pillow": "12.3.0",
+    "freetype": "2.14.3"
+  },
+  "icons": {
+    "file": "DejaVuSans.ttf",
+    "sha256": "3fdf69cabf06049ea70a00b5919340e2ce1e6d02b0cc3c4b44fb6801bd1e0d22",
+    "licence": "DejaVu font licence, see vendor/LICENSE_DEJAVU"
+  }
 }

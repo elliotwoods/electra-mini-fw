@@ -151,7 +151,10 @@ def emit(faces, path):
 
 def main():
     lock = json.load(open(os.path.join(os.path.dirname(__file__), "fonts.lock.json")))
-    for source in lock["fonts"]:
+    actual = {"pillow": PIL.__version__, "freetype": ImageFont.core.freetype2_version}
+    if actual != lock["generator"]:
+        raise SystemExit("Font generator versions differ from fonts.lock.json: " + str(actual))
+    for source in lock["fonts"] + [lock["icons"]]:
         data = open(os.path.join(VENDOR, source["file"]), "rb").read()
         assert hashlib.sha256(data).hexdigest() == source["sha256"], source["file"]
     faces = [render_face(*spec) for spec in FACES]
