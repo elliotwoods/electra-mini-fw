@@ -40,6 +40,7 @@ def main():
     elif op==OP_HEARTBEAT:
      hb=parse_heartbeat(p)
      if hb['session_id']!=result['ready']['session_id']:raise RuntimeError('Device reset during mixed run')
+     if result['heartbeats'] and hb['uptime_ms']<result['heartbeats'][-1]['uptime_ms']:raise RuntimeError('Device uptime went backwards')
      result['heartbeats'].append(hb)
     elif op==6:result['diagnostics'].append(p.hex())
     elif op in (0x50,0x54,0x58,0x56):

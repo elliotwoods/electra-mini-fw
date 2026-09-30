@@ -33,6 +33,10 @@ def main():
    row={'backend':name,'workload':workload,'measured_samples':len(samples)}
    for key in ('submit_us','gpu_wait_us','pixel_spi_us','total_us','input_gap_ms'):row[key]=stats([r[key] for r in samples])
    row['cold']=[d['cold'] for d in data if d['workload']==workload]
+   if workload=='paging':
+    cold=[json.loads((Q/'cold'/name/f'paging-{run}.json').read_text()) for run in range(3)]
+    if any(not d['cold_paging'] or d['cold']['index']!=0 or d['cold']['input_drops'] or d['cold']['accel_errors'] for d in cold):raise ValueError('Invalid cold paging record')
+    row['cold']=[d['cold'] for d in cold]
    row['protocol_error_delta']=delta;rows.append(row)
   size=subprocess.check_output([SIZE,'-A',str(build/'app.elf')],text=True)
   sections={k:int(v) for k,v in re.findall(r'^(\.[a-zA-Z0-9_]+)\s+(\d+)\s+\d+',size,re.M)}
@@ -64,6 +68,7 @@ def main():
  if (Q/'dave-interrupted.raw').exists():shutil.copy2(Q/'dave-interrupted.raw',probes/'dave-interrupted.raw')
  (probes/'README.md').write_text('These records are excluded from the comparison. The first probe lacked render-buffer submission; the corrected probe hit a cold full-canvas timeout. The bounded probe verified the fixes. The interrupted matrix predates the single-frame reset fix and has no valid complete matrix.\n')
  shutil.copytree(Q/'mixed',OUT/'mixed',dirs_exist_ok=True)
+ shutil.copytree(Q/'cold',OUT/'cold',dirs_exist_ok=True)
  for folder in ['storage-before','storage-after-bench','storage-after-production']:
   shutil.copytree(Q/folder,OUT/folder,dirs_exist_ok=True)
  before=json.loads((Q/'storage-before/saved-records.json').read_text())
