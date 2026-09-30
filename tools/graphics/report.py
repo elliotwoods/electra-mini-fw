@@ -36,6 +36,13 @@ def main():
    row['cold']=[d['cold'] for d in data if d['workload']==workload]
    if workload=='paging':
     cold=[json.loads((Q/'cold'/name/f'paging-{run}.json').read_text()) for run in range(3)]
+    cold_meta=json.loads((Q/'cold'/name/'manifest.json').read_text())
+    expected=json.loads((Q/'source-manifest.json').read_text())['compile_settings'][name+'_cold']['srec_sha256']
+    if cold_meta['image_sha256']!=expected:raise ValueError('Cold image mismatch')
+    cb=counters(cold_meta['emp_before']);ca=counters(cold_meta['emp_after'])
+    if cb['session_id']!=ca['session_id'] or any(ca[k]!=cb[k] for k in ('rx_decode_errors','rx_seq_gaps','tx_dropped')):raise ValueError('Cold protocol failure')
+    ci=counters(cold_meta['identity_after'])
+    if any(ci[k] for k in ('input_queue_drops','graphics_errors','usb_tx_dropped','nmi_count')):raise ValueError('Cold diagnostics failure')
     if any(not d['cold_paging'] or d['cold']['index']!=0 or d['cold']['input_drops'] or d['cold']['accel_errors'] for d in cold):raise ValueError('Invalid cold paging record')
     row['cold']=[d['cold'] for d in cold]
    row['protocol_error_delta']=delta;rows.append(row)
