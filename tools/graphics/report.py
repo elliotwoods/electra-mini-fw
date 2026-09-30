@@ -64,7 +64,12 @@ def main():
  if (Q/'dave-interrupted.raw').exists():shutil.copy2(Q/'dave-interrupted.raw',probes/'dave-interrupted.raw')
  (probes/'README.md').write_text('These records are excluded from the comparison. The first probe lacked render-buffer submission; the corrected probe hit a cold full-canvas timeout. The bounded probe verified the fixes. The interrupted matrix predates the single-frame reset fix and has no valid complete matrix.\n')
  shutil.copytree(Q/'mixed',OUT/'mixed',dirs_exist_ok=True)
- for name in ['source-manifest.json','backend-guard.log']:shutil.copy2(Q/name,OUT/name)
+ for folder in ['storage-before','storage-after-bench','storage-after-production']:
+  shutil.copytree(Q/folder,OUT/folder,dirs_exist_ok=True)
+ before=json.loads((Q/'storage-before/saved-records.json').read_text())
+ if any(json.loads((Q/folder/'saved-records.json').read_text())!=before for folder in ['storage-after-bench','storage-after-production']):raise ValueError('Saved calibration/preferences changed')
+ for name in ['source-manifest.json','backend-guard.log','baseline-build.log','ra-build.log','dave-build.log','production-build.log','flash-baseline.log','flash-ra-final.log','flash-dave-final.log','production-install.log']:
+  shutil.copy2(Q/name,OUT/name)
  for name in ['portable-tests','graphics-tests','fonts','palette']:shutil.copy2(ROOT/'build/host'/f'{name}.log',OUT/(name+'.log'))
  (OUT/'sha256.json').write_text(json.dumps({str(p.relative_to(OUT)):sha(p) for p in sorted(OUT.rglob('*')) if p.is_file() and p.name!='sha256.json'},indent=2)+'\n')
  print('\n'.join(lines))

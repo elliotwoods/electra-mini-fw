@@ -26,17 +26,8 @@ def main():
   # Reading console counters also consumes protocol frames, so start the decoder cleanly.
   link.dec.buf.clear();link.dec.need=0
   start=time.monotonic();next_ping=start;ping_id=0;pending={};last_reconnect=start;last_page=-1;acks={};echo_expected={}
-  while time.monotonic()-start<args.seconds:
-   now=time.monotonic();step=result['updates'];n=1 if step%3==0 else 8
-   payload=struct.pack('<QH',rev,n)
-   for k in range(n):payload+=struct.pack('<HIBd',k,acks.get(k,0),1,((step+k)%190-95)/100)
-   link.send(0x24,payload,CH_SURFACE);result['updates']+=1
-   page=int((now-start)//12)%2
-   if page!=last_page:link.send(0x25,struct.pack('<QH',rev,8 if page else 0),CH_SURFACE);last_page=page
-   if now>=next_ping:
-    ping_id+=1;link.send(OP_PING,struct.pack('<IQ',ping_id,int(time.time()*1e6)));pending[ping_id]=now
-    blob=bytes([ping_id%256])*64;echo_expected[blob]=now;link.send(OP_ECHO,blob);next_ping=now+1
-   for m in link.pump(.03):
+  def process(messages):
+   for m in messages:
     if 'error' in m:raise RuntimeError(m)
     op=m['opcode'];p=m['payload']
     if op==OP_PONG:
@@ -55,13 +46,30 @@ def main():
      result['input_messages'].append({'opcode':op,'payload':p.hex()})
      if op==0x50:
       edit=parse_edit(p);acks[edit['id']]=edit['edit_seq']
+  while time.monotonic()-start<args.seconds:
+   now=time.monotonic();step=result['updates'];n=1 if step%3==0 else 8
+   payload=struct.pack('<QH',rev,n)
+   for k in range(n):payload+=struct.pack('<HIBd',k,acks.get(k,0),1,((step+k)%190-95)/100)
+   link.send(0x24,payload,CH_SURFACE);result['updates']+=1
+   page=int((now-start)//12)%2
+   if page!=last_page:link.send(0x25,struct.pack('<QH',rev,8 if page else 0),CH_SURFACE);last_page=page
+   if now>=next_ping:
+    ping_id+=1;link.send(OP_PING,struct.pack('<IQ',ping_id,int(time.time()*1e6)));pending[ping_id]=now
+    blob=bytes([ping_id%256])*64;echo_expected[blob]=now;link.send(OP_ECHO,blob);next_ping=now+1
+   process(link.pump(.03))
    if pending and now-min(pending.values())>5:raise RuntimeError('Lost ping / stalled device')
+   if echo_expected and now-min(echo_expected.values())>5:raise RuntimeError('Lost echo reply')
    if now-last_reconnect>120 and not pending and not echo_expected:
     sequence=link.seq;link.close();link=Link();link.seq=sequence;ready=hello(link)
     if ready['session_id']!=result['ready']['session_id']:raise RuntimeError('Device reset during mixed run')
     pending.clear();last_reconnect=now;result['reconnects']+=1
    if step%250==0:print('mixed elapsed',round(now-start),'updates',step,'pongs',result['pongs'],flush=True)
   result['elapsed_seconds']=time.monotonic()-start
+  drain_start=time.monotonic()
+  while (pending or echo_expected) and time.monotonic()-drain_start<5:process(link.pump(.03))
+  result['reply_drain_seconds']=time.monotonic()-drain_start
+  result['requests']=ping_id
+  if pending or echo_expected or result['pongs']!=ping_id or result['echoes']!=ping_id:raise RuntimeError('Missing final ping/echo replies')
   result['pending_pings_at_end']=len(pending);result['pending_echoes_at_end']=len(echo_expected)
   result['id_after']=command(link.c,'id').decode('latin1');result['emp_after']=command(link.c,'emp').decode('latin1')
   def counters(s):return {k:int(v,16) for k,v in re.findall(r'([a-z_]+) 0x([0-9A-Fa-f]+)',s)}
