@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2];sys.path.insert(0,str(ROOT/'tools/deploy'))
 from flash_usb import router_maintenance
 from emp import Link,field_record,crc32c,parse_ready,parse_heartbeat,parse_edit,OP_HELLO,OP_READY,OP_PING,OP_PONG,OP_ECHO,OP_ECHO_REPLY,OP_HEARTBEAT,OP_DESC_ACK,CH_SURFACE
-from qualify import command
+from qualify import command,framebuffer
 
 def hello(link):
  link.send(OP_HELLO,struct.pack('<BBHQI',1,2,1016,0,16));m,_=link.wait_for(OP_READY,5)
@@ -17,6 +17,21 @@ def descriptor(link,rev):
  link.send(0x22,struct.pack('<QHI',rev,len(bodies),crc32c(b''.join(bodies))),CH_SURFACE)
  m,_=link.wait_for(OP_DESC_ACK,5)
  if not m:raise RuntimeError('Descriptor not accepted')
+def validate_result(result):
+ def counters(s):return {k:int(v,16) for k,v in re.findall(r'([a-z_]+) 0x([0-9A-Fa-f]+)',s)}
+ before=counters(result['emp_before']);after=counters(result['emp_after'])
+ if after['session_id']!=before['session_id']:raise RuntimeError('Device reset before final identity check')
+ result['protocol_error_delta']={k:after[k]-before[k] for k in ('rx_decode_errors','rx_seq_gaps','tx_dropped')}
+ if any(result['protocol_error_delta'].values()):raise RuntimeError('New protocol errors')
+ initial=counters(result['id_before']);ids=counters(result['id_after'])
+ result['device_error_delta']={k:ids[k]-initial[k] for k in ('input_queue_drops','graphics_errors','usb_tx_dropped','nmi_count')}
+ if any(result['device_error_delta'].values()) or any(ids[k] for k in ('input_queue_drops','graphics_errors','nmi_count')):raise RuntimeError('Device diagnostics failed')
+ if result['diagnostics']:raise RuntimeError('Device emitted a diagnostic')
+ if result['pending_pings_at_end'] or result['pending_echoes_at_end'] or result['pongs']!=result['requests'] or result['echoes']!=result['requests']:raise RuntimeError('Missing final replies')
+ h=result['heartbeats']
+ if not h or any(x['session_id']!=before['session_id'] for x in h) or any(b['uptime_ms']<a['uptime_ms'] for a,b in zip(h,h[1:])):raise RuntimeError('Missing heartbeats or device reset')
+ result['success']=True
+
 def main():
  ap=argparse.ArgumentParser();ap.add_argument('--out',required=True);ap.add_argument('--seconds',type=int,default=600);args=ap.parse_args();out=Path(args.out);out.mkdir(parents=True,exist_ok=True)
  url=router_maintenance(True);link=None;result={'updates':0,'pongs':0,'echoes':0,'heartbeats':[],'input_messages':[],'diagnostics':[],'reconnects':0,'ping_latency_ms':[]}
@@ -27,6 +42,7 @@ def main():
   command(link.c,'sim b 0');command(link.c,'sim b 0')
   result['ready']=hello(link);rev=0xBEEF0030;descriptor(link,rev)
   result['id_before']=command(link.c,'id').decode('latin1');result['emp_before']=command(link.c,'emp').decode('latin1')
+  time.sleep(.2);framebuffer(link.c,out,'live-start')
   # Reading console counters also consumes protocol frames, so start the decoder cleanly.
   link.dec.buf.clear();link.dec.need=0
   start=time.monotonic();next_ping=start;ping_id=0;pending={};last_reconnect=start;last_page=-1;acks={};echo_expected={}
@@ -76,15 +92,9 @@ def main():
   result['requests']=ping_id
   if pending or echo_expected or result['pongs']!=ping_id or result['echoes']!=ping_id:raise RuntimeError('Missing final ping/echo replies')
   result['pending_pings_at_end']=len(pending);result['pending_echoes_at_end']=len(echo_expected)
+  framebuffer(link.c,out,'live-end')
   result['id_after']=command(link.c,'id').decode('latin1');result['emp_after']=command(link.c,'emp').decode('latin1')
-  def counters(s):return {k:int(v,16) for k,v in re.findall(r'([a-z_]+) 0x([0-9A-Fa-f]+)',s)}
-  before=counters(result['emp_before']);after=counters(result['emp_after'])
-  result['protocol_error_delta']={k:after[k]-before[k] for k in ('rx_decode_errors','rx_seq_gaps','tx_dropped')}
-  if any(result['protocol_error_delta'].values()):raise RuntimeError('New protocol errors')
-  ids=counters(result['id_after'])
-  if any(ids[k] for k in ('input_queue_drops','graphics_errors','usb_tx_dropped','nmi_count')):raise RuntimeError('Device diagnostics failed')
-  if result['diagnostics']:raise RuntimeError('Device emitted a diagnostic')
-  result['success']=True
+  validate_result(result)
  finally:
   (out/'mixed.json').write_text(json.dumps(result,indent=2)+'\n')
   if link:link.close()

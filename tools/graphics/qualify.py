@@ -34,6 +34,8 @@ def benchmark(dev,out,workload,count,run,cold_paging=False):
     return result
 def screenshot(dev,out,scene):
     command(dev,'gscene '+scene,b'GSCENE done')
+    framebuffer(dev,out,scene)
+def framebuffer(dev,out,scene):
     dev.drain();dev.write(b'shot\r');buf=bytearray();end=time.monotonic()+120
     while time.monotonic()<end:
         buf.extend(dev.read(4096));m=re.search(rb'SHOT ([0-9A-Fa-f]+) ([0-9A-Fa-f]+)\r?\n',buf)
