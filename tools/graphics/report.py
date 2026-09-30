@@ -21,7 +21,7 @@ def main():
   delta={k:after[k]-before[k] for k in ('rx_decode_errors','rx_seq_gaps','tx_dropped')}
   if any(delta.values()):raise ValueError('Protocol errors: '+name+' '+str(delta))
   ids=counters(meta['identity_after'])
-  if any(ids[k] for k in ('input_queue_drops','graphics_errors','usb_tx_dropped','nmi_count')):raise ValueError('Failed device diagnostics: '+name)
+  if ids['usb_tx_dropped']!=counters(meta['identity'])['usb_tx_dropped'] or any(ids[k] for k in ('input_queue_drops','graphics_errors','nmi_count')):raise ValueError('Failed device diagnostics: '+name)
   data=[]
   for workload in WORKLOADS:
    for run in range(3):
@@ -42,7 +42,7 @@ def main():
     cb=counters(cold_meta['emp_before']);ca=counters(cold_meta['emp_after'])
     if cb['session_id']!=ca['session_id'] or any(ca[k]!=cb[k] for k in ('rx_decode_errors','rx_seq_gaps','tx_dropped')):raise ValueError('Cold protocol failure')
     ci=counters(cold_meta['identity_after'])
-    if any(ci[k] for k in ('input_queue_drops','graphics_errors','usb_tx_dropped','nmi_count')):raise ValueError('Cold diagnostics failure')
+    if ci['usb_tx_dropped']!=counters(cold_meta['identity'])['usb_tx_dropped'] or any(ci[k] for k in ('input_queue_drops','graphics_errors','nmi_count')):raise ValueError('Cold diagnostics failure')
     if any(not d['cold_paging'] or d['cold']['index']!=0 or d['cold']['input_drops'] or d['cold']['accel_errors'] for d in cold):raise ValueError('Invalid cold paging record')
     row['cold']=[d['cold'] for d in cold]
    row['protocol_error_delta']=delta;rows.append(row)
@@ -53,6 +53,8 @@ def main():
  mixed=json.loads((Q/'mixed/mixed.json').read_text())
  if not mixed.get('success') or mixed['elapsed_seconds']<600:raise ValueError('Incomplete live endurance run')
  validate_result(mixed)
+ production=json.loads((Q/'production/production-check.json').read_text())
+ if not production.get('success'):raise ValueError('Production checks did not pass')
  OUT.mkdir(parents=True,exist_ok=True)
  for name,source,size in validated:
   dest=OUT/name;dest.mkdir(exist_ok=True)
@@ -78,11 +80,12 @@ def main():
  (probes/'README.md').write_text('These records are excluded from the comparison. The first probe lacked render-buffer submission; the corrected probe hit a cold full-canvas timeout. The bounded probe verified the fixes. The interrupted matrix predates the single-frame reset fix and has no valid complete matrix. The inherited-brightness mixed attempt is invalid fixture setup. mixed-original-gate is the complete live run rejected by an absolute USB-drop check; retained before/after counters prove no new drops and the corrected delta gate revalidates the same record.\n')
  shutil.copytree(Q/'mixed',OUT/'mixed',dirs_exist_ok=True)
  shutil.copytree(Q/'cold',OUT/'cold',dirs_exist_ok=True)
+ shutil.copytree(Q/'production',OUT/'production',dirs_exist_ok=True)
  for folder in ['storage-before','storage-after-bench','storage-after-production']:
   shutil.copytree(Q/folder,OUT/folder,dirs_exist_ok=True)
  before=json.loads((Q/'storage-before/saved-records.json').read_text())
  if any(json.loads((Q/folder/'saved-records.json').read_text())!=before for folder in ['storage-after-bench','storage-after-production']):raise ValueError('Saved calibration/preferences changed')
- for name in ['source-manifest.json','backend-parity.json','backend-guard.log','baseline-build.log','ra-build.log','dave-build.log','production-build.log','flash-baseline.log','flash-ra-final.log','flash-dave-final.log','production-install.log','baseline-cold-build.log','ra-cold-build.log','dave-cold-build.log','flash-cold-baseline.log','flash-cold-ra.log','flash-cold-dave.log']:
+ for name in ['source-manifest.json','endurance-gate-tests.log','production-check.log','backend-parity.json','backend-guard.log','baseline-build.log','ra-build.log','dave-build.log','production-build.log','flash-baseline.log','flash-ra-final.log','flash-dave-final.log','production-install.log','baseline-cold-build.log','ra-cold-build.log','dave-cold-build.log','flash-cold-baseline.log','flash-cold-ra.log','flash-cold-dave.log']:
   shutil.copy2(Q/name,OUT/name)
  for name in ['portable-tests','graphics-tests','fonts','palette']:shutil.copy2(ROOT/'build/host'/f'{name}.log',OUT/(name+'.log'))
  (OUT/'sha256.json').write_text(json.dumps({str(p.relative_to(OUT)):sha(p) for p in sorted(OUT.rglob('*')) if p.is_file() and p.name!='sha256.json'},indent=2)+'\n')
