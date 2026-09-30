@@ -1788,12 +1788,13 @@ static void cmd_gscene(const char *name)
 }
 static void cmd_gbench(const char *a)
 {
-    const char *p=a;uint32_t workload=arg_hex(&p),count=arg_hex(&p);
+    const char *p=a;uint32_t workload=arg_hex(&p),count=arg_hex(&p),cold_page=arg_hex(&p);
     if(workload>6||count<1||count>331){console_write("gbench <0..6> <1..14B hex>\r\n");return;}
     emp_session_mute(1);g_bench_scene=1;
     surf_demo_descriptor();ui_state_init();ui_reset();
     if(workload==1) {ui_state_push(4,1,bsp_millis());ui_state_push(4,0,bsp_millis());}
     if(workload==3) ui_state_reveal(11);
+    if(workload==4&&cold_page)ui_state_reveal(8);
     ui_render();discard_demo_actions();
     gfx_cache_reset(); /* First sample has cold caches; fixtures are otherwise already visible. */
     g_input_gap_max=g_input_drops=0;

@@ -17,8 +17,8 @@ def receive(dev, marker, timeout=1200):
     raise TimeoutError(f'No {marker!r}; received {len(out)} bytes')
 def command(dev,line,marker=b'\r\n> ',timeout=1200):
     dev.drain();dev.write((line+'\r').encode());return receive(dev,marker,timeout)
-def benchmark(dev,out,workload,count,run):
-    raw=command(dev,f'gbench {workload:X} {count:X}',b'GBEND')
+def benchmark(dev,out,workload,count,run,cold_paging=False):
+    raw=command(dev,f'gbench {workload:X} {count:X}'+(' 1' if cold_paging else ''),b'GBEND')
     (out/f'{WORKLOADS[workload]}-{run}.raw').write_bytes(raw)
     rows=[]
     for m in re.finditer(rb'GB ((?:[0-9A-F]{8} ){7}[0-9A-F]{8})\r\n',raw):
@@ -28,7 +28,7 @@ def benchmark(dev,out,workload,count,run):
     clock=re.search(rb'clock_cycles_per_100ms 0x([0-9A-Fa-f]+)',raw)
     if not clock or not 23500000<int(clock[1],16)<24500000:raise ValueError('Invalid 240 MHz clock qualification')
     span=re.search(rb'clock_span_ms 0x([0-9A-Fa-f]+)',raw)
-    result={'clock_span_ms':int(span[1],16) if span else None,'workload':WORKLOADS[workload],'run':run,'cycles_per_100ms':int(clock[1],16),'cold':rows[1] if workload==4 and len(rows)>1 else rows[0],'warmup':rows[1:31],'measured':rows[31:]}
+    result={'cold_paging':cold_paging,'clock_span_ms':int(span[1],16) if span else None,'workload':WORKLOADS[workload],'run':run,'cycles_per_100ms':int(clock[1],16),'cold':rows[1] if workload==4 and len(rows)>1 else rows[0],'warmup':rows[1:31],'measured':rows[31:]}
     (out/f'{WORKLOADS[workload]}-{run}.json').write_text(json.dumps(result,indent=2)+'\n')
     print(WORKLOADS[workload],run,'max_us',max(x['total_us'] for x in rows),'gap_ms',max(x['input_gap_ms'] for x in rows),'errors',max(x['accel_errors'] for x in rows),flush=True)
     return result
@@ -48,7 +48,8 @@ def screenshot(dev,out,scene):
         print('device capture',scene,w,h,flush=True);return
     raise TimeoutError('Incomplete screenshot; refusing a partial image')
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('--out',required=True);ap.add_argument('--image');ap.add_argument('--runs',type=int,default=3);ap.add_argument('--count',type=int,default=331);ap.add_argument('--workloads',default='0,1,2,3,4,5,6');ap.add_argument('--scenes',default='');ap.add_argument('--mixed-seconds',type=int,default=0);args=ap.parse_args()
+    ap=argparse.ArgumentParser();ap.add_argument('--out',required=True);ap.add_argument('--image');ap.add_argument('--runs',type=int,default=3);ap.add_argument('--count',type=int,default=331);ap.add_argument('--workloads',default='0,1,2,3,4,5,6');ap.add_argument('--scenes',default='');ap.add_argument('--mixed-seconds',type=int,default=0);ap.add_argument('--cold-paging',action='store_true');args=ap.parse_args()
+    if args.cold_paging and (args.count!=1 or args.workloads!='4'):ap.error('--cold-paging requires --count 1 --workloads 4')
     out=Path(args.out);out.mkdir(parents=True,exist_ok=True)
     meta={'utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'transport':'physical Mini / macOS IOKit'}
     if args.image:meta['image_sha256']=hashlib.sha256(Path(args.image).read_bytes()).hexdigest()
@@ -58,7 +59,7 @@ def main():
         for scene in filter(None,args.scenes.split(',')):screenshot(dev,out,scene)
         results=[]
         for run in range(args.runs):
-            for workload in map(int,filter(None,args.workloads.split(','))):results.append(benchmark(dev,out,workload,args.count,run))
+            for workload in map(int,filter(None,args.workloads.split(','))):results.append(benchmark(dev,out,workload,args.count,run,args.cold_paging))
         start=time.monotonic();n=0
         while time.monotonic()-start<args.mixed_seconds:
             results.append(benchmark(dev,out,n%7,8,100+n));n+=1
