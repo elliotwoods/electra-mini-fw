@@ -116,6 +116,8 @@ int main(int argc, char **argv)
     if      (strncmp(scene,"sparse-",7)==0) {fixture_sparse((unsigned)atoi(scene+7),0);ui_render();}
     else if (strcmp(scene,"holes")==0) {fixture_sparse(4,1);ui_render();}
     else if (strcmp(scene, "specimen") == 0) scene_specimen();
+    else if (strcmp(scene,"operator-settings")==0) {surf_demo_operator();ui_state_init();ui_state_reveal(8);ui_render();}
+    else if (strcmp(scene,"operator-settings-press")==0) {surf_demo_operator();ui_state_init();ui_state_reveal(8);ui_state_touch(1,100);ui_state_push(0,1,120);ui_render();}
     else if (strcmp(scene,"operator-touch")==0) {surf_demo_operator();ui_state_init();ui_state_touch(1,100);ui_render();}
     else if (strcmp(scene,"operator-press")==0) {surf_demo_operator();ui_state_init();ui_state_touch(1,100);ui_state_push(0,1,120);ui_render();}
     else if (strcmp(scene, "operator") == 0) { surf_demo_operator(); ui_render(); }

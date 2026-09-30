@@ -711,13 +711,13 @@ static void render_operator(int full)
 static void render_operator_settings(int full)
 {
     static char previous[8][96];
-    static uint16_t previous_press;
+    static uint16_t previous_press,previous_touch;
     const ui_state_t *st = ui_state();
     const uint16_t ground = C_BG, panel = C_CELL, ink = C_VALUE, muted = C_TITLE;
     if (full) {
         gfx_set_fg(ground);
         for (int16_t y = 0; y < 480; y += 80) gfx_fill_rect(0, y, 800, 80);
-        memset(previous, 0xff, sizeof(previous)); previous_press = 0xffff;
+        memset(previous, 0xff, sizeof(previous)); previous_press = previous_touch = 0xffff;
         text_draw(&font_small, 24, 114, "MOTION SETTINGS", muted, ground);
         text_draw_right(&font_small, 776, 114, "2 / 2", muted, ground);
         text_draw(&font_small, 24, 318, "BUTTON 1: BACK TO MANUAL CONTROL", muted, ground);
@@ -725,7 +725,9 @@ static void render_operator_settings(int full)
     for (unsigned k = 0; k < 8; ++k) {
         const surf_field_t *f = surf_field((uint16_t)(8 + k));
         char value[96] = {0}; if (f) value_text(f, value, sizeof(value));
-        if (!full && strcmp(previous[k], value) == 0 && !((previous_press ^ st->press_mask) & (1u << (k ^ 4u)))) continue;
+        uint16_t bit=(uint16_t)(1u<<(k^4u));
+        int pressed=(st->press_mask&bit)!=0,touched=(st->touch_mask&bit)!=0;
+        if (!full && strcmp(previous[k], value) == 0 && !((previous_press ^ st->press_mask) & bit) && !((previous_touch ^ st->touch_mask)&bit)) continue;
         memcpy(previous[k], value, sizeof(value));
         if (k < 4) {
             int16_t x = (int16_t)(16 + k * 196);
@@ -746,14 +748,19 @@ static void render_operator_settings(int full)
             text_draw(&font_small, 224, 24, "COMMAND ROUTE", muted, ground);
             int connected = f && ((f->value_tag == EMP_VAL_BOOL && f->boolean) ||
                 (f->value_tag == EMP_VAL_TEXT && strcmp(f->text, "true") == 0));
-            text_draw(&font_ui, 224, 56, connected ? "Connected" : "Disconnected", ink, ground);
+            text_draw(&font_ui, 224, 56, connected ? "Connected" : "Disconnected", connected ? C_LIVE : C_TITLE, ground);
         } else {
             gfx_set_fg(ground); gfx_fill_rect(24, 170, 752, 124);
             text_draw(&font_small, 24, 170, "OPERATION", muted, ground);
             fit_text(&font_ui, value, 744); text_draw(&font_ui, 24, 218, value, ink, ground);
         }
+        if(k<4||k==4||k==7) {
+            int16_t px=(int16_t)(16+(k>=4?k-4:k)*196),py=k>=4?12:366,ph=k>=4?88:102;
+            if(touched){gfx_set_fg(C_LIVE);gfx_fill_rect(px+72,py+3,40,3);}
+            if(pressed)frame(px+4,py+4,176,ph-8,2,C_INDICATOR);
+        }
     }
-    previous_press = st->press_mask;
+    previous_press = st->press_mask;previous_touch=st->touch_mask;
 }
 
 static void render_overview(int full)

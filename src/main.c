@@ -1771,6 +1771,7 @@ static void cmd_gscene(const char *name)
     else if(strcmp(name,"brightness")==0) ui_render_demo_brightness_mid();
     else if(strcmp(name,"cal")==0) ui_render_demo_calibration();
     else if(strcmp(name,"cal-failed")==0) ui_render_demo_calibration_failed();
+    else if(strcmp(name,"operator-settings")==0) {surf_demo_operator();ui_state_init();ui_state_reveal(8);ui_reset();ui_render();}
     else if(strcmp(name,"operator")==0) {surf_demo_operator();ui_state_init();ui_reset();ui_render();}
     else if(strcmp(name,"color")==0) {
         surf_demo_descriptor();ui_state_init();ui_state_reveal(11);

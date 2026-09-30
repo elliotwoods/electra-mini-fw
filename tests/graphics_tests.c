@@ -74,7 +74,11 @@ static void operator_tests(void)
     ui_state_push(0,0,140);ui_state_touch(0,160);ui_render();
     memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
     CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
-    puts("  operator touched/pressed cues and release match a clean repaint");
+    ui_state_reveal(8);ui_render();ui_state_touch(1,180);ui_state_push(0,1,200);ui_render();
+    ui_state_push(0,0,220);ui_state_touch(0,240);ui_render();
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    puts("  both operator pages restore touched/pressed cues to a clean repaint");
 }
 static void eviction_tests(void)
 {
