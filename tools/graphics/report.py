@@ -53,6 +53,16 @@ def main():
   t=r['total_us'];cold=', '.join(f"{c['total_us']/1000:.2f}" for c in r['cold'])
   lines.append(f"| {r['backend']} | {r['workload']} | {t['median']/1000:.2f} | {t['p95']/1000:.2f} | {t['max']/1000:.2f} | {r['input_gap_ms']['max']} | {cold} |")
  (OUT/'comparison.md').write_text('\n'.join(lines)+'\n')
+ # Failed bring-up probes and an interrupted obsolete matrix are diagnostic evidence only.
+ probes=OUT/'probes';probes.mkdir(exist_ok=True)
+ for folder in ['dave-probe','dave-corrected-probe','dave-bounded-probe']:
+  source=Q/folder
+  if source.exists():
+   dest=probes/folder;dest.mkdir(exist_ok=True)
+   for p in source.iterdir():
+    if p.suffix in ('.raw','.json','.png'):shutil.copy2(p,dest/p.name)
+ if (Q/'dave-interrupted.raw').exists():shutil.copy2(Q/'dave-interrupted.raw',probes/'dave-interrupted.raw')
+ (probes/'README.md').write_text('These records are excluded from the comparison. The first probe lacked render-buffer submission; the corrected probe hit a cold full-canvas timeout. The bounded probe verified the fixes. The interrupted matrix predates the single-frame reset fix and has no valid complete matrix.\n')
  shutil.copytree(Q/'mixed',OUT/'mixed',dirs_exist_ok=True)
  for name in ['source-manifest.json','backend-guard.log']:shutil.copy2(Q/name,OUT/name)
  for name in ['portable-tests','graphics-tests','fonts','palette']:shutil.copy2(ROOT/'build/host'/f'{name}.log',OUT/(name+'.log'))
