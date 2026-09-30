@@ -1,0 +1,208 @@
+{
+  "source_revision": "bb279c5d689b3be85044b75e7558d7863b6045d3",
+  "colours": {
+    "BG": 4258,
+    "CELL": 6372,
+    "CELL_HOT": 8485,
+    "CELL_DOWN": 10598,
+    "OUTLINE": 14824,
+    "TITLE": 50777,
+    "ICON": 61277,
+    "NAV": 9885,
+    "VALUE": 61277,
+    "UNIT": 50777,
+    "ACCENT": 9885,
+    "TRACK": 33,
+    "DIM": 50777,
+    "DISABLED": 27567,
+    "TOGGLE_ON": 11959,
+    "ALERT": 64996,
+    "LINK": 40213,
+    "LIVE": 11959,
+    "DANGER": 64398,
+    "STOP": 24869,
+    "INDICATOR": 40213
+  },
+  "checks": [
+    {
+      "fg": "VALUE",
+      "bg": "BG",
+      "minimum": 7,
+      "ratio": 15.677
+    },
+    {
+      "fg": "VALUE",
+      "bg": "CELL",
+      "minimum": 7,
+      "ratio": 14.413
+    },
+    {
+      "fg": "VALUE",
+      "bg": "CELL_HOT",
+      "minimum": 7,
+      "ratio": 13.109
+    },
+    {
+      "fg": "VALUE",
+      "bg": "CELL_DOWN",
+      "minimum": 7,
+      "ratio": 11.772
+    },
+    {
+      "fg": "TITLE",
+      "bg": "BG",
+      "minimum": 4.5,
+      "ratio": 11.266
+    },
+    {
+      "fg": "TITLE",
+      "bg": "CELL",
+      "minimum": 4.5,
+      "ratio": 10.358
+    },
+    {
+      "fg": "TITLE",
+      "bg": "CELL_HOT",
+      "minimum": 4.5,
+      "ratio": 9.421
+    },
+    {
+      "fg": "TITLE",
+      "bg": "CELL_DOWN",
+      "minimum": 4.5,
+      "ratio": 8.46
+    },
+    {
+      "fg": "UNIT",
+      "bg": "BG",
+      "minimum": 4.5,
+      "ratio": 11.266
+    },
+    {
+      "fg": "UNIT",
+      "bg": "CELL",
+      "minimum": 4.5,
+      "ratio": 10.358
+    },
+    {
+      "fg": "UNIT",
+      "bg": "CELL_HOT",
+      "minimum": 4.5,
+      "ratio": 9.421
+    },
+    {
+      "fg": "UNIT",
+      "bg": "CELL_DOWN",
+      "minimum": 4.5,
+      "ratio": 8.46
+    },
+    {
+      "fg": "ACCENT",
+      "bg": "BG",
+      "minimum": 3,
+      "ratio": 10.219
+    },
+    {
+      "fg": "ACCENT",
+      "bg": "CELL",
+      "minimum": 3,
+      "ratio": 9.395
+    },
+    {
+      "fg": "ACCENT",
+      "bg": "CELL_HOT",
+      "minimum": 3,
+      "ratio": 8.545
+    },
+    {
+      "fg": "ACCENT",
+      "bg": "CELL_DOWN",
+      "minimum": 3,
+      "ratio": 7.674
+    },
+    {
+      "fg": "LIVE",
+      "bg": "BG",
+      "minimum": 4.5,
+      "ratio": 10.159
+    },
+    {
+      "fg": "LIVE",
+      "bg": "CELL",
+      "minimum": 4.5,
+      "ratio": 9.34
+    },
+    {
+      "fg": "LIVE",
+      "bg": "CELL_HOT",
+      "minimum": 4.5,
+      "ratio": 8.495
+    },
+    {
+      "fg": "LIVE",
+      "bg": "CELL_DOWN",
+      "minimum": 4.5,
+      "ratio": 7.629
+    },
+    {
+      "fg": "ALERT",
+      "bg": "BG",
+      "minimum": 4.5,
+      "ratio": 11.18
+    },
+    {
+      "fg": "ALERT",
+      "bg": "CELL",
+      "minimum": 4.5,
+      "ratio": 10.279
+    },
+    {
+      "fg": "ALERT",
+      "bg": "CELL_HOT",
+      "minimum": 4.5,
+      "ratio": 9.349
+    },
+    {
+      "fg": "ALERT",
+      "bg": "CELL_DOWN",
+      "minimum": 4.5,
+      "ratio": 8.396
+    },
+    {
+      "fg": "INDICATOR",
+      "bg": "BG",
+      "minimum": 3,
+      "ratio": 7.226
+    },
+    {
+      "fg": "INDICATOR",
+      "bg": "CELL",
+      "minimum": 3,
+      "ratio": 6.643
+    },
+    {
+      "fg": "INDICATOR",
+      "bg": "CELL_HOT",
+      "minimum": 3,
+      "ratio": 6.042
+    },
+    {
+      "fg": "INDICATOR",
+      "bg": "CELL_DOWN",
+      "minimum": 3,
+      "ratio": 5.426
+    },
+    {
+      "fg": "BG",
+      "bg": "TOGGLE_ON",
+      "minimum": 4.5,
+      "ratio": 10.159
+    },
+    {
+      "fg": "VALUE",
+      "bg": "STOP",
+      "minimum": 4.5,
+      "ratio": 9.77
+    }
+  ]
+}

@@ -29,9 +29,10 @@ typedef struct {
 } font_t;
 
 extern const font_t font_ui;      /* proportional, labels */
-extern const font_t font_value;   /* monospaced, numbers that must not jitter */
+extern const font_t font_value;
+extern const font_t font_compact;   /* monospaced, numbers that must not jitter */
 extern const font_t font_small;   /* proportional, units and secondary text */
 extern const font_t font_display; /* the focused readout; digits and punctuation only */
-extern const font_t font_icons;   /* Segoe MDL2, remapped to bytes; see icons.h */
+extern const font_t font_icons;   /* DejaVu icons, remapped to bytes; see icons.h */
 
 #endif /* ELECTRA_FONT_H */

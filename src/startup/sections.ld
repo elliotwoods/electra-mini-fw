@@ -152,5 +152,11 @@ SECTIONS
         __heap_end = .;
     } > SDRAM
 
+    .graphics_sdram (NOLOAD) :
+    {
+        . = ALIGN(8);
+        *(.graphics_sdram)
+    } > SDRAM
+
     /DISCARD/ : { *(.note.GNU-stack) *(.gnu_debuglink) *(.gnu.lto_*) }
 }

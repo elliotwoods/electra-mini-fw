@@ -1,0 +1,36 @@
+{
+  "_comment": [
+    "The two typefaces web/tokens/src/tokens.ts declares, pinned by tag and SHA-256.",
+    "Same discipline as cef.lock: the binaries are gitignored, this file is the pin, and",
+    "tools/fetch-fonts.ps1 reproduces the tree. tokens.ts says an external font request is",
+    "a hard failure -- av-gui runs inside a Rust-hosted webview with no network egress -- so",
+    "these are embedded at build time and never fetched at run time.",
+    "",
+    "Only the weights the stylesheet actually uses. Inter is a variable font and covers its",
+    "whole range in one file; JetBrains Mono is not, and only Regular and Medium are asked",
+    "for (Medium is the 0.08em-tracked uppercase micro-label that is the visual identity)."
+  ],
+  "fonts": [
+    {
+      "file": "InterVariable.woff2",
+      "family": "InterVariable",
+      "version": "v4.1",
+      "licence": "SIL Open Font License 1.1",
+      "url": "https://github.com/rsms/inter/raw/v4.1/docs/font-files/InterVariable.woff2",
+      "sha256": "693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3",
+      "bytes": 352240,
+      "weight": "100 900"
+    },
+    {
+      "file": "JetBrainsMono-Regular.woff2",
+      "family": "JetBrains Mono",
+      "version": "v2.304",
+      "licence": "SIL Open Font License 1.1",
+      "url": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/v2.304/fonts/webfonts/JetBrainsMono-Regular.woff2",
+      "sha256": "a9cb1cd82332b23a47e3a1239d25d13c86d16c4220695e34b243effa999f45f2",
+      "bytes": 92164,
+      "weight": "400"
+    }
+  ],
+  "av_revision": "bb279c5d689b3be85044b75e7558d7863b6045d3"
+}

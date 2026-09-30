@@ -80,8 +80,8 @@ add_executable(bootloader
     # answering -- see boot_screen.c. --gc-sections drops the font faces this does not use.
     src/hal/spi.c
     src/hal/ra8876.c
-    src/app/text.c
-    src/app/font_data.c
+    src/boot/text.c
+    src/boot/font_data.c
     src/common/persist.c
     src/hal/usb_fs.c
     # CDC, and it stays CDC. The bootloader is reachable only over USB and replaceable only from
@@ -116,6 +116,7 @@ add_executable(app
     src/common/persist.c
     src/boot/flash_faci.c
     src/boot/app_launch.c
+    src/app/graphics.c
     src/app/ui.c
     src/app/ui_state.c
     src/app/history.c
@@ -140,4 +141,22 @@ if(DEVICE_SELFTEST)
 endif()
 target_compile_definitions(app PRIVATE DEVICE_SELFTEST=$<BOOL:${DEVICE_SELFTEST}>)
 
+target_compile_definitions(app PRIVATE ELECTRA_GRAPHICS=1)
 electra_image(app app.ld app 0x00120000)
+
+# Alternative accelerators are never implicitly enabled in a production build.
+option(GRAPHICS_BENCHMARK "Enable graphics qualification commands/backends" OFF)
+set(GRAPHICS_BACKEND "RA8876" CACHE STRING "RA8876 or DAVE2D (benchmark only)")
+set_property(CACHE GRAPHICS_BACKEND PROPERTY STRINGS RA8876 DAVE2D)
+if(GRAPHICS_BACKEND STREQUAL "DAVE2D")
+    if(NOT GRAPHICS_BENCHMARK)
+        message(FATAL_ERROR "DAVE2D is available only with GRAPHICS_BENCHMARK=ON")
+    endif()
+    file(GLOB DAVE_SOURCES CONFIGURE_DEPENDS third_party/renesas-dave2d/src/*.c)
+    target_sources(app PRIVATE ${DAVE_SOURCES} src/hal/dave_s7g2.c src/app/graphics_dave2d.c)
+    target_include_directories(app PRIVATE third_party/renesas-dave2d/inc third_party/renesas-dave2d/src)
+    target_compile_definitions(app PRIVATE GRAPHICS_DAVE2D=1)
+elseif(NOT GRAPHICS_BACKEND STREQUAL "RA8876")
+    message(FATAL_ERROR "Unknown GRAPHICS_BACKEND")
+endif()
+target_compile_definitions(app PRIVATE GRAPHICS_BENCHMARK=$<BOOL:${GRAPHICS_BENCHMARK}>)

@@ -118,7 +118,25 @@ static int wait_status_set(uint8_t mask)
     return -1;
 }
 
+#if defined(ELECTRA_GRAPHICS) && ELECTRA_GRAPHICS
+#include "graphics_backend.h"
+#include "diag.h"
+static void wait_core(void)
+{
+    uint32_t begin=gfx_clock_cycles();
+    int rc=-1;
+    /* Large cold-cache copies legitimately exceed the old bring-up poll budget. */
+    for(uint32_t i=0;i<32000u;i++) {
+        if(!(ra_read_status()&ST_CORE_BUSY)){rc=0;break;}
+        if((uint32_t)(gfx_clock_cycles()-begin)>4800000u)break; /* 20 ms at 240 MHz */
+        if(!(i&63u))ra8876_yield();
+    }
+    gfx_gpu_cycles+=(uint32_t)(gfx_clock_cycles()-begin);
+    if(rc!=0) {gfx_accel_errors++;emp_diag(EMP_SEV_ERROR,EMP_DIAG_GRAPHICS_TIMEOUT,gfx_accel_errors,"RA8876 core completion timeout");}
+}
+#else
 static void wait_core(void) { (void)wait_status_clear(ST_CORE_BUSY); }
+#endif
 
 /* --- hardware reset on P313 --------------------------------------------- */
 

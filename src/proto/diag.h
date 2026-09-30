@@ -53,6 +53,10 @@
 #define EMP_DIAG_VERSION_MISMATCH     17u  /* context = the host's major version */
 #define EMP_DIAG_MTU_REFUSED          18u  /* context = the MTU asked for */
 
+#define EMP_DIAG_GRAPHICS_TIMEOUT 19u
+#define EMP_DIAG_GRAPHICS_FAULT 20u
+#define EMP_DIAG_INPUT_QUEUE_OVERFLOW 21u
+
 /* Raise one. `detail` must be a string literal or otherwise outlive the flush -- only the
  * pointer is kept, because copying a message this code exists to make cheap would defeat it.
  * Safe to call from inside a decoder, from an interrupt-driven path, and at any rate. */

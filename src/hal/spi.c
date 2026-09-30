@@ -213,9 +213,15 @@ uint8_t ra_read_reg(uint8_t reg)
  * The stock firmware does this as a polled loop with no DMA. So do we, for now; wiring the
  * DTC to it is unclaimed headroom noted in the plan.
  */
+#if defined(ELECTRA_GRAPHICS) && ELECTRA_GRAPHICS
+#include "graphics_backend.h"
+#endif
 void ra_write_bulk(const uint8_t *buf, uint32_t len)
 {
     if (buf == 0 || len == 0) return;
+#if defined(ELECTRA_GRAPHICS) && ELECTRA_GRAPHICS
+    uint32_t begin=gfx_clock_cycles();
+#endif
 
     /* Built out of the single 32-bit frame that every register write already uses, because the
      * previous implementation did not work at all.
@@ -242,4 +248,7 @@ void ra_write_bulk(const uint8_t *buf, uint32_t len)
         i += 3u;
     }
     for (; i < len; i++) ra_data(buf[i]);
+#if defined(ELECTRA_GRAPHICS) && ELECTRA_GRAPHICS
+    gfx_spi_cycles+=(uint32_t)(gfx_clock_cycles()-begin);
+#endif
 }

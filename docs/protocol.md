@@ -237,6 +237,9 @@ string: the field index for a truncated label, the tag for an unknown value tag,
 | `16` | `E_UNKNOWN_CHANNEL` |
 | `17` | `E_VERSION_MISMATCH` |
 | `18` | `E_MTU_REFUSED` |
+| `19` | `E_GRAPHICS_TIMEOUT` — bounded accelerator completion wait expired |
+| `20` | `E_GRAPHICS_FAULT` — accelerator initialization, command, memory, or bus failure |
+| `21` | `E_INPUT_QUEUE_OVERFLOW` — deferred input queue exhausted during rendering |
 
 A device MUST NOT send `DIAG` from inside a decoder. Framing an outbound message part-way
 through an inbound one means building it from state the inbound parse is still walking, and on

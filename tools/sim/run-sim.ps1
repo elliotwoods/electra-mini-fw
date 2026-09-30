@@ -23,6 +23,8 @@ New-Item -ItemType Directory -Force -Path $out | Out-Null
 
 $sources = @(
     "$root\tools\sim\sim_main.c",
+    "$root\tools\sim\sim_hal.c",
+    "$root\src\app\graphics.c",
     "$root\src\app\text.c",
     "$root\src\app\font_data.c",
     "$root\src\app\ui.c",
@@ -38,7 +40,7 @@ $inc = "/I`"$root\src\app`" /I`"$root\src\hal`" /I`"$root\src\proto`" /I`"$root\
 
 # /W3 rather than /W4: this is host scaffolding around device code, and MSVC objects to
 # perfectly reasonable embedded idioms. The device build is the one held to /Wall -Werror.
-$cmd = "call `"$($vcvars.FullName)`" >nul && cl /nologo /W3 /D_CRT_SECURE_NO_WARNINGS $inc " +
+$cmd = "call `"$($vcvars.FullName)`" >nul && cl /nologo /W3 /std:c11 /D_CRT_SECURE_NO_WARNINGS $inc " +
        "/Fe:`"$out\sim.exe`" /Fo:`"$out\\`" $sources"
 
 cmd /c $cmd

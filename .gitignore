@@ -26,3 +26,6 @@ Thumbs.db
 # Python bytecode
 __pycache__/
 *.pyc
+
+.venv/
+__pycache__/

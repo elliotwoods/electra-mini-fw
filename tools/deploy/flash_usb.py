@@ -393,19 +393,19 @@ def flash(path, port):
 
     # "run" has no prompt because the bootloader detaches before jumping. Do not mistake that
     # lack of a reply for success: hand back only after the WinUSB application enumerates.
-    deadline = time.time() + 8.0
+    deadline = time.time() + 30.0
     while time.time() < deadline:
         if app_present():
             app = app_over_winusb()
             if app:
                 reply = app.cmd("id")
                 app.close()
-                if "electra-mini-fw APP" not in reply:
-                    raise SystemExit("application enumerated but did not answer an active "
-                                     "WinUSB identity check")
-                print("application: responsive on WinUSB")
-                print("done.")
-                return
+                if "electra-mini-fw APP" in reply:
+                    print("application: responsive on WinUSB")
+                    print("done.")
+                    return
+                # Enumeration precedes the paced startup drawing. Retry an identity check
+                # within the deadline instead of accepting enumeration or failing early.
         time.sleep(0.1)
     raise SystemExit("image verified, but the application did not enumerate after launch; "
                      "device may still be in update mode")

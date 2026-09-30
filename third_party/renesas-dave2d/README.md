@@ -1,0 +1,5 @@
+Renesas FSP v6.6.0 `ra/tes/dave2d` is vendored with its original licence. Use is restricted to Renesas integrated circuits by the retained Renesas Open License; this firmware targets the Renesas S7G2. The portable simulator does not link this driver.
+
+`source.lock.json` records the downloaded tag, every upstream file hash, and the one local patch: `src/dave_hardware.c` delegates its two busy waits to the bounded S7G2 D1 port. The upstream hash and patched hash are both retained. `src/hal/dave_s7g2.c` owns direct register access, clock gating, polling, memory barriers, diagnostics and a fixed 128 KiB lifetime arena. No RTOS, interrupt handler, system allocator or unbounded accelerator wait is used.
+
+The Mini reports revision `0x0FBE0107` at DRW register `0x400E4004`. Driver render buffers must be explicitly executed and reselected; `d2_flushframe()` only waits. Cached RGB565 regions live in explicitly linked MCU SDRAM and completed dirty strips are uploaded to the RA8876. This backend is available only in an explicit benchmark build.

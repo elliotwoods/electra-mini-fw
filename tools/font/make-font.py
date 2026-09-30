@@ -1,32 +1,12 @@
-"""
-Turn a TrueType face into an 8-bit alpha atlas the firmware can render.
-
-    python make-font.py
-
-Design, and why it is not the obvious one:
-
-The RA8876 can composite a bitmap out of its own VRAM with the BTE, which is how the stock
-firmware draws text — glyphs live in video memory and are block-copied. That is fast, but it is
-1-bit: a glyph is either there or it is not, so the type is aliased. On a 800x480 panel viewed
-at arm's length, aliased small text is exactly the thing that makes an instrument look cheap,
-and "better typography" is one of the stated reasons this firmware exists.
-
-So instead each glyph is stored as 8-bit COVERAGE in MCU flash, and the MCU blends it against
-the actual foreground and background colours into a scanline buffer, which is then pushed to
-the panel. That buys real antialiasing and arbitrary colours from one atlas, at a cost that is
-affordable precisely because text is small: a 120x24 label is ~5.8 KB on the wire, about 6 ms
-at 15 MHz, against 0.8 s for a full-screen repaint. Cost scales with ink, not with screen.
-
-Two faces, because they do different jobs:
-
-  * a proportional UI face for labels, which reads better in running text
-  * a MONOSPACED face for values, so digits do not shift sideways as a number changes
-
-That second one is not fussiness. A value readout that reflows while you turn a knob is
-genuinely harder to read, and a control surface is mostly value readouts.
+"""Generate cropped coverage atlases from pinned Inter / JetBrains Mono sources.
+DejaVu supplies only the existing icon glyphs. See vendor licences and fonts.lock.json.
+Run with the pinned Pillow in tools/font/requirements.txt.
 """
 
 import os
+import json
+import hashlib
+import PIL
 import sys
 
 from PIL import Image, ImageDraw, ImageFont
@@ -41,13 +21,7 @@ OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "src", "app")
 # instrument is the same as illegible.
 # Fonts are VENDORED, not taken from the system.
 #
-# The first version rendered Segoe UI, Consolas and Segoe MDL2 straight out of C:/Windows/Fonts.
-# That works on the machine it was written on and nowhere else, and -- the reason it had to
-# change -- the generated atlas is a derivative of a licensed font, so it could not be published
-# with the firmware. DejaVu is under the Bitstream Vera licence, which permits redistribution
-# and derived works, so the atlas in src/app/font_data.c can ship with the source that uses it.
-#
-# It also makes the build reproducible: no dependency on which fonts a machine happens to have.
+# Inter and JetBrains Mono are retained under SIL OFL 1.1; icons retain DejaVu.
 VENDOR = os.path.join(os.path.dirname(__file__), "vendor")
 
 # Icons come through this same pipeline, because a coverage atlas does not care whether a glyph
@@ -73,10 +47,11 @@ ICON_CODEPOINTS = [
 
 FACES = [
     # name       file                 size  codepoints        description
-    ("ui",      "DejaVuSans.ttf",      26,  (0x20, 0x7E),     "proportional, for labels"),
-    ("value",   "DejaVuSansMono.ttf",  38,  (0x20, 0x7E),     "monospaced, so digits do not jitter"),
-    ("small",   "DejaVuSans.ttf",      19,  (0x20, 0x7E),     "proportional, for units and secondary"),
-    ("display", "DejaVuSansMono.ttf", 112,  (0x20, 0x39),     "the focused readout: digits only"),
+    ("ui",      "InterVariable.woff2", 26,  (0x20, 0x7E),     "proportional, for labels"),
+    ("value",   "JetBrainsMono-Regular.woff2", 38,  (0x20, 0x7E),     "monospaced, so digits do not jitter"),
+    ("compact", "JetBrainsMono-Regular.woff2", 26, (0x20, 0x7E), "monospaced compact values"),
+    ("small",   "InterVariable.woff2", 19,  (0x20, 0x7E),     "proportional, for units and secondary"),
+    ("display", "JetBrainsMono-Regular.woff2", 112,  (0x20, 0x39),     "the focused readout: digits only"),
     ("icons",   "DejaVuSans.ttf",      34,  ICON_CODEPOINTS,  "remapped to bytes; see icons.h"),
 ]
 
@@ -175,7 +150,12 @@ def emit(faces, path):
 
 
 def main():
+    lock = json.load(open(os.path.join(os.path.dirname(__file__), "fonts.lock.json")))
+    for source in lock["fonts"]:
+        data = open(os.path.join(VENDOR, source["file"]), "rb").read()
+        assert hashlib.sha256(data).hexdigest() == source["sha256"], source["file"]
     faces = [render_face(*spec) for spec in FACES]
+    print("Pillow", PIL.__version__, "FreeType", ImageFont.core.freetype2_version)
 
     out = os.path.abspath(os.path.join(OUT_DIR, "font_data.c"))
     emit(faces, out)

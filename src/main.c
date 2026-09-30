@@ -11,6 +11,7 @@
  * device untouched on the bench.
  */
 
+#include <string.h>
 #include "s7g2.h"
 #include "bsp.h"
 #include "ra8876.h"
@@ -28,6 +29,9 @@
 #include "touch_cal.h"
 #include "inputs.h"
 #include "ui.h"
+#include "graphics.h"
+#include "graphics_backend.h"
+#include "diag.h"
 #include "ui_state.h"
 #include "session.h"
 #include "surface.h"
@@ -95,6 +99,7 @@ static void cycles_start(void)
 }
 
 static uint32_t cycles_now(void) { return REG32(DWT_CYCCNT); }
+uint32_t gfx_clock_cycles(void) { return cycles_now(); }
 
 /* ------------------------------------------------------------------ breadcrumbs */
 
@@ -371,7 +376,13 @@ static void test_pattern(void)
 /* The display driver calls this from inside its wait loops. Servicing USB there is what
  * keeps the console alive even when the RA8876 is not answering — which is precisely the
  * situation we need the console for. */
-void ra8876_yield(void) { usb_poll(); }
+static void capture_inputs(void);
+static void service_pending_inputs(void);
+static uint8_t g_bench_scene;
+static uint8_t g_inputs_ready;
+static uint32_t g_input_gap_max,g_input_drops;
+void gfx_yield(void) { usb_poll(); if(g_inputs_ready) capture_inputs(); watchdog_kick(); }
+void ra8876_yield(void) { gfx_yield(); }
 
 /* ------------------------------------------------------------------ commands */
 
@@ -389,6 +400,15 @@ static void cmd_id(const char *a)
     console_hex("usb_tx_dropped", g_usb_tx_dropped);
     console_hex("service_hz", g_service_hz);
     console_hex("render_us_max", g_render_us_max);
+    console_hex("input_gap_ms_max",g_input_gap_max);
+    console_hex("input_queue_drops",g_input_drops);
+    console_hex("graphics_errors",gfx_accel_errors);
+#if defined(GRAPHICS_DAVE2D) && GRAPHICS_DAVE2D
+    extern uint32_t electra_dave_fault_code,electra_dave_fault_context,electra_dave_revision;
+    console_hex("dave_revision",electra_dave_revision);
+    console_hex("dave_fault_code",electra_dave_fault_code);
+    console_hex("dave_fault_context",electra_dave_fault_context);
+#endif
     console_hex("nmi_count", g_nmi_count);
     if (g_nmi_count) {
         console_hex("  nmi msp", g_nmi_msp);
@@ -1737,6 +1757,78 @@ static void cmd_ui(const char *a)
 }
 
 
+#if GRAPHICS_BENCHMARK
+static void discard_demo_actions(void)
+{
+    ui_action_t action;while(ui_state_take_action(&action)) { }
+}
+static void cmd_gscene(const char *name)
+{
+    g_bench_scene=1;
+    if(strcmp(name,"focus")==0) ui_render_demo_focused();
+    else if(strcmp(name,"focustop")==0) ui_render_demo_focused_top();
+    else if(strcmp(name,"system")==0) ui_render_demo_system();
+    else if(strcmp(name,"brightness")==0) ui_render_demo_brightness_mid();
+    else if(strcmp(name,"cal")==0) ui_render_demo_calibration();
+    else if(strcmp(name,"cal-failed")==0) ui_render_demo_calibration_failed();
+    else if(strcmp(name,"operator")==0) {surf_demo_operator();ui_state_init();ui_reset();ui_render();}
+    else if(strcmp(name,"color")==0) {surf_demo_descriptor();ui_state_init();ui_state_reveal(11);ui_state_push(3,1,1000);ui_state_push(3,0,1010);ui_reset();ui_render();}
+    else if(strcmp(name,"page2")==0) ui_render_demo_page2();
+    else if(strcmp(name,"empty")==0) ui_render_empty();
+    else if(strcmp(name,"boot")==0) ui_render_boot(UI_BOOT_FRAMES-1);
+    else if(strcmp(name,"live")==0) {g_bench_scene=0;ui_reset();ui_render();}
+    else ui_render_demo();
+    discard_demo_actions();console_write("GSCENE done\r\n");
+}
+static void cmd_gbench(const char *a)
+{
+    const char *p=a;uint32_t workload=arg_hex(&p),count=arg_hex(&p);
+    if(workload>6||count<1||count>331){console_write("gbench <0..6> <1..14B hex>\r\n");return;}
+    emp_session_mute(1);g_bench_scene=1;
+    surf_demo_descriptor();ui_state_init();ui_reset();
+    if(workload==1) {ui_state_push(4,1,bsp_millis());ui_state_push(4,0,bsp_millis());}
+    if(workload==3) ui_state_reveal(11);
+    ui_render();discard_demo_actions();
+    gfx_cache_reset(); /* First sample has cold caches; fixtures are otherwise already visible. */
+    g_input_gap_max=g_input_drops=0;
+    uint32_t c0=cycles_now(),ms0=bsp_millis();
+    while(bsp_millis()-ms0<100)gfx_yield();
+    console_hex("clock_cycles_per_100ms",cycles_now()-c0);
+    console_write("GB columns: index submit_us gpu_wait_us pixel_spi_us total_us input_gap_ms input_drops accel_errors\r\n");
+    for(uint32_t i=0;i<count;i++) {
+        gfx_yield();service_pending_inputs();
+        uint64_t gpu=gfx_gpu_cycles,spi=gfx_spi_cycles;
+        uint32_t begin=cycles_now();
+        if(workload==0)surf_set_number(0,(double)(i%90+5)/100.0);
+        else if(workload==1)surf_set_number(4,(double)(i%90+5)/1000.0);
+        else if(workload==2) {
+            for(unsigned k=0;k<8;k++) {
+                const surf_field_t *f=surf_field((uint16_t)k);
+                if(f->value_tag==EMP_VAL_BOOL)surf_set_bool((uint16_t)k,(uint8_t)(i&1));
+                else surf_set_number((uint16_t)k,(double)(i%50+1)/100.0);
+            }
+        } else if(workload==3) {float c[4]={(float)(i%100)/100.0f,.5f,.8f,.5f};surf_set_color(11,c,4);}
+        else if(workload==4) {ui_state_reveal((uint16_t)((i&1)?8:0));}
+        else if(workload==5) {
+            if(i&1)ui_render_demo_system();else ui_render_demo_calibration();
+        } else {
+            if(i&1)ui_render_demo_brightness_mid();else ui_render_demo_brightness_full();
+        }
+        if(workload<5)ui_render();
+        discard_demo_actions();
+        uint32_t total=cycles_now()-begin;
+        uint32_t waited=(uint32_t)(gfx_gpu_cycles-gpu),streamed=(uint32_t)(gfx_spi_cycles-spi);
+        /* Submission/composition excludes measured wait and pixel-stream phases; register SPI
+           remains part of submission. Time spent sampling inputs is included in total. */
+        uint32_t submit=total>waited+streamed?total-waited-streamed:0;
+        char line[140],*d=line;*d++='G';*d++='B';*d++=' ';
+        uint32_t v[8]={i,submit/240u,waited/240u,streamed/240u,total/240u,g_input_gap_max,g_input_drops,gfx_accel_errors};
+        for(unsigned k=0;k<8;k++){put_nib(&d,v[k],8);*d++=k==7?'\r':' ';}*d++='\n';*d=0;console_write(line);
+    }
+    console_write("GBEND\r\n");emp_session_mute(0);
+}
+#endif
+
 /* wdt on|off — the liveness watchdog, which is currently suspected of false positives. */
 static void cmd_wdt(const char *a)
 {
@@ -2160,6 +2252,10 @@ static const console_cmd_t app_cmds[] = {
     { "rst",  "bare warm reset, as the RESET button", cmd_rst      },
     { "lcd",  "on|off|r|g|b|t",                      cmd_lcd      },
     { "type", "draw a type specimen",                cmd_type     },
+#if GRAPHICS_BENCHMARK
+    { "gscene","render qualification scene; no persistence",cmd_gscene },
+    { "gbench","graphics qualification workload and count (hex)",cmd_gbench },
+#endif
     { "blitfill","blitfill x y w h rgb mode", cmd_blitfill },
     { "ui",   "draw the surface UI",                 cmd_ui       },
     { "shot", "shot [x y w h]  read the screen back", cmd_shot    },
@@ -2312,6 +2408,166 @@ static void boot_ready_animation(void)
     }
 }
 
+typedef struct {
+    input_sample_t input;
+    uint16_t raw,filtered;
+    uint32_t ms;
+} queued_input_t;
+#define INPUT_QUEUE 128u
+static queued_input_t input_queue[INPUT_QUEUE];
+static unsigned input_head,input_count;
+static void capture_inputs(void)
+{
+    static uint16_t filtered;
+    static uint32_t previous,next;
+    uint32_t now=bsp_millis();
+    if((int32_t)(now-next)<0) return;
+    next=now+SERVICE_PERIOD_MS;
+    if(previous && now-previous>g_input_gap_max)g_input_gap_max=now-previous;
+    uint32_t dt=now-previous;previous=now;
+    uint16_t raw=0;(void)qt2120_read_touch(&raw);
+    input_sample_t input;inputs_service(filtered,&input);
+    filtered=qt2120_touch_filter(raw,input.moved_mask,dt>500?500:dt);
+    g_touch_filtered=filtered;
+    /* Qualification fixtures sample physical inputs but intentionally freeze UI actions. */
+    if(g_bench_scene)return;
+    if(input_count==INPUT_QUEUE) {
+        g_input_drops++;emp_diag(EMP_SEV_ERROR,EMP_DIAG_INPUT_QUEUE_OVERFLOW,input_count,"Graphics input queue overflow");return;
+    }
+    unsigned tail=(input_head+input_count)%INPUT_QUEUE;
+    input_queue[tail]=(queued_input_t){input,raw,filtered,now};input_count++;
+}
+static void consume_input(const queued_input_t *sample)
+{
+    input_sample_t in=sample->input;
+    uint16_t touch_raw=sample->raw,touch_filtered=sample->filtered;
+    uint32_t now_ms=sample->ms;
+    static uint32_t last_ms;
+    uint32_t dt_ms=now_ms-last_ms;last_ms=now_ms;
+    (void)dt_ms;
+static uint16_t prev_push, prev_btn, prev_touch;
+static uint8_t  edges_primed;
+if (!edges_primed) {
+    prev_push = in.push_mask;
+    prev_btn  = in.button_mask;
+    edges_primed = 1;
+}
+g_moved_mask = in.moved_mask;
+if (g_qt_init_rc == 0)
+    touch_cal_tick(now_ms, touch_raw, in.moved_mask);
+caltrace_emit(now_ms);
+
+for (unsigned p = 0; p < INPUT_POTS; p++) {
+    if (in.detents[p]) (void)ui_state_rotate(p, in.detents[p], now_ms);
+
+    uint16_t bit = (uint16_t)(1u << p);
+    if ((in.push_mask & bit) != (prev_push & bit)) {
+        int down = (in.push_mask & bit) != 0;
+        ui_state_push(p, down, now_ms);
+        surf_on_push(p, down);
+    }
+}
+for (unsigned b = 0; b < INPUT_BUTTONS; b++) {
+    uint16_t bit = (uint16_t)(1u << b);
+    if ((in.button_mask & bit) != (prev_btn & bit)) {
+        int down = (in.button_mask & bit) != 0;
+        ui_state_button(b, down, now_ms);
+        /* Still reported to the host. BUTTON is diagnostics-only by design, so
+         * device-local navigation never looks like a user editing a value. */
+        surf_on_button(b, down);
+    }
+}
+if (touch_filtered != prev_touch) {
+    surf_on_touch(touch_filtered);
+    ui_state_touch(touch_filtered, now_ms);
+}
+ui_state_tick(now_ms);
+
+{
+    const touch_cal_status_t *cs = touch_cal_status();
+    ui_state_calibration_status((uint8_t)cs->phase, cs->pot, cs->cycle,
+                                cs->valid_mask, cs->custom_active,
+                                cs->clear_ms_remaining, cs->message);
+    ui_state_system_status(now_ms, g_qt_init_rc);
+
+    ui_action_t action;
+    if (ui_state_take_action(&action)) {
+        switch (action.kind) {
+        case UI_ACTION_REBOOT:
+            /* A normal restart: RUN_APP is consumed by the bootloader but does not
+             * request update mode. The UI emits this only after the debounced release
+             * of physical Button 5, so an ordinary reboot cannot carry the USB Disk
+             * Mode chord into the lower boot stage. */
+            boot_handshake_set_request(BOOT_REQ_RUN_APP, 0);
+            bsp_delay_ms(100);       /* let the released contact settle physically */
+            bsp_system_reset();
+            break;
+        case UI_ACTION_CALIBRATE:
+            touch_cal_start(action.pot_mask, now_ms);
+            break;
+        case UI_ACTION_CAL_CANCEL:
+            touch_cal_cancel();
+            break;
+        case UI_ACTION_CAL_RETRY:
+            touch_cal_retry(now_ms);
+            break;
+        case UI_ACTION_CAL_DONE:
+            touch_cal_done();
+            break;
+        case UI_ACTION_RESTORE_DEFAULTS:
+            touch_cal_restore_defaults();
+            break;
+        case UI_ACTION_BRIGHTNESS_PREVIEW:
+        case UI_ACTION_BRIGHTNESS_CANCEL:
+            ra8876_backlight_percent(action.brightness_percent);
+            break;
+        case UI_ACTION_BRIGHTNESS_SAVE: {
+            ui_pref_rec_t next = g_ui_pref;
+            next.magic = UI_PREF_MAGIC;
+            next.version = UI_PREF_VERSION;
+            next.generation++;
+            next.brightness_percent = action.brightness_percent;
+            next.reserved = 0;
+            next.checksum = persist_ui_pref_checksum(&next);
+            int rc = persist_ui_pref_write(&next);
+            if (rc == FLASH_OK) {
+                g_ui_pref = next;
+                g_brightness_saved = action.brightness_percent;
+                ra8876_backlight_percent(g_brightness_saved);
+                ui_state_brightness_save_result(1);
+            } else {
+                ui_state_brightness_save_result(0);
+            }
+            break;
+        }
+        default:
+            break;
+        }
+    }
+}
+
+prev_push  = in.push_mask;
+prev_btn   = in.button_mask;
+prev_touch = touch_filtered;
+
+/* Peak-hold the raw deltas so a touch can be measured after the fact rather than
+ * needing anyone to touch a knob inside a capture window. Three I2C transactions,
+ * the most expensive thing in this block, so it runs at a quarter rate: it is
+ * instrumentation and must not be what limits input responsiveness. */
+static uint8_t peak_div;
+if ((++peak_div & 3u) == 0) qt2120_track_peaks();
+
+}
+static void service_pending_inputs(void)
+{
+    while(input_count) {
+        queued_input_t sample=input_queue[input_head];
+        input_head=(input_head+1)%INPUT_QUEUE;input_count--;
+        if(!g_bench_scene)consume_input(&sample);
+    }
+}
+
+
 int main(void)
 {
     /* NOTHING that touches hardware happens before USB is up.
@@ -2370,6 +2626,7 @@ int main(void)
     riic_init(RIIC_CH_TOUCHKEY);
     riic_init(RIIC_CH_TOUCHSCR);
     inputs_init();
+    g_inputs_ready=0;
     g_qt_init_rc = qt2120_init();
     touch_cal_init();
 
@@ -2459,6 +2716,7 @@ int main(void)
     g_bss_ballast[0] = 1;                 /* stop the linker discarding the evidence */
 #endif
 
+    g_inputs_ready=1;
     for (;;) {
         g_loop_beat++;
         usb_poll();
@@ -2497,146 +2755,8 @@ int main(void)
             }
         }
         {
-            /* Order matters. The scan dwells on whatever the FILTERED mask says is touched, so
-             * a momentary sensor dropout does not stop us sampling that pot — otherwise the
-             * dropout would hide the very movement that repairs it. */
-            static uint16_t touch_filtered;
-            uint16_t touch_raw = 0;
-            (void)qt2120_read_touch(&touch_raw);
-
-            input_sample_t in;
-            inputs_service(touch_filtered, &in);
-
-            static uint32_t last_ms;
-            uint32_t now_ms = bsp_millis();
-            uint32_t dt_ms  = now_ms - last_ms;
-            last_ms = now_ms;
-            if (dt_ms > 500u) dt_ms = 500u;      /* first pass, or a long stall elsewhere */
-
-            touch_filtered = qt2120_touch_filter(touch_raw, in.moved_mask, dt_ms);
-            g_touch_filtered = touch_filtered;
-
-            /* Physical input -> protocol.
-             *
-             * The two-track pots are endless, so rotation is a signed delta rather than a
-             * position, and the surface layer decides per field whether to integrate it locally
-             * or hand the delta to the host. Pushes and buttons are edge-triggered; touch is
-             * reported as a mask so focus can be per-lane rather than per-control. */
-            /* Seeded from the first sweep, not from zero. Starting at zero makes any switch
-             * that happens to be held at power-on look like a fresh press on the first pass --
-             * which, now that a pot press drills into a field, would open a view nobody asked
-             * for before the panel had even finished starting. */
-            static uint16_t prev_push, prev_btn, prev_touch;
-            static uint8_t  edges_primed;
-            if (!edges_primed) {
-                prev_push = in.push_mask;
-                prev_btn  = in.button_mask;
-                edges_primed = 1;
-            }
-            g_moved_mask = in.moved_mask;
-            if (g_qt_init_rc == 0)
-                touch_cal_tick(now_ms, touch_raw, in.moved_mask);
-            caltrace_emit(now_ms);
-
-            for (unsigned p = 0; p < INPUT_POTS; p++) {
-                if (in.detents[p]) (void)ui_state_rotate(p, in.detents[p], now_ms);
-
-                uint16_t bit = (uint16_t)(1u << p);
-                if ((in.push_mask & bit) != (prev_push & bit)) {
-                    int down = (in.push_mask & bit) != 0;
-                    ui_state_push(p, down, now_ms);
-                    surf_on_push(p, down);
-                }
-            }
-            for (unsigned b = 0; b < INPUT_BUTTONS; b++) {
-                uint16_t bit = (uint16_t)(1u << b);
-                if ((in.button_mask & bit) != (prev_btn & bit)) {
-                    int down = (in.button_mask & bit) != 0;
-                    ui_state_button(b, down, now_ms);
-                    /* Still reported to the host. BUTTON is diagnostics-only by design, so
-                     * device-local navigation never looks like a user editing a value. */
-                    surf_on_button(b, down);
-                }
-            }
-            if (touch_filtered != prev_touch) {
-                surf_on_touch(touch_filtered);
-                ui_state_touch(touch_filtered, now_ms);
-            }
-            ui_state_tick(now_ms);
-
-            {
-                const touch_cal_status_t *cs = touch_cal_status();
-                ui_state_calibration_status((uint8_t)cs->phase, cs->pot, cs->cycle,
-                                            cs->valid_mask, cs->custom_active,
-                                            cs->clear_ms_remaining, cs->message);
-                ui_state_system_status(now_ms, g_qt_init_rc);
-
-                ui_action_t action;
-                if (ui_state_take_action(&action)) {
-                    switch (action.kind) {
-                    case UI_ACTION_REBOOT:
-                        /* A normal restart: RUN_APP is consumed by the bootloader but does not
-                         * request update mode. The UI emits this only after the debounced release
-                         * of physical Button 5, so an ordinary reboot cannot carry the USB Disk
-                         * Mode chord into the lower boot stage. */
-                        boot_handshake_set_request(BOOT_REQ_RUN_APP, 0);
-                        bsp_delay_ms(100);       /* let the released contact settle physically */
-                        bsp_system_reset();
-                        break;
-                    case UI_ACTION_CALIBRATE:
-                        touch_cal_start(action.pot_mask, now_ms);
-                        break;
-                    case UI_ACTION_CAL_CANCEL:
-                        touch_cal_cancel();
-                        break;
-                    case UI_ACTION_CAL_RETRY:
-                        touch_cal_retry(now_ms);
-                        break;
-                    case UI_ACTION_CAL_DONE:
-                        touch_cal_done();
-                        break;
-                    case UI_ACTION_RESTORE_DEFAULTS:
-                        touch_cal_restore_defaults();
-                        break;
-                    case UI_ACTION_BRIGHTNESS_PREVIEW:
-                    case UI_ACTION_BRIGHTNESS_CANCEL:
-                        ra8876_backlight_percent(action.brightness_percent);
-                        break;
-                    case UI_ACTION_BRIGHTNESS_SAVE: {
-                        ui_pref_rec_t next = g_ui_pref;
-                        next.magic = UI_PREF_MAGIC;
-                        next.version = UI_PREF_VERSION;
-                        next.generation++;
-                        next.brightness_percent = action.brightness_percent;
-                        next.reserved = 0;
-                        next.checksum = persist_ui_pref_checksum(&next);
-                        int rc = persist_ui_pref_write(&next);
-                        if (rc == FLASH_OK) {
-                            g_ui_pref = next;
-                            g_brightness_saved = action.brightness_percent;
-                            ra8876_backlight_percent(g_brightness_saved);
-                            ui_state_brightness_save_result(1);
-                        } else {
-                            ui_state_brightness_save_result(0);
-                        }
-                        break;
-                    }
-                    default:
-                        break;
-                    }
-                }
-            }
-
-            prev_push  = in.push_mask;
-            prev_btn   = in.button_mask;
-            prev_touch = touch_filtered;
-
-            /* Peak-hold the raw deltas so a touch can be measured after the fact rather than
-             * needing anyone to touch a knob inside a capture window. Three I2C transactions,
-             * the most expensive thing in this block, so it runs at a quarter rate: it is
-             * instrumentation and must not be what limits input responsiveness. */
-            static uint8_t peak_div;
-            if ((++peak_div & 3u) == 0) qt2120_track_peaks();
+            capture_inputs();
+            service_pending_inputs();
 
             {
                 /* Timed, because "drilling in feels slow" has two possible causes with the same
@@ -2644,7 +2764,7 @@ int main(void)
                  * redraw -- and they need opposite fixes. A view switch repaints everything, so
                  * it is the expensive case by far. */
                 uint32_t c0 = cycles_now();
-                ui_render();
+                if(!g_bench_scene)ui_render();
                 uint32_t us = (cycles_now() - c0) / CYCLES_PER_US;
                 if (us > g_render_us_max) g_render_us_max = us;
                 emp_session_note_render_us(us);

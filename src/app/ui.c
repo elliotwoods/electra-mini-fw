@@ -20,7 +20,7 @@
  *  - **Ink is expensive, area is cheap.** Filled rectangles are hardware-accelerated and cost a
  *    few register writes whatever their size; text and icons travel over SPI pixel by pixel. So
  *    backgrounds, bars and rules are effectively free and glyphs are not.
- *  - **Only repaint what changed.** A full-screen repaint measures 56 ms. Every region tracks
+ *  - **Only repaint what changed.** Full-screen repaint latency is recorded in graphics evidence. Every region tracks
  *    what it last drew, so a still panel costs nothing and a turning knob repaints one number.
  */
 
@@ -34,25 +34,8 @@
 #include "surface.h"
 #include "session.h"
 
-/* A restrained palette: dark ground, one accent, grey for anything secondary. Colour is reserved
- * for state that matters rather than spent on decoration. */
-#define C_BG        0x0862
-#define C_CELL      0x18C4      /* very dark grey: separates a cell from the ground */
-#define C_CELL_HOT  0x2124      /* under a finger */
-#define C_CELL_DOWN 0x3186      /* switch held: brighter than touched, because it is deliberate */
-#define C_OUTLINE   0x39E7      /* quiet idle frames and separators */
-#define C_TITLE     0xBDF7      /* headings and field names */
-#define C_ICON      0xCE79      /* enabled button glyphs */
-#define C_NAV       0x4DD6      /* current page and navigation selection */
-#define C_VALUE     0xFFFF
-#define C_UNIT      0xBDF7
-#define C_ACCENT    0x4DD6      /* cyan: bars, the drilled cell, the live digit */
-#define C_TRACK     0x18E3      /* the EMPTY part of a bar */
-#define C_DIM       0x4208      /* a digit outside the value's magnitude */
-#define C_DISABLED  0x2965      /* an affordance that would do nothing */
-#define C_TOGGLE_ON 0x4DD6
-#define C_ALERT     0xFBE0      /* amber: faults and failed calibration */
-#define C_LINK      0x4C7F      /* knob-to-digit link lines */
+#include "theme.h"
+#include "graphics.h"
 
 /* One spacing scale, so the layout is composed rather than accumulated. Every gap below is a
  * multiple of this; the previous pass used a different number at each site and it showed. */
@@ -112,9 +95,9 @@
 /* Short fills finish within the controller's bounded busy wait, including on view changes. */
 static void clear_screen(void)
 {
-    ra8876_set_fg(C_BG);
+    gfx_set_fg(C_BG);
     for (int16_t y = 0; y < LCD_HEIGHT; y += 80)
-        ra8876_fill_rect(0, y, LCD_WIDTH, 80);
+        gfx_fill_rect(0, y, LCD_WIDTH, 80);
 }
 
 /* Scale an RGB565 towards black, for the "everything but the digit under your finger fades
@@ -129,11 +112,7 @@ static uint16_t dim(uint16_t c, uint8_t pct)
 
 static void frame(int16_t x, int16_t y, int16_t w, int16_t h, int16_t t, uint16_t c)
 {
-    ra8876_set_fg(c);
-    ra8876_fill_rect(x, y, w, t);
-    ra8876_fill_rect(x, (int16_t)(y + h - t), w, t);
-    ra8876_fill_rect(x, y, t, h);
-    ra8876_fill_rect((int16_t)(x + w - t), y, t, h);
+    gfx_border((gfx_rect_t){x,y,w,h}, 5, (uint8_t)t, c);
 }
 
 /* A boolean is a state, not a tiny two-button menu. One strong tile reads cleanly at a glance:
@@ -143,8 +122,8 @@ static void draw_bool_tile(int16_t x, int16_t y, int16_t w, int16_t h, int on,
 {
     uint16_t bg = on ? C_TOGGLE_ON : C_TRACK;
     uint16_t fg = on ? C_BG : C_TITLE;
-    ra8876_set_fg(bg);
-    ra8876_fill_rect(x, y, w, h);
+    gfx_set_fg(bg);
+    gfx_fill_rect(x, y, w, h);
     frame(x, y, w, h, 2, on ? dim(C_TOGGLE_ON, 65) : C_OUTLINE);
     text_draw_centred(face, (int16_t)(x + w / 2),
                       (int16_t)(y + (h - text_height(face)) / 2),
@@ -156,7 +135,10 @@ static void str_of(char *out, uint32_t cap, uint16_t off, uint16_t len)
 {
     const char *s = surf_string(off, len);
     uint32_t n = (len < cap - 1u) ? len : cap - 1u;
-    if (s && n) memcpy(out, s, n); else n = 0;
+    if (s && n) {
+        if(len>=cap&&n>1u) {out[0]='~';memcpy(out+1,s+len-(n-1u),n-1u);}
+        else memcpy(out,s,n);
+    } else n = 0;
     out[n] = 0;
 }
 
@@ -317,16 +299,18 @@ static void forget_everything(void)
 
 void ui_reset(void)
 {
+    gfx_begin();
     forget_everything();
     clear_screen();
+    gfx_end();
 }
 
 /* ------------------------------------------------------------------ page position */
 
 static void draw_page_strip(int16_t y)
 {
-    ra8876_set_fg(C_BG);
-    ra8876_fill_rect(0, y, LCD_WIDTH, 32);
+    gfx_set_fg(C_BG);
+    gfx_fill_rect(0, y, LCD_WIDTH, 32);
 
     uint16_t total = surf_slot_span();
     uint16_t page  = ui_state()->page;
@@ -350,8 +334,8 @@ static void draw_page_strip(int16_t y)
             int16_t col = (int16_t)(lane % UI_ROW_SPLIT);
             int16_t row = lane < UI_ROW_SPLIT ? 0 : 1;
             int16_t x = (int16_t)(x0 + pg * (group_w + page_gap) + col * (block + gap));
-            ra8876_set_fg(pg == page / UI_FIELDS_PER_PAGE ? C_NAV : C_OUTLINE);
-            ra8876_fill_rect(x, (int16_t)(y0 + row * (block + gap)), block, block);
+            gfx_set_fg(pg == page / UI_FIELDS_PER_PAGE ? C_NAV : C_OUTLINE);
+            gfx_fill_rect(x, (int16_t)(y0 + row * (block + gap)), block, block);
         }
     }
 
@@ -387,14 +371,14 @@ static void draw_legend(int full)
         int down = (want[b] & 2u) != 0;
 
         if (!live) {
-            ra8876_set_fg(C_BG);
-            ra8876_fill_rect(x, LEGEND_Y, w, LEGEND_H);
+            gfx_set_fg(C_BG);
+            gfx_fill_rect(x, LEGEND_Y, w, LEGEND_H);
             continue;
         }
 
         uint16_t bg = down ? C_CELL_DOWN : C_CELL;
-        ra8876_set_fg(bg);
-        ra8876_fill_rect(x, LEGEND_Y, w, LEGEND_H);
+        gfx_set_fg(bg);
+        gfx_fill_rect(x, LEGEND_Y, w, LEGEND_H);
         frame(x, LEGEND_Y, w, LEGEND_H, 1, down ? C_NAV : C_OUTLINE);
 
         const char *icon = glyph[b];
@@ -444,6 +428,17 @@ static void draw_cell_frame(unsigned knob, int touched, int pressed, int drilled
     int16_t x, y;
     cell_geometry(knob, &x, &y);
     frame(x, y, CELL_W, ROW_H, 2, cell_frame_color(touched, pressed, drilled, active));
+    gfx_set_fg(C_CELL); gfx_fill_rect(x + 7, y + 3, CELL_W - 14, 3);
+    if (touched || active) { gfx_set_fg(C_LIVE); gfx_fill_rect(x + CELL_W/2 - 14, y + 3, 28, 3); }
+    if (pressed) frame(x + 4, y + 4, CELL_W - 8, ROW_H - 8, 1, C_INDICATOR);
+    else { /* Restore the inset when a switch releases. */
+        gfx_restore((gfx_rect_t){x+4,y+4,CELL_W-8,1},C_CELL);
+        gfx_restore((gfx_rect_t){x+4,y+ROW_H-5,CELL_W-8,1},C_CELL);
+        gfx_restore((gfx_rect_t){x+4,y+5,1,ROW_H-10},C_CELL);
+        gfx_restore((gfx_rect_t){x+CELL_W-5,y+5,1,ROW_H-10},C_CELL);
+    }
+    if (drilled) { gfx_set_fg(C_NAV); gfx_fill_rect(x+3,y+12,3,ROW_H-24); }
+    else gfx_restore((gfx_rect_t){x+3,y+12,3,ROW_H-24},C_CELL);
 }
 
 /* Clear and repaint only the value region. Keeping the label and cell background untouched is
@@ -455,8 +450,8 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
     const int16_t h = ROW_H;
     const uint16_t bg = C_CELL;
 
-    ra8876_set_fg(bg);
-    ra8876_fill_rect((int16_t)(x + 2), (int16_t)(y + 70),
+    gfx_set_fg(bg);
+    gfx_fill_rect((int16_t)(x + 2), (int16_t)(y + 70),
                      (int16_t)(CELL_W - 4), (int16_t)(h - 72));
 
     if (!f) {
@@ -488,8 +483,8 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
         int16_t sh = 54;
         int16_t sx = (int16_t)(x + 2 * SP);
         int16_t sy = (int16_t)(vy - (sh - text_height(&font_ui)) / 2);
-        ra8876_set_fg(color565(f));
-        ra8876_fill_rect(sx, sy, sw, sh);
+        gfx_checker((gfx_rect_t){sx,sy,sw,sh},color565(f),
+                    f->color_count==4 ? (uint8_t)(255*color_normal(f,f->color[3])) : 255u);
         frame(sx, sy, sw, sh, 2, C_OUTLINE);
         return;
     }
@@ -497,11 +492,14 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
     /* Numbers get the monospaced face so digits do not shift as they change; words get the
      * proportional one, since monospacing "Sawtooth" buys nothing and costs the width. */
     const font_t *vf = (f->value_tag == EMP_VAL_NUMBER) ? &font_value : &font_ui;
-    if (text_width(vf, buf) > avail) vf = &font_ui;
+    if (text_width(vf, buf) > avail) vf = (f->value_tag == EMP_VAL_NUMBER) ? &font_compact : &font_small;
     fit_text(vf, buf, avail);
 
     uint16_t vc = C_VALUE;
-    if (f->kind == EMP_KIND_READONLY)  vc = C_TITLE;
+    if (f->kind == EMP_KIND_READONLY) {
+        vc = C_VALUE;
+        text_draw_right(&font_small, x + CELL_W - 2*SP, y + h - 30, "READ ONLY", C_UNIT, bg);
+    }
     text_draw(vf, (int16_t)(x + 2 * SP), vy, buf, vc, bg);
 
     if (f->present & EMP_PRESENT_UNIT) {
@@ -517,15 +515,12 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
     int16_t bh = (int16_t)(h - 70 - 2 * SP);
     int16_t ext = bar_extent(f, bh);
 
-    ra8876_set_fg(C_TRACK);
-    ra8876_fill_rect(bx, by, bw, bh);
-    if (ext > 0) {
-        ra8876_set_fg(f->kind == EMP_KIND_READONLY ? C_TITLE : C_ACCENT);
-        ra8876_fill_rect(bx, (int16_t)(by + bh - ext), bw, ext);
-    } else if (ext < 0) {
-        ra8876_set_fg(C_OUTLINE);
-        ra8876_fill_rect(bx, (int16_t)(by + bh / 2 - 2), bw, 4);
+    gfx_meter((gfx_rect_t){bx,by,bw,bh}, ext, 0,
+              f->kind == EMP_KIND_READONLY ? C_TITLE : C_ACCENT);
+    if (ext < 0) {
+        gfx_set_fg(C_INDICATOR);gfx_fill_rect(bx+2, by+bh/2-2, bw-4, 4);
     }
+
 }
 
 /* Preserve identifying suffixes (Offset X/Y, frequency units) before truncating a title.
@@ -553,8 +548,11 @@ static void draw_cell_label(int16_t x, int16_t y, char *label)
             label[split] = ' ';
         }
     }
-    fit_text(&font_small, label, width);
-    text_draw(&font_small, x, y, label, C_TITLE, C_CELL);
+    /* Keep the identifying suffix when even two lines cannot fit. */
+    unsigned length=(unsigned)strlen(label),tail=length>8u?length-8u:0u;
+    char suffix[12];suffix[0]='~';memcpy(suffix+1,label+tail,length-tail+1u);
+    while(tail>0&&text_width(&font_small,suffix)>width){tail++;suffix[0]='~';memcpy(suffix+1,label+tail,length-tail+1u);}
+    text_draw(&font_small, x, y, suffix, C_TITLE, C_CELL);
 }
 
 static void draw_cell(unsigned knob, const surf_field_t *f,
@@ -562,8 +560,8 @@ static void draw_cell(unsigned knob, const surf_field_t *f,
 {
     int16_t x, y;
     cell_geometry(knob, &x, &y);
-    ra8876_set_fg(C_CELL);
-    ra8876_fill_rect(x, y, CELL_W, ROW_H);
+    gfx_set_fg(C_CELL);
+    gfx_fill_rect(x, y, CELL_W, ROW_H);
     draw_cell_frame(knob, touched, pressed, drilled, active);
 
     if (f) {
@@ -643,11 +641,11 @@ static void render_operator(int full)
     static char previous[8][96];
     static uint16_t previous_press;
     const ui_state_t *st = ui_state();
-    const uint16_t ground = 0x0862, panel = 0x18c4, ink = 0xffff, muted = 0xbdd7;
-    const uint16_t stop_bg = 0x9808;
+    const uint16_t ground = C_BG, panel = C_CELL, ink = C_VALUE, muted = C_TITLE;
+    const uint16_t stop_bg = C_STOP;
     if (full) {
-        ra8876_set_fg(ground);
-        for (int16_t y = 0; y < 480; y += 80) ra8876_fill_rect(0, y, 800, 80);
+        gfx_set_fg(ground);
+        for (int16_t y = 0; y < 480; y += 80) gfx_fill_rect(0, y, 800, 80);
         memset(previous, 0xff, sizeof(previous)); previous_press = 0xffff;
         text_draw(&font_small, 24, 114, "MANUAL CONTROL", muted, ground);
         text_draw_right(&font_small, 776, 114, "1 / 2", muted, ground);
@@ -663,8 +661,8 @@ static void render_operator(int full)
         if (k >= 4) {
             int16_t x = (int16_t)(16 + (k - 4) * 196);
             uint16_t bg = k == 7 ? stop_bg : panel;
-            if (pressed) bg = k == 7 ? 0xc108 : 0x3269;
-            ra8876_set_fg(bg); ra8876_fill_rect(x, 12, 184, 88);
+            if (pressed) bg = k == 7 ? C_STOP : C_CELL_DOWN;
+            gfx_set_fg(bg); gfx_fill_rect(x, 12, 184, 88);
             char label[48] = {0}; if (f) str_of(label, sizeof(label), f->label_off, f->label_len);
             /* Whole words on two lines beat truncating the action an operator will execute. */
             if (k == 7) { text_draw_centred(&font_ui, x + 92, 22, "STOP", ink, bg);
@@ -676,11 +674,11 @@ static void render_operator(int full)
             char *status = strchr(value, '\n');
             if (status) {
                 *status++ = 0;
-                ra8876_set_fg(ground); ra8876_fill_rect(24, 114, 660, 30);
+                gfx_set_fg(ground); gfx_fill_rect(24, 114, 660, 30);
                 fit_text(&font_small, status, 660);
                 text_draw(&font_small, 24, 114, status, muted, ground);
             }
-            ra8876_set_fg(ground); ra8876_fill_rect(24, 157, 752, 154);
+            gfx_set_fg(ground); gfx_fill_rect(24, 157, 752, 154);
             int numeric = value[0] && (value[0] == '-' || (value[0] >= '0' && value[0] <= '9'));
             const font_t *face = numeric ? &font_display : &font_ui;
             if (text_width(face, value) > 740) face = &font_value;
@@ -688,7 +686,7 @@ static void render_operator(int full)
             text_draw(face, 24, numeric ? 158 : 208, value, ink, ground);
         } else {
             int16_t x = (int16_t)(16 + k * 196);
-            ra8876_set_fg(panel); ra8876_fill_rect(x, 366, 184, 102);
+            gfx_set_fg(panel); gfx_fill_rect(x, 366, 184, 102);
             const char *label = k == 0 ? "AXIS" : k == 1 ? "STEP / rev" : "SPEED / ustep/s";
             text_draw(&font_small, x + 12, 374, label, muted, panel);
             const font_t *face = k == 0 ? &font_ui : &font_value;
@@ -697,7 +695,7 @@ static void render_operator(int full)
         }
     }
     if (full) {
-        ra8876_set_fg(panel); ra8876_fill_rect(604, 366, 180, 102);
+        gfx_set_fg(panel); gfx_fill_rect(604, 366, 180, 102);
         text_draw(&font_small, 616, 374, "MORE SETTINGS", muted, panel);
         text_draw(&font_ui, 616, 414, "PRESS  >", ink, panel);
     }
@@ -710,10 +708,10 @@ static void render_operator_settings(int full)
     static char previous[8][96];
     static uint16_t previous_press;
     const ui_state_t *st = ui_state();
-    const uint16_t ground = 0x0862, panel = 0x18c4, ink = 0xffff, muted = 0xbdd7;
+    const uint16_t ground = C_BG, panel = C_CELL, ink = C_VALUE, muted = C_TITLE;
     if (full) {
-        ra8876_set_fg(ground);
-        for (int16_t y = 0; y < 480; y += 80) ra8876_fill_rect(0, y, 800, 80);
+        gfx_set_fg(ground);
+        for (int16_t y = 0; y < 480; y += 80) gfx_fill_rect(0, y, 800, 80);
         memset(previous, 0xff, sizeof(previous)); previous_press = 0xffff;
         text_draw(&font_small, 24, 114, "MOTION SETTINGS", muted, ground);
         text_draw_right(&font_small, 776, 114, "2 / 2", muted, ground);
@@ -727,25 +725,25 @@ static void render_operator_settings(int full)
         if (k < 4) {
             int16_t x = (int16_t)(16 + k * 196);
             const char *labels[] = { "COMMAND VIA", "ACCEL / ustep/s2", "MIN SPEED", "TARGET / rev" };
-            ra8876_set_fg(panel); ra8876_fill_rect(x, 366, 184, 102);
+            gfx_set_fg(panel); gfx_fill_rect(x, 366, 184, 102);
             text_draw(&font_small, x + 12, 374, labels[k], muted, panel);
             const font_t *face = k == 0 ? &font_ui : &font_value;
             fit_text(face, value, 160); text_draw(face, x + 12, 411, value, ink, panel);
         } else if (k == 4 || k == 7) {
             int16_t x = k == 4 ? 16 : 604;
-            uint16_t bg = k == 7 ? 0x9808 : panel;
-            if (st->press_mask & (1u << (k ^ 4u))) bg = k == 7 ? 0xc108 : 0x3269;
-            ra8876_set_fg(bg); ra8876_fill_rect(x, 12, 184, 88);
+            uint16_t bg = k == 7 ? C_STOP : panel;
+            if (st->press_mask & (1u << (k ^ 4u))) bg = k == 7 ? C_STOP : C_CELL_DOWN;
+            gfx_set_fg(bg); gfx_fill_rect(x, 12, 184, 88);
             text_draw_centred(&font_ui, x + 92, 22, k == 4 ? "Move" : "STOP", ink, bg);
             text_draw_centred(&font_small, x + 92, 60, k == 4 ? "TO TARGET" : "PRESS / ESCAPE", ink, bg);
         } else if (k == 5) {
-            ra8876_set_fg(ground); ra8876_fill_rect(212, 12, 380, 88);
+            gfx_set_fg(ground); gfx_fill_rect(212, 12, 380, 88);
             text_draw(&font_small, 224, 24, "COMMAND ROUTE", muted, ground);
             int connected = f && ((f->value_tag == EMP_VAL_BOOL && f->boolean) ||
                 (f->value_tag == EMP_VAL_TEXT && strcmp(f->text, "true") == 0));
             text_draw(&font_ui, 224, 56, connected ? "Connected" : "Disconnected", ink, ground);
         } else {
-            ra8876_set_fg(ground); ra8876_fill_rect(24, 170, 752, 124);
+            gfx_set_fg(ground); gfx_fill_rect(24, 170, 752, 124);
             text_draw(&font_small, 24, 170, "OPERATION", muted, ground);
             fit_text(&font_ui, value, 744); text_draw(&font_ui, 24, 218, value, ink, ground);
         }
@@ -798,8 +796,8 @@ static void draw_system_footer(int full)
         : s->mode == UI_MODE_CAL_SELECT ? "5  Calibrate all"
         : s->mode == UI_MODE_RESTORE_CONFIRM ? "5  Restore defaults"
         : s->mode == UI_MODE_CAL_RUN ? (s->cal_phase == 7 ? "5  Retry" : "5  Done") : "5  Release to restart";
-    ra8876_set_fg(C_BG); ra8876_fill_rect(0, 418, LCD_WIDTH, 62);
-    ra8876_set_fg(C_OUTLINE); ra8876_fill_rect(24, 418, 752, 1);
+    gfx_set_fg(C_BG); gfx_fill_rect(0, 418, LCD_WIDTH, 62);
+    gfx_set_fg(C_OUTLINE); gfx_fill_rect(24, 418, 752, 1);
     if (ui_state_button_enabled(UI_BTN_BACK))
         text_draw(&font_small, 24, 442, back, s->btn_mask & 1 ? C_ACCENT : C_TITLE, C_BG);
     if (ui_state_button_enabled(UI_BTN_SYSTEM))
@@ -818,8 +816,8 @@ static void draw_cal_dial_map(int active, int selection)
         int16_t h = selection ? 92 : 58;
         uint16_t bg = active == (int)p ? C_CELL_DOWN
                     : ((s->cal_valid_mask & (1u << p)) ? C_CELL_HOT : C_CELL);
-        ra8876_set_fg(bg);
-        ra8876_fill_rect(x, y, CELL_W, h);
+        gfx_set_fg(bg);
+        gfx_fill_rect(x, y, CELL_W, h);
         frame(x, y, CELL_W, h, active == (int)p ? 3 : 2,
               active == (int)p ? C_NAV : C_OUTLINE);
         char label[12] = { 'D','i','a','l',' ',(char)('1' + p),0 };
@@ -855,9 +853,8 @@ static void render_brightness_editor(void)
     text_draw_centred(&font_display, 400, 94, value, C_VALUE, C_BG);
     text_draw_centred(&font_small, 400, 246, "Turn any dial to adjust", C_TITLE, C_BG);
     const int16_t bx = 96, by = 306, bw = 608;
-    ra8876_set_fg(C_TRACK); ra8876_fill_rect(bx, by, bw, 12);
-    int16_t fill = (int16_t)(((uint32_t)(s->brightness_preview - 10u) * bw) / 90u);
-    if (fill > 0) { ra8876_set_fg(C_ACCENT); ra8876_fill_rect(bx, by, fill, 12); }
+    int16_t fill = (int16_t)(((uint32_t)(s->brightness_preview - 10u) * (bw-4)) / 90u);
+    gfx_meter((gfx_rect_t){bx,by,bw,14},fill,1,C_ACCENT);
     text_draw(&font_small, bx, 332, "10%", C_TITLE, C_BG);
     text_draw_right(&font_small, bx + bw, 332, "100%", C_TITLE, C_BG);
     if (s->brightness_save_error)
@@ -878,8 +875,8 @@ static void render_system_view(int full)
     else if (s->mode == UI_MODE_RESTORE_CONFIRM) title = "RESTORE TOUCH DEFAULTS";
     else if (s->mode == UI_MODE_BRIGHTNESS) title = "Brightness";
     text_draw(&font_ui, 24, 20, title, C_VALUE, C_BG);
-    ra8876_set_fg(C_OUTLINE);
-    ra8876_fill_rect(MARGIN_X, 58, LCD_WIDTH - 2 * MARGIN_X, 2);
+    gfx_set_fg(C_OUTLINE);
+    gfx_fill_rect(MARGIN_X, 58, LCD_WIDTH - 2 * MARGIN_X, 2);
     if (s->mode == UI_MODE_REBOOT_WAIT) {
         text_draw_centred(&font_ui, LCD_WIDTH / 2, 175,
                           "Release button 5 to restart", C_VALUE, C_BG);
@@ -915,7 +912,7 @@ static void render_system_view(int full)
         text_draw(&font_small, 24, 238, "Touch sensors", C_TITLE, C_BG);
         text_draw(&font_small, 208, 238, s->touch_status == 0
             ? (s->cal_custom ? "Ready / custom calibration" : "Ready / factory defaults") : "Sensor fault",
-            s->touch_status == 0 ? C_ACCENT : C_ALERT, C_BG);
+            s->touch_status == 0 ? C_LIVE : C_ALERT, C_BG);
         text_draw(&font_small, 24, 276, "Turn any dial to choose / press to open", C_TITLE, C_BG);
         const char *items[3] = { "Calibrate", "Restore", "Brightness" };
         const char *details[3] = { "Touch sensors", "Touch defaults", "" };
@@ -923,8 +920,8 @@ static void render_system_view(int full)
             int16_t x = (int16_t)(24 + i * 256);
             int selected = s->system_selection == i;
             uint16_t bg = selected ? C_CELL_HOT : C_CELL;
-            ra8876_set_fg(bg); ra8876_fill_rect(x, 310, 240, 92);
-            if (selected) { ra8876_set_fg(C_ACCENT); ra8876_fill_rect(x, 310, 3, 92); }
+            gfx_set_fg(bg); gfx_fill_rect(x, 310, 240, 92);
+            if (selected) { gfx_set_fg(C_ACCENT); gfx_fill_rect(x, 310, 3, 92); }
             text_draw(&font_ui, x + 16, 322, items[i], C_VALUE, bg);
             char pct[12];
             if (i == 2) {
@@ -976,8 +973,8 @@ static void render_system_view(int full)
              * chrome afterwards so its background can never leave holes at the card edges. */
             draw_cal_dial_map((int)s->cal_pot, 0);
             text_draw(&font_ui, 24, 20, title, C_VALUE, C_BG);
-            ra8876_set_fg(C_OUTLINE);
-            ra8876_fill_rect(MARGIN_X, 58, LCD_WIDTH - 2 * MARGIN_X, 2);
+            gfx_set_fg(C_OUTLINE);
+            gfx_fill_rect(MARGIN_X, 58, LCD_WIDTH - 2 * MARGIN_X, 2);
         }
     } else {
         text_draw_centred(&font_ui, LCD_WIDTH / 2, 170,
@@ -1097,8 +1094,8 @@ static uint8_t choice_slot_count(const surf_field_t *f)
 
 static void render_choice_drilled(const surf_field_t *f, int16_t y)
 {
-    ra8876_set_fg(C_BG);
-    ra8876_fill_rect(FC_X, y, FC_W, FC_DIGIT_H);
+    gfx_set_fg(C_BG);
+    gfx_fill_rect(FC_X, y, FC_W, FC_DIGIT_H);
     uint16_t count = f->choice_count;
     if (!count) return;
     uint16_t selected = (uint16_t)(f->choice < count ? f->choice : count - 1u);
@@ -1122,8 +1119,8 @@ static void render_choice_drilled(const surf_field_t *f, int16_t y)
 
     /* The marker makes selection unambiguous when every label uses the compact proportional
      * face. Its centre is also invariant: exactly LCD_WIDTH/2 for every option and density. */
-    ra8876_set_fg(C_ACCENT);
-    ra8876_fill_rect((int16_t)(LCD_WIDTH / 2 - 15),
+    gfx_set_fg(C_ACCENT);
+    gfx_fill_rect((int16_t)(LCD_WIDTH / 2 - 15),
                      (int16_t)(y + FC_DIGIT_H - 13), 30, 3);
 
     if (selected > (uint16_t)half)
@@ -1136,20 +1133,23 @@ static void render_choice_drilled(const surf_field_t *f, int16_t y)
 static void render_color_drilled(const surf_field_t *f, int16_t y)
 {
     static const char *const name[4] = { "R", "G", "B", "A" };
-    ra8876_set_fg(C_BG);
-    ra8876_fill_rect(FC_X, y, FC_W, FC_DIGIT_H);
+    gfx_set_fg(C_BG);
+    gfx_fill_rect(FC_X, y, FC_W, FC_DIGIT_H);
     for (uint8_t i = 0; i < f->color_count; i++) {
         char value[24];
         (void)text_format(value, sizeof(value), f->color[i],
                           (f->present & EMP_PRESENT_PRECISION) ? f->precision : 2u);
+        static const uint16_t channel[4]={0xF800,0x07E0,0x001F,0xFFFF};
+        gfx_rect_t ramp={KNOB_CX(i)-64,y+72,128,8};
+        gfx_paint(ramp,(gfx_paint_t){C_TRACK,channel[i],ramp,1},2);
         text_draw_centred(&font_small, KNOB_CX(i), y, name[i], C_TITLE, C_BG);
         text_draw_centred(&font_ui, KNOB_CX(i), (int16_t)(y + 32), value, C_VALUE, C_BG);
     }
     int16_t sw = 180, sh = 30;
     int16_t sx = (int16_t)((LCD_WIDTH - sw) / 2);
     int16_t sy = (int16_t)(y + FC_DIGIT_H - sh - 2);
-    ra8876_set_fg(color565(f));
-    ra8876_fill_rect(sx, sy, sw, sh);
+    gfx_checker((gfx_rect_t){sx,sy,sw,sh},color565(f),
+                f->color_count==4 ? (uint8_t)(255*color_normal(f,f->color[3])) : 255u);
     frame(sx, sy, sw, sh, 2, C_OUTLINE);
 }
 
@@ -1170,8 +1170,8 @@ static void render_drilled(int full, const surf_field_t *f)
         /* Clear only the half the readout occupies. The band and the other row of cells belong
          * to both views and are drawn by the shared paths below, so clearing the whole panel
          * here would make them flash on every entry into a field. */
-        ra8876_set_fg(C_BG);
-        ra8876_fill_rect(FC_X, reg_y, FC_W, reg_h);
+        gfx_set_fg(C_BG);
+        gfx_fill_rect(FC_X, reg_y, FC_W, reg_h);
     }
 
     draw_legend(full);
@@ -1188,8 +1188,8 @@ static void render_drilled(int full, const surf_field_t *f)
     /* Anything that is not a plain number has no digit window to show. Booleans use the same
      * single-state tile as the overview, at a larger drilled-view scale. */
     if (f->value_tag == EMP_VAL_BOOL || f->kind != EMP_KIND_NUMBER) {
-        ra8876_set_fg(C_BG);
-        ra8876_fill_rect(FC_X, digit_y, FC_W, FC_DIGIT_H);
+        gfx_set_fg(C_BG);
+        gfx_fill_rect(FC_X, digit_y, FC_W, FC_DIGIT_H);
         if (f->value_tag == EMP_VAL_BOOL) {
             const int16_t sw = 220, sh = 76;
             draw_bool_tile((int16_t)((LCD_WIDTH - sw) / 2),
@@ -1219,8 +1219,8 @@ static void render_drilled(int full, const surf_field_t *f)
         int16_t clr_y = top ? cap_y : link_nr;
         int16_t clr_h = top ? (int16_t)(link_nr - cap_y)
                             : (int16_t)(cap_y + 28 - link_nr);
-        ra8876_set_fg(C_BG);
-        ra8876_fill_rect(FC_X, clr_y, FC_W, clr_h);
+        gfx_set_fg(C_BG);
+        gfx_fill_rect(FC_X, clr_y, FC_W, clr_h);
 
         for (unsigned k = 0; k < UI_DIGITS; k++) {
             int8_t e = (int8_t)(st->ws - (int8_t)k);
@@ -1245,11 +1245,11 @@ static void render_drilled(int full, const surf_field_t *f)
                 int16_t knob_end  = top ? link_far : (int16_t)(link_far - 10);
                 int16_t digit_end = top ? (int16_t)(link_nr - 10) : link_nr;
 
-                ra8876_set_fg(held ? C_ACCENT : C_LINK);
-                ra8876_fill_rect((int16_t)(KNOB_CX(k) - 1), knob_end, 2, 10);
-                ra8876_line((int16_t)KNOB_CX(k), (int16_t)(top ? knob_end + 10 : knob_end),
+                gfx_set_fg(held ? C_ACCENT : C_LINK);
+                gfx_fill_rect((int16_t)(KNOB_CX(k) - 1), knob_end, 2, 10);
+                gfx_line((int16_t)KNOB_CX(k), (int16_t)(top ? knob_end + 10 : knob_end),
                             dx, (int16_t)(top ? digit_end : digit_end + 10));
-                ra8876_fill_rect((int16_t)(dx - 1), digit_end, 2, 10);
+                gfx_fill_rect((int16_t)(dx - 1), digit_end, 2, 10);
                 break;
             }
         }
@@ -1263,16 +1263,17 @@ static void render_drilled(int full, const surf_field_t *f)
      * SPI and showed as the value flashing black on every detent; a knob changes one digit. */
     static char     last_ch[MAX_DIGITS];
     static uint16_t last_col[MAX_DIGITS];
+    static uint8_t last_selected[MAX_DIGITS];
     static unsigned last_n_digits;
     static int16_t  last_digit_x0 = -1;
     static int16_t  last_digit_y  = -1;
 
-    uint8_t other = (uint8_t)(st->held_digit >= 0 ? 45u : 100u);
+    uint8_t other = (uint8_t)(st->held_digit >= 0 ? 88u : 100u);
 
     int relayout = full || n != last_n_digits || x0 != last_digit_x0 || digit_y != last_digit_y;
     if (relayout) {
-        ra8876_set_fg(C_BG);
-        ra8876_fill_rect(FC_X, digit_y, FC_W, FC_DIGIT_H);
+        gfx_set_fg(C_BG);
+        gfx_fill_rect(FC_X, digit_y, FC_W, FC_DIGIT_H);
         for (unsigned i = 0; i < MAX_DIGITS; i++) last_ch[i] = 0;
     }
     last_digit_y = digit_y;
@@ -1285,15 +1286,23 @@ static void render_drilled(int full, const surf_field_t *f)
         else if (d[i].knob >= 0 && d[i].knob == st->held_digit) c = C_VALUE;
         else                                                    c = dim(C_VALUE, other);
 
-        if (!relayout && last_ch[i] == d[i].ch && last_col[i] == c) continue;
+        uint8_t selected=(uint8_t)(d[i].knob >= 0 && d[i].knob == st->held_digit);
+        if (!relayout && last_ch[i] == d[i].ch && last_col[i] == c && last_selected[i]==selected) continue;
+        last_selected[i]=selected;
 
         int16_t gx = (int16_t)(x0 + d[i].x);
         if (!relayout) {
-            ra8876_set_fg(C_BG);
-            ra8876_fill_rect(gx, digit_y, adv, FC_DIGIT_H);
+            gfx_set_fg(C_BG);
+            gfx_fill_rect(gx, digit_y, adv, FC_DIGIT_H);
+        }
+        if (d[i].knob >= 0 && d[i].knob == st->held_digit) {
+            gfx_rect_t plate={gx,digit_y,adv,FC_DIGIT_H};
+            gfx_card(plate,C_CELL_HOT);
+            gfx_set_fg(C_ACCENT);gfx_fill_rect(gx+4,digit_y+FC_DIGIT_H-3,adv-8,3);
         }
         char one[2] = { d[i].ch, 0 };
-        text_draw(&font_display, gx, digit_y, one, c, C_BG);
+        text_draw(&font_display, gx, digit_y, one, c,
+                  d[i].knob >= 0 && d[i].knob == st->held_digit ? C_CELL_HOT : C_BG);
 
         last_ch[i]  = d[i].ch;
         last_col[i] = c;
@@ -1304,22 +1313,22 @@ static void render_drilled(int full, const surf_field_t *f)
     if (f->present & EMP_PRESENT_UNIT) {
         str_of(buf, sizeof(buf), f->unit_off, f->unit_len);
         text_draw(&font_small, (int16_t)(x0 + w + SP),
-                  (int16_t)(digit_y + text_height(&font_display) - 34), buf, C_UNIT, C_BG);
+                  (int16_t)(digit_y + FC_DIGIT_H - text_height(&font_small)), buf, C_UNIT, C_BG);
     }
 
     if ((f->present & (EMP_PRESENT_MIN | EMP_PRESENT_MAX)) ==
         (EMP_PRESENT_MIN | EMP_PRESENT_MAX) && f->max > f->min) {
         int16_t bx = (int16_t)(LCD_WIDTH - 2 * MARGIN_X - 12), by = digit_y;
         int16_t bh = FC_DIGIT_H;
-        ra8876_set_fg(C_TRACK);
-        ra8876_fill_rect(bx, by, 12, bh);
+        gfx_set_fg(C_TRACK);
+        gfx_fill_rect(bx, by, 12, bh);
 
         double t = (f->number - f->min) / (f->max - f->min);
         if (t < 0.0) t = 0.0;
         if (t > 1.0) t = 1.0;
         int16_t fh = (int16_t)(t * (double)bh);
-        ra8876_set_fg(C_ACCENT);
-        ra8876_fill_rect(bx, (int16_t)(by + bh - fh), 12, fh);
+        gfx_set_fg(C_ACCENT);
+        gfx_fill_rect(bx, (int16_t)(by + bh - fh), 12, fh);
     }
 }
 
@@ -1344,15 +1353,14 @@ static const uint8_t boot_order[UI_BOOT_CELL_FRAMES] = { 0, 1, 2, 3, 4, 5, 6, 7 
  * channel must never be blocked by the thing being debugged (see the enumeration wait in
  * main.c, and the hang that comment records).
  *
- * Every frame is INCREMENTAL. A full-screen repaint measures 56 ms and would set the frame rate
- * on its own; the cells and the rule are hardware fills, and the one piece of text is drawn
+ * Every frame is INCREMENTAL. Full-screen repaint time contributes to the frame budget; the cells and the rule are hardware fills, and the one piece of text is drawn
  * once. So a frame cannot be rendered on its own -- run 0..n to see frame n, which is also
  * exactly what the device does.
  *
  * It deliberately says nothing about a host. The device is an instrument that a computer may or
  * may not be driving; "READY" is a claim about the panel, the knobs and the surface layer, all
  * of which are true with nothing plugged in. */
-void ui_boot_ready_frame(unsigned step)
+static void boot_ready_frame_impl(unsigned step)
 {
     if (step == 0) {
         clear_screen();
@@ -1363,8 +1371,8 @@ void ui_boot_ready_frame(unsigned step)
         unsigned i = step - 1u;
         int16_t x, y;
         cell_geometry(boot_order[i], &x, &y);
-        ra8876_set_fg(C_CELL);
-        ra8876_fill_rect(x, y, CELL_W, ROW_H);
+        gfx_set_fg(C_CELL);
+        gfx_fill_rect(x, y, CELL_W, ROW_H);
         frame(x, y, CELL_W, ROW_H, 2, C_OUTLINE);
 
         /* The rule advances WITH the cells rather than on a clock of its own, so the two read as
@@ -1372,8 +1380,8 @@ void ui_boot_ready_frame(unsigned step)
         int16_t from = (int16_t)((int32_t)BOOT_RULE_W * (int32_t)i / (int32_t)UI_BOOT_CELL_FRAMES);
         int16_t to   = (int16_t)((int32_t)BOOT_RULE_W * (int32_t)(i + 1u)
                                  / (int32_t)UI_BOOT_CELL_FRAMES);
-        ra8876_set_fg(C_ACCENT);
-        ra8876_fill_rect((int16_t)(BOOT_RULE_X + from), BOOT_RULE_Y,
+        gfx_set_fg(C_ACCENT);
+        gfx_fill_rect((int16_t)(BOOT_RULE_X + from), BOOT_RULE_Y,
                          (int16_t)(to - from), BOOT_RULE_H);
         return;
     }
@@ -1398,7 +1406,7 @@ void ui_boot_ready_frame(unsigned step)
 
 /* ------------------------------------------------------------------ entry point */
 
-void ui_render(void)
+static void render_impl(void)
 {
     const ui_state_t *st = ui_state();
     int view = st->mode == UI_MODE_SURFACE ? ((st->focused >= 0) ? 1 : 0)
@@ -1475,6 +1483,19 @@ void ui_render(void)
         if (view == 0) last_focus = -2;
         memset(last_cell, 0, sizeof(last_cell));
     }
+}
+
+void ui_render(void)
+{
+    gfx_begin();
+    render_impl();
+    gfx_end();
+}
+void ui_boot_ready_frame(unsigned step)
+{
+    gfx_begin();
+    boot_ready_frame_impl(step);
+    gfx_end();
 }
 
 /* ------------------------------------------------------------------ demo scenes */

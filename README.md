@@ -258,3 +258,7 @@ survive host Reveal, descriptor replacement and disconnect; Back returns to the
 latest application page. Generic cells wrap labels onto two lines so axis suffixes
 remain readable, use brighter units and share the settings palette. Full clears
 use bounded strips to avoid remnants of the previous page.
+
+## Graphics refresh
+
+The application uses a shared clipped RGB565 compositor, Inter labels, JetBrains Mono values and the av-frameworks palette. RA8876 is the production backend; the pinned Renesas D/AVE backend requires an explicit benchmark build. See [graphics refresh and qualification](docs/graphics-refresh.md) for reproducible build/test commands, screen evidence, measurement definitions and qualification status.
