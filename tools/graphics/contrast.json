@@ -203,6 +203,30 @@
       "bg": "STOP",
       "minimum": 4.5,
       "ratio": 9.77
+    },
+    {
+      "fg": "DIM",
+      "bg": "BG",
+      "minimum": 7,
+      "ratio": 11.266
+    },
+    {
+      "fg": "DIM",
+      "bg": "CELL_HOT",
+      "minimum": 7,
+      "ratio": 9.421
+    },
+    {
+      "fg": "VALUE_88_PERCENT",
+      "bg": "BG",
+      "minimum": 7,
+      "ratio": 11.809
+    },
+    {
+      "fg": "VALUE_88_PERCENT",
+      "bg": "CELL_HOT",
+      "minimum": 7,
+      "ratio": 9.875
     }
   ]
 }
