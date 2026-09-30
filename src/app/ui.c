@@ -1143,7 +1143,7 @@ static void render_color_drilled(const surf_field_t *f, int16_t y)
         gfx_rect_t ramp={KNOB_CX(i)-64,y+72,128,8};
         gfx_paint(ramp,(gfx_paint_t){C_TRACK,channel[i],ramp,1},2);
         text_draw_centred(&font_small, KNOB_CX(i), y, name[i], C_TITLE, C_BG);
-        text_draw_centred(&font_ui, KNOB_CX(i), (int16_t)(y + 32), value, C_VALUE, C_BG);
+        text_draw_centred(&font_compact, KNOB_CX(i), (int16_t)(y + 32), value, C_VALUE, C_BG);
     }
     int16_t sw = 180, sh = 30;
     int16_t sx = (int16_t)((LCD_WIDTH - sw) / 2);
