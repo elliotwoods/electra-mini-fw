@@ -639,24 +639,27 @@ static void render_cells(int full, unsigned first, unsigned last)
 static void render_operator(int full)
 {
     static char previous[8][96];
-    static uint16_t previous_press;
+    static uint16_t previous_press,previous_touch;
     const ui_state_t *st = ui_state();
     const uint16_t ground = C_BG, panel = C_CELL, ink = C_VALUE, muted = C_TITLE;
     const uint16_t stop_bg = C_STOP;
     if (full) {
         gfx_set_fg(ground);
         for (int16_t y = 0; y < 480; y += 80) gfx_fill_rect(0, y, 800, 80);
-        memset(previous, 0xff, sizeof(previous)); previous_press = 0xffff;
+        memset(previous, 0xff, sizeof(previous)); previous_press = previous_touch = 0xffff;
         text_draw(&font_small, 24, 114, "MANUAL CONTROL", muted, ground);
         text_draw_right(&font_small, 776, 114, "1 / 2", muted, ground);
         text_draw(&font_small, 24, 318, "ACTUAL POSITION / rev", muted, ground);
+        text_draw_right(&font_small, 776, 318, "READ ONLY", muted, ground);
     }
     for (unsigned k = 0; k < 8; ++k) {
         const surf_field_t *f = surf_field((uint16_t)k);
         char value[96] = {0}; if (f) value_text(f, value, sizeof(value));
         int pressed = (st->press_mask & (1u << (k ^ 4u))) != 0;
+        int touched = (st->touch_mask & (1u << (k ^ 4u))) != 0;
         if (!full && strcmp(previous[k], value) == 0 &&
-            ((previous_press ^ st->press_mask) & (1u << (k ^ 4u))) == 0) continue;
+            ((previous_press ^ st->press_mask) & (1u << (k ^ 4u))) == 0 &&
+            ((previous_touch ^ st->touch_mask) & (1u << (k ^ 4u))) == 0) continue;
         memcpy(previous[k], value, sizeof(value));
         if (k >= 4) {
             int16_t x = (int16_t)(16 + (k - 4) * 196);
@@ -684,6 +687,9 @@ static void render_operator(int full)
             if (text_width(face, value) > 740) face = &font_value;
             fit_text(face, value, 740);
             text_draw(face, 24, numeric ? 158 : 208, value, ink, ground);
+            gfx_set_fg(panel);gfx_fill_rect(604,366,180,102);
+            text_draw(&font_small,616,374,"MORE SETTINGS",muted,panel);
+            text_draw(&font_ui,616,414,"PRESS  >",ink,panel);
         } else {
             int16_t x = (int16_t)(16 + k * 196);
             gfx_set_fg(panel); gfx_fill_rect(x, 366, 184, 102);
@@ -693,13 +699,12 @@ static void render_operator(int full)
             fit_text(face, value, 160);
             text_draw(face, x + 12, 411, value, ink, panel);
         }
+        int16_t px=(int16_t)(16+(k>=4?k-4:k)*196),py=k>=4?12:366;
+        int16_t pw=k==3?180:184,ph=k>=4?88:102;
+        if(touched){gfx_set_fg(C_LIVE);gfx_fill_rect(px+pw/2-20,py+3,40,3);}
+        if(pressed)frame(px+4,py+4,pw-8,ph-8,2,C_INDICATOR);
     }
-    if (full) {
-        gfx_set_fg(panel); gfx_fill_rect(604, 366, 180, 102);
-        text_draw(&font_small, 616, 374, "MORE SETTINGS", muted, panel);
-        text_draw(&font_ui, 616, 414, "PRESS  >", ink, panel);
-    }
-    previous_press = st->press_mask;
+    previous_press = st->press_mask;previous_touch=st->touch_mask;
 }
 
 /* Settings stay on the same visual scale and never take over the Stop knob. */

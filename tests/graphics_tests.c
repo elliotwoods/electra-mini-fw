@@ -65,6 +65,17 @@ static void incremental_tests(void)
     CHECK(diff==0);
     puts("  focus/touch release and editor orientation match a clean repaint");
 }
+static void operator_tests(void)
+{
+    clean();surf_demo_operator();ui_state_init();ui_reset();ui_render();
+    memcpy(reference,sim_framebuffer(),sizeof(reference));
+    ui_state_touch(1,100);ui_state_push(0,1,120);ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))!=0);
+    ui_state_push(0,0,140);ui_state_touch(0,160);ui_render();
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    puts("  operator touched/pressed cues and release match a clean repaint");
+}
 static void eviction_tests(void)
 {
     clean();gfx_rect_t card={20,20,200,184},value={24,80,180,95};base(card);
@@ -90,6 +101,6 @@ static void layout_tests(void)
 }
 int main(void)
 {
-    primitive_tests();background_tests();incremental_tests();eviction_tests();layout_tests();
+    primitive_tests();background_tests();incremental_tests();operator_tests();eviction_tests();layout_tests();
     printf("%u graphics checks passed\n",checks);return 0;
 }
