@@ -1799,7 +1799,9 @@ static void cmd_gbench(const char *a)
     g_input_gap_max=g_input_drops=0;
     uint32_t c0=cycles_now(),ms0=bsp_millis();
     while(bsp_millis()-ms0<100)gfx_yield();
-    console_hex("clock_cycles_per_100ms",cycles_now()-c0);
+    uint32_t clock_cycles=cycles_now()-c0,clock_span=bsp_millis()-ms0;
+    console_hex("clock_span_ms",clock_span);
+    console_hex("clock_cycles_per_100ms",(uint32_t)((uint64_t)clock_cycles*100u/clock_span));
     console_write("GB columns: index submit_us gpu_wait_us pixel_spi_us total_us input_gap_ms input_drops accel_errors\r\n");
     for(uint32_t i=0;i<count;i++) {
         gfx_yield();service_pending_inputs();

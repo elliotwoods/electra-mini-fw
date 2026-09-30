@@ -149,18 +149,24 @@ static void raster(gfx_rect_t r,gfx_paint_t p,uint8_t radius)
     if(radius>8) radius=8;
     if(radius>r.w/2) radius=(uint8_t)(r.w/2);
     if(radius>r.h/2) radius=(uint8_t)(r.h/2);
-    for(int16_t row=0;row<r.h;row++) {
-        int cut=inset(row,r.h,radius);
+    for(int16_t row=0;row<r.h;) {
+        int cut=inset(row,r.h,radius),run=1;
         if(!p.horizontal||p.first==p.last) {
-            gb_set_fg(gfx_sample(p,r.x,r.y+row));
-            gb_fill_rect(r.x+cut,r.y+row,r.w-2*cut,1); counters.fills++;
+            uint16_t colour=gfx_sample(p,r.x,r.y+row);
+            /* RGB565 gradients contain repeated rows. Submit equal rows as one rectangle,
+               keeping rounded cutouts exact and each operation at most 32 rows tall. */
+            while(run<32&&row+run<r.h&&inset(row+run,r.h,radius)==cut&&
+                  gfx_sample(p,r.x,r.y+row+run)==colour)run++;
+            gb_set_fg(colour);
+            gb_fill_rect(r.x+cut,r.y+row,r.w-2*cut,(int16_t)run); counters.fills++;
         } else {
             for(int16_t x=0;x<r.w-2*cut;x++) scanline[x]=gfx_sample(p,r.x+cut+x,r.y+row);
             gb_blit_begin(r.x+cut,r.y+row,r.w-2*cut,1);
             gb_blit_pixels(scanline,(uint32_t)(r.w-2*cut));gb_blit_end();
             counters.spi_pixels+=(uint32_t)(r.w-2*cut);
         }
-        if((row&15)==15) gfx_yield();
+        row+=(int16_t)run;
+        if(run>1||(row&15)==0)gfx_yield();
     }
 }
 static int paint_equal(gfx_paint_t a,gfx_paint_t b)
@@ -226,11 +232,21 @@ void gfx_border(gfx_rect_t r,uint8_t radius,uint8_t t,uint16_t c)
 {
     if(!t) return;
     if(t>8) t=8;
-    for(int16_t row=0;row<r.h;row++) {
-        int cut=inset(row,r.h,radius>8?8:radius);
+    unsigned rad=radius>8?8:radius;
+    int16_t middle_start=(int16_t)(rad>t?rad:t);
+    int16_t middle_end=(int16_t)(r.h-middle_start);
+    for(int16_t row=0;row<r.h;) {
+        /* Only rounded corners need individual rows. Straight sides are hardware rectangles. */
+        if(middle_end>middle_start&&row==middle_start) {
+            gfx_paint((gfx_rect_t){r.x,r.y+row,t,middle_end-row},gfx_solid(c,r),0);
+            gfx_paint((gfx_rect_t){r.x+r.w-t,r.y+row,t,middle_end-row},gfx_solid(c,r),0);
+            row=middle_end;continue;
+        }
+        int cut=inset(row,r.h,(uint8_t)rad);
         int top=row<t||row>=r.h-t;
         gfx_paint((gfx_rect_t){r.x+cut,r.y+row,top?r.w-2*cut:t,1},gfx_solid(c,r),0);
         if(!top) gfx_paint((gfx_rect_t){r.x+r.w-cut-t,r.y+row,t,1},gfx_solid(c,r),0);
+        row++;
     }
 }
 void gfx_line(int16_t x0,int16_t y0,int16_t x1,int16_t y1)

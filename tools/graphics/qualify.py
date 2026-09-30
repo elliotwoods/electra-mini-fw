@@ -27,7 +27,8 @@ def benchmark(dev,out,workload,count,run):
         raise ValueError(f'Incomplete benchmark: {len(rows)}/{count}')
     clock=re.search(rb'clock_cycles_per_100ms 0x([0-9A-Fa-f]+)',raw)
     if not clock or not 23500000<int(clock[1],16)<24500000:raise ValueError('Invalid 240 MHz clock qualification')
-    result={'workload':WORKLOADS[workload],'run':run,'cycles_per_100ms':int(clock[1],16),'cold':rows[1] if workload==4 and len(rows)>1 else rows[0],'warmup':rows[1:31],'measured':rows[31:]}
+    span=re.search(rb'clock_span_ms 0x([0-9A-Fa-f]+)',raw)
+    result={'clock_span_ms':int(span[1],16) if span else None,'workload':WORKLOADS[workload],'run':run,'cycles_per_100ms':int(clock[1],16),'cold':rows[1] if workload==4 and len(rows)>1 else rows[0],'warmup':rows[1:31],'measured':rows[31:]}
     (out/f'{WORKLOADS[workload]}-{run}.json').write_text(json.dumps(result,indent=2)+'\n')
     print(WORKLOADS[workload],run,'max_us',max(x['total_us'] for x in rows),'gap_ms',max(x['input_gap_ms'] for x in rows),'errors',max(x['accel_errors'] for x in rows),flush=True)
     return result
