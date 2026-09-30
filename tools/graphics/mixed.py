@@ -21,7 +21,11 @@ def main():
  ap=argparse.ArgumentParser();ap.add_argument('--out',required=True);ap.add_argument('--seconds',type=int,default=600);args=ap.parse_args();out=Path(args.out);out.mkdir(parents=True,exist_ok=True)
  url=router_maintenance(True);link=None;result={'updates':0,'pongs':0,'echoes':0,'heartbeats':[],'input_messages':[],'diagnostics':[],'reconnects':0,'ping_latency_ms':[]}
  try:
-  link=Link();command(link.c,'gscene live',b'GSCENE done');result['ready']=hello(link);rev=0xBEEF0030;descriptor(link,rev)
+  link=Link();command(link.c,'gscene live',b'GSCENE done')
+  # Back cancels the inherited brightness preview, then closes local settings. Both commands
+  # precede measurement and are fixture setup, never evidence of physical input acceptance.
+  command(link.c,'sim b 0');command(link.c,'sim b 0')
+  result['ready']=hello(link);rev=0xBEEF0030;descriptor(link,rev)
   result['id_before']=command(link.c,'id').decode('latin1');result['emp_before']=command(link.c,'emp').decode('latin1')
   # Reading console counters also consumes protocol frames, so start the decoder cleanly.
   link.dec.buf.clear();link.dec.need=0
