@@ -227,6 +227,41 @@
       "bg": "CELL_HOT",
       "minimum": 7,
       "ratio": 9.875
+    },
+    {
+      "fg": "VALUE",
+      "bg": "SWITCH_ON_25_PERCENT",
+      "bg_rgb565": 2469,
+      "minimum": 7,
+      "ratio": 11.489
+    },
+    {
+      "fg": "VALUE",
+      "bg": "TRACK",
+      "bg_rgb565": 33,
+      "minimum": 7,
+      "ratio": 17.383
+    },
+    {
+      "fg": "TOGGLE_ON",
+      "bg": "SWITCH_ON_25_PERCENT",
+      "bg_rgb565": 2469,
+      "minimum": 3,
+      "ratio": 7.445
+    },
+    {
+      "fg": "INDICATOR",
+      "bg": "TRACK",
+      "bg_rgb565": 33,
+      "minimum": 3,
+      "ratio": 8.013
+    },
+    {
+      "fg": "BG",
+      "bg": "VALUE",
+      "bg_rgb565": 61277,
+      "minimum": 7,
+      "ratio": 15.677
     }
   ]
 }

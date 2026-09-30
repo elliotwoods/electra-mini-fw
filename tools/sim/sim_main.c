@@ -114,6 +114,15 @@ int main(int argc, char **argv)
     }
 
     if      (strncmp(scene,"sparse-",7)==0) {fixture_sparse((unsigned)atoi(scene+7),0);ui_render();}
+    else if (strncmp(scene,"toggle",6)==0) {
+        fixture_toggles();
+        if(strstr(scene,"focus")) {
+            unsigned knob=strstr(scene,"bottom") ? 4u : 0u;
+            surf_set_bool((uint16_t)knob,strstr(scene,"on")!=NULL);
+            ui_state_push(knob,1,100);ui_state_push(knob,0,120);
+        }
+        ui_render();
+    }
     else if (strcmp(scene,"holes")==0) {fixture_sparse(4,1);ui_render();}
     else if (strcmp(scene, "specimen") == 0) scene_specimen();
     else if (strcmp(scene,"operator-settings")==0) {surf_demo_operator();ui_state_init();ui_state_reveal(8);ui_render();}

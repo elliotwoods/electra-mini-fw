@@ -35,6 +35,37 @@ static void primitive_tests(void)
     for(int y=0;y<60;y++)for(int x=0;x<60;x++)CHECK(sim_framebuffer()[(40+y)*800+40+x]==sim_framebuffer()[(40+y)*800+140+x]);
     puts("  clipping, endpoint quantization, rounded edges, staging and VRAM copies passed");
 }
+static void switch_tests(void)
+{
+    clean();gfx_rect_t card={20,20,220,184},pill={40,70,148,54};base(card);
+    uint16_t corner=sim_framebuffer()[70*800+40];
+    gfx_begin();gfx_paint(pill,gfx_solid(C_TRACK,pill),27);gfx_end();
+    CHECK(sim_framebuffer()[70*800+40]==corner);
+    CHECK(sim_framebuffer()[97*800+114]==C_TRACK);
+    memcpy(reference,sim_framebuffer(),sizeof(reference));
+    gfx_begin();gfx_paint(pill,gfx_solid(C_TRACK,pill),27);gfx_end();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    clean();base(card);memcpy(reference,sim_framebuffer(),sizeof(reference));
+    gfx_begin();gfx_clip((gfx_rect_t){100,80,20,30});gfx_paint(pill,gfx_solid(C_VALUE,pill),27);gfx_unclip();gfx_end();
+    for(int y=70;y<124;y++)for(int x=40;x<188;x++)
+        if(x<100||x>=120||y<80||y>=110) CHECK(sim_framebuffer()[y*800+x]==reference[y*800+x]);
+
+    clean();fixture_toggles();ui_render();
+    for(unsigned pass=0;pass<4;pass++) {
+        for(unsigned k=0;k<8;k++)surf_set_bool((uint16_t)k,(uint8_t)((k+pass+1)%2));
+        ui_render();memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+        CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    }
+    for(unsigned knob=0;knob<=4;knob+=4) {
+        clean();fixture_toggles();ui_state_push(knob,1,100);ui_state_push(knob,0,120);ui_render();
+        for(unsigned state=0;state<2;state++) {
+            surf_set_bool((uint16_t)knob,(uint8_t)state);ui_render();
+            memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+            CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+        }
+    }
+    puts("  rounded switch overlays preserve corners/clipping; both states and editor orientations restore cleanly");
+}
 static void background_tests(void)
 {
     clean();gfx_rect_t card={20,20,200,184};base(card);memcpy(reference,sim_framebuffer(),sizeof(reference));
@@ -105,6 +136,6 @@ static void layout_tests(void)
 }
 int main(void)
 {
-    primitive_tests();background_tests();incremental_tests();operator_tests();eviction_tests();layout_tests();
+    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();eviction_tests();layout_tests();
     printf("%u graphics checks passed\n",checks);return 0;
 }

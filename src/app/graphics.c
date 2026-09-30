@@ -139,14 +139,13 @@ static int inset(int16_t row,int16_t h,uint8_t radius)
 {
     int i=row<h-1-row?row:h-1-row;
     if(i>=radius) return 0;
-    /* Integer circle edges; radius is capped at 8 pixels. */
+    /* Integer circle edges, bounded by the rectangle dimensions. */
     int dy=radius-1-i,dx=radius;
     while(dx>0&&dx*dx+dy*dy>radius*radius) dx--;
     return radius-dx;
 }
 static void raster(gfx_rect_t r,gfx_paint_t p,uint8_t radius)
 {
-    if(radius>8) radius=8;
     if(radius>r.w/2) radius=(uint8_t)(r.w/2);
     if(radius>r.h/2) radius=(uint8_t)(r.h/2);
     for(int16_t row=0;row<r.h;) {
@@ -205,7 +204,23 @@ void gfx_paint(gfx_rect_t r,gfx_paint_t p,uint8_t radius)
         gradients[entry].radius=radius;gradients[entry].valid=1;
         gb_set_canvas(GFX_WORK);
     } else counters.gradient_hits++;
-    gfx_copy(GFX_GRADIENT_FIRST+entry*RA_PAGE_BYTES,(gfx_rect_t){q.x-r.x,q.y-r.y,q.w,q.h},GFX_WORK,q.x,q.y);
+    if(radius>8) {
+        /* Large rounded shapes are overlays: copy only covered spans, preserving the
+         * existing card/track beneath their corners. Reuse equal spans in bounded strips. */
+        uint8_t rad=radius;
+        if(rad>r.w/2) rad=(uint8_t)(r.w/2);
+        if(rad>r.h/2) rad=(uint8_t)(r.h/2);
+        for(int16_t row=0;row<r.h;) {
+            int cut=inset(row,r.h,rad),run=1;
+            while(run<32&&row+run<r.h&&inset(row+run,r.h,rad)==cut) run++;
+            gfx_rect_t span={r.x+cut,r.y+row,r.w-2*cut,(int16_t)run},visible;
+            if(gfx_intersect(span,q,&visible))
+                gfx_copy(GFX_GRADIENT_FIRST+entry*RA_PAGE_BYTES,
+                         (gfx_rect_t){visible.x-r.x,visible.y-r.y,visible.w,visible.h},
+                         GFX_WORK,visible.x,visible.y);
+            row+=(int16_t)run;gfx_yield();
+        }
+    } else gfx_copy(GFX_GRADIENT_FIRST+entry*RA_PAGE_BYTES,(gfx_rect_t){q.x-r.x,q.y-r.y,q.w,q.h},GFX_WORK,q.x,q.y);
 }
 void gfx_card(gfx_rect_t r,uint16_t c)
 {
@@ -232,7 +247,10 @@ void gfx_border(gfx_rect_t r,uint8_t radius,uint8_t t,uint16_t c)
 {
     if(!t) return;
     if(t>8) t=8;
-    unsigned rad=radius>8?8:radius;
+    if(r.w<=0||r.h<=0) return;
+    unsigned rad=radius;
+    if(rad>(unsigned)r.w/2u) rad=(unsigned)r.w/2u;
+    if(rad>(unsigned)r.h/2u) rad=(unsigned)r.h/2u;
     int16_t middle_start=(int16_t)(rad>t?rad:t);
     int16_t middle_end=(int16_t)(r.h-middle_start);
     for(int16_t row=0;row<r.h;) {

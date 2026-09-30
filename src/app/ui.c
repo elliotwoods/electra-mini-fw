@@ -115,19 +115,38 @@ static void frame(int16_t x, int16_t y, int16_t w, int16_t h, int16_t t, uint16_
     gfx_border((gfx_rect_t){x,y,w,h}, 5, (uint8_t)t, c);
 }
 
-/* A boolean is a state, not a tiny two-button menu. One strong tile reads cleanly at a glance:
- * the accent means ON, while OFF stays neutral and relies on its word rather than inverse chrome. */
-static void draw_bool_tile(int16_t x, int16_t y, int16_t w, int16_t h, int on,
-                           const font_t *face)
+/* Switch position, state word and thumb symbol each identify the boolean independently.
+ * Keep the word on the unoccupied half so the moving thumb never masks it. */
+static void draw_bool_switch(int16_t x, int16_t y, int16_t w, int16_t h, int on,
+                             const font_t *face)
 {
-    uint16_t bg = on ? C_TOGGLE_ON : C_TRACK;
-    uint16_t fg = on ? C_BG : C_TITLE;
-    gfx_set_fg(bg);
-    gfx_fill_rect(x, y, w, h);
-    frame(x, y, w, h, 2, on ? dim(C_TOGGLE_ON, 65) : C_OUTLINE);
-    text_draw_centred(face, (int16_t)(x + w / 2),
-                      (int16_t)(y + (h - text_height(face)) / 2),
-                      on ? "ON" : "OFF", fg, bg);
+    int16_t pad = (int16_t)(h / 10);
+    int16_t diameter = (int16_t)(h - 2 * pad);
+    int16_t tx = (int16_t)(on ? x + w - pad - diameter : x + pad);
+    int16_t ty = (int16_t)(y + pad);
+    gfx_rect_t track = {x,y,w,h};
+    gfx_paint_t paint = gfx_solid(on ? dim(C_TOGGLE_ON,25) : C_TRACK,track);
+    gfx_paint(track,paint,(uint8_t)(h/2));
+    gfx_border(track,(uint8_t)(h/2),2,on ? C_TOGGLE_ON : C_INDICATOR);
+
+    /* An inset dark rim separates the bright circular thumb from the track. */
+    gfx_rect_t thumb = {tx,ty,diameter,diameter};
+    gfx_paint(thumb,gfx_solid(C_BG,thumb),(uint8_t)(diameter/2));
+    thumb=(gfx_rect_t){tx+2,ty+2,diameter-4,diameter-4};
+    gfx_paint(thumb,gfx_solid(C_VALUE,thumb),(uint8_t)((diameter-4)/2));
+    int16_t cx=(int16_t)(tx+diameter/2),cy=(int16_t)(ty+diameter/2);
+    int16_t mark=(int16_t)(diameter/5),stroke=diameter>=64 ? 4 : 3;
+    gfx_set_fg(C_BG);
+    if(on) {
+        for(int16_t i=0;i<stroke;i++) {
+            gfx_line(cx-mark,cy+i,cx-mark/3,cy+mark/2+i);
+            gfx_line(cx-mark/3,cy+mark/2+i,cx+mark,cy-mark/2+i);
+        }
+    } else gfx_fill_rect(cx-mark,cy-stroke/2,2*mark,stroke);
+
+    int16_t word_cx=(int16_t)(on ? x+(w-pad-diameter)/2 : x+(w+pad+diameter)/2);
+    text_draw_centred(face,word_cx,(int16_t)(y+(h-text_height(face))/2),
+                      on ? "ON" : "OFF",C_VALUE,paint.first);
 }
 
 /* Pooled strings are not NUL-terminated on the wire. */
@@ -471,11 +490,11 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
     value_text(f, buf, sizeof(buf));
 
     if (f->value_tag == EMP_VAL_BOOL) {
-        const int16_t sw = 92, sh = 46;
-        draw_bool_tile((int16_t)(x + (CELL_W - sw) / 2),
+        const int16_t sw = 148, sh = 54;
+        draw_bool_switch((int16_t)(x + (CELL_W - sw) / 2),
                        (int16_t)(vy - (sh - text_height(&font_ui)) / 2),
                        sw, sh, f->boolean, &font_ui);
-        return;                         /* the state tile replaces the numeric side fader */
+        return;                         /* the switch replaces the numeric side fader */
     }
 
     if (f->value_tag == EMP_VAL_COLOR && f->color_count >= 3u) {
@@ -1198,13 +1217,13 @@ static void render_drilled(int full, const surf_field_t *f)
     }
 
     /* Anything that is not a plain number has no digit window to show. Booleans use the same
-     * single-state tile as the overview, at a larger drilled-view scale. */
+     * switch as the overview, at a larger drilled-view scale. */
     if (f->value_tag == EMP_VAL_BOOL || f->kind != EMP_KIND_NUMBER) {
         gfx_set_fg(C_BG);
         gfx_fill_rect(FC_X, digit_y, FC_W, FC_DIGIT_H);
         if (f->value_tag == EMP_VAL_BOOL) {
-            const int16_t sw = 220, sh = 76;
-            draw_bool_tile((int16_t)((LCD_WIDTH - sw) / 2),
+            const int16_t sw = 300, sh = 96;
+            draw_bool_switch((int16_t)((LCD_WIDTH - sw) / 2),
                            (int16_t)(digit_y + (FC_DIGIT_H - sh) / 2),
                            sw, sh, f->boolean, &font_value);
             return;

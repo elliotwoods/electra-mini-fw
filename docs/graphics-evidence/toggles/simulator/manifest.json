@@ -1,0 +1,10 @@
+{
+  "kind": "simulator / shared application C drawing code",
+  "scenes": {
+    "toggle-focus-bottom-off.png": "b87887c3485afb674255ef529ee3c9e5c3c3db98083cd904985415de81a57e4e",
+    "toggle-focus-bottom-on.png": "750ee543da25682f0274d7fc56f9cc64d7ed510934f296da5086f7c967ab3db2",
+    "toggle-focus-off.png": "cd29de09574bcfb37b0c8e293d629b187b6f15f9a7d589fb758cc507b5d2cd14",
+    "toggle-focus-on.png": "992e9489233346bbe387bd6e09b922437d6e1d3b731352a4aabbc098452a9ce2",
+    "toggles.png": "77391f2b6f354dd3b5447665129a54b84a32ee30cbcbdc48d3e18a11348d2d70"
+  }
+}

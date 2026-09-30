@@ -25,4 +25,19 @@ static void fixture_sparse(unsigned count,int holes)
     }
     b.n=0;fixture_int(&b,revision,8);fixture_int(&b,count,2);fixture_int(&b,~crc,4);surf_handle(EMP_OP_DESC_END,b.bytes,b.n);ui_state_init();
 }
+static void fixture_toggles(void)
+{
+    static uint64_t revision=0x700000000ULL;revision++;
+    static const char *const labels[8]={"Bypass","Mute","Gate","Monitor","Enable","Record","Solo","Output"};
+    fixture_buf b={{0},0};fixture_int(&b,revision,8);fixture_int(&b,8,2);fixture_int(&b,0,2);fixture_int(&b,0,4);
+    surf_handle(EMP_OP_DESC_BEGIN,b.bytes,b.n);uint32_t crc=0xffffffff;
+    for(unsigned i=0;i<8;i++) {
+        b.n=0;fixture_int(&b,i,2);unsigned body=b.n;
+        fixture_int(&b,0,2);fixture_int(&b,i,2);fixture_int(&b,EMP_KIND_TOGGLE,1);fixture_int(&b,0,1);fixture_int(&b,0,2);
+        fixture_double(&b,0);fixture_double(&b,1);fixture_double(&b,1);
+        fixture_int(&b,0,1);fixture_int(&b,0,1);fixture_int(&b,0,2);fixture_int(&b,EMP_VAL_BOOL,1);fixture_int(&b,i%2,1);
+        fixture_string(&b,labels[i]);crc=emp_crc32c_update(crc,b.bytes+body,b.n-body);surf_handle(EMP_OP_DESC_FIELD,b.bytes,b.n);
+    }
+    b.n=0;fixture_int(&b,revision,8);fixture_int(&b,8,2);fixture_int(&b,~crc,4);surf_handle(EMP_OP_DESC_END,b.bytes,b.n);ui_state_init();ui_reset();
+}
 #endif
