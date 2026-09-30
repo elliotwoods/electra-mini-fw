@@ -6,13 +6,13 @@ Work is in the standalone `elliotwoods/electra-mini-fw` checkout on `main`. Comm
 
 The palette comes from av-frameworks revision `bb279c5d689b3be85044b75e7558d7863b6045d3`, with the source CSS retained at `tools/graphics/av-tokens.css`. Run `python3 tools/graphics/make-palette.py` to regenerate RGB565 constants and `contrast.json`. The generator enforces 7:1 primary numeric ink, 4.5:1 informative labels and 3:1 essential indicators on the quantized surfaces. Cyan selection, teal live state, semantic warning colours and a derived dark danger plate accompany distinct selection bars, touch caps, pressed inset borders and explicit READ ONLY labels.
 
-Inter labels and JetBrains Mono values are retained under OFL, with sources and hashes in `tools/font/fonts.lock.json`. Icons retain DejaVu. Run `python3 tools/font/make-font.py` using Pillow 12.3.0; the generator records FreeType version in its output. Font sizes are Inter 26/19, Mono 38/26 and focused Mono 112 pixels. Values remain monospaced when reduced to fit. Titles use two lines or preserve their identifying suffix with a visible truncation mark. Bootloader font/text copies retain the baseline implementation.
+Inter labels and JetBrains Mono values are retained under OFL, with sources and hashes in `tools/font/fonts.lock.json`. Icons retain DejaVu. Run `python3 tools/font/make-font.py` using Pillow 12.3.0 and FreeType 2.14.3; the generator enforces both versions and verifies all three retained font sources. Font sizes are Inter 26/19, Mono 38/26 and focused Mono 112 pixels. Values remain monospaced when reduced to fit. Titles use two lines or preserve their identifying suffix with a visible truncation mark. Bootloader font/text copies retain the baseline implementation.
 
 All application screen families use graphite surfaces, rounded gradient cards, inset meter tracks, gradient fills, selection plates, RGB channel ramps and alpha checkerboards. Physical control mapping, sparse slot IDs, settings/calibration storage and EMP contracts remain under the existing portable interaction/protocol tests.
 
 ## Renderer
 
-`src/app/graphics.h` defines the shared clipped RGB565 solid/linear paint, rounded rectangle, border, coverage text and region-copy operations. Text samples the actual card gradient. Cache keys include font, foreground, text and background coordinates. Page changes clear surface metadata; cache resets and tile reuse invalidate matching entries. Rendering stages in a persistent work canvas before publishing coalesced dirty regions in strips. The simulator models separate canvas/display addresses, clipping and the complete 16 MiB VRAM range.
+`src/app/graphics.h` defines the shared clipped RGB565 solid/linear paint, rounded rectangle, border, coverage text and region-copy operations. Text samples the actual card gradient. Cache keys include font, foreground, text and background coordinates. Page changes clear surface metadata; cache resets and tile reuse invalidate matching entries. Rendering stages in a persistent work canvas before publishing coalesced dirty regions in strips. Reset and replacement screens publish together; the reset test confirms that the previous visible frame survives until replacement rendering finishes. The simulator models separate canvas/display addresses, clipping and the complete 16 MiB VRAM range.
 
 RA8876 uses hardware geometry and BTE copies. Page 0 is visible, 1 is the work canvas, 2–9 are gradient tiles and 10–13 are cached text shelves. Total reserved VRAM is 10,752,000 bytes, below 16 MiB. MCU graphics data uses fixed arrays; there is no runtime allocation. Waits are bounded by 20 ms and a poll count, with USB polling and physical input sampling between operations.
 
@@ -38,15 +38,15 @@ python3 tools/graphics/build-baseline.py /private/tmp/electra-mini-legacy
 
 The build gates each application image before installation: base, flash bounds, stack, reset vector and entry record. The linker retains inherited RWX-segment warnings; image validation reports small alignment gaps, which the updater deliberately fills with erased `0xFF` bytes. Installation validates a padded image CRC and actively checks application identity after re-enumeration. Identity checks retry within a bounded 30-second startup window.
 
-Graphics tests cover clipping, RGB565 gradient endpoints, rounded edges, canvas staging, VRAM copies, text blended against gradients, background restoration, cache invalidation, monospaced widths, sparse pages, lower-row 1–4-control placement, long suffixes, negative/read-only values and incremental touch/focus release versus a clean repaint. ASan and UBSan are enabled for portable tests, graphics tests and simulator captures.
+The latest ASan/UBSan run passed 5,258 graphics checks. Graphics tests cover clipping, RGB565 gradient endpoints, rounded edges, canvas staging, VRAM copies, text blended against gradients, background restoration, cache invalidation, monospaced widths, sparse pages, lower-row 1–4-control placement, long suffixes, negative/read-only values and incremental touch/focus release versus a clean repaint. ASan and UBSan are enabled for portable tests, graphics tests and simulator captures.
 
-`docs/graphics-evidence/simulator/` contains 32 captures from the real UI code. Device captures are framebuffer readbacks, explicitly separated from simulator evidence; they are not photographs of panel scanout. RA8876 and corrected D/AVE overview/focused captures matched the simulator pixel for pixel. Simulator settings show fixture uptime/build text; physical settings show device data.
+`docs/graphics-evidence/simulator/` contains 36 captures from the real UI code. Device captures are framebuffer readbacks, explicitly separated from simulator evidence; they are not photographs of panel scanout. RA8876 and corrected D/AVE overview/focused captures matched the simulator pixel for pixel. Simulator settings show fixture uptime/build text; physical settings show device data.
 
 ## Measurement method
 
 ```sh
 .venv/bin/python tools/deploy/flash_usb.py build/dave/app.srec
-.venv/bin/python tools/graphics/qualify.py --out build/qualification/dave --image build/dave/app.srec
+.venv/bin/python tools/graphics/qualify.py --out build/qualification/dave-final --image build/dave/app.srec
 .venv/bin/python tools/deploy/flash_usb.py /private/tmp/electra-mini-legacy/build/app.srec
 .venv/bin/python tools/graphics/qualify.py --out build/qualification/baseline --image /private/tmp/electra-mini-legacy/build/app.srec
 .venv/bin/python tools/deploy/flash_usb.py build/ra-bench/app.srec
