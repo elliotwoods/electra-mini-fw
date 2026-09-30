@@ -1,0 +1,19 @@
+{
+  "cold_paging": true,
+  "clock_span_ms": 100,
+  "workload": "paging",
+  "run": 2,
+  "cycles_per_100ms": 23860857,
+  "cold": {
+    "index": 0,
+    "submit_us": 11757,
+    "gpu_wait_us": 21025,
+    "pixel_spi_us": 47369,
+    "total_us": 80151,
+    "input_gap_ms": 21,
+    "input_drops": 0,
+    "accel_errors": 0
+  },
+  "warmup": [],
+  "measured": []
+}

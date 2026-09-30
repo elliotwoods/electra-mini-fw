@@ -1,0 +1,57 @@
+{
+  "ready": {
+    "version": "1.2",
+    "mtu": 1016,
+    "session_id": 3492706331,
+    "capabilities": 0,
+    "max_message_rx": 8192,
+    "max_descriptor_bytes": 16384,
+    "max_fields": 64,
+    "fields_per_page": 8,
+    "applied_revision": 0,
+    "firmware": "0.1.0",
+    "build_number": 0,
+    "model": "Electra One Mini",
+    "serial": "EMB-0001",
+    "build": "Sep 30 2026 19:49:40"
+  },
+  "id_before": "id\r\nelectra-mini-fw APP @0x00120000\r\nstray_systicks 0x00000001\r\nsdram_selftest 0x00000000\r\nra8876_init_rc 0x00000000\r\nra_status_bits 0x00000000\r\nqt2120_init_rc 0x00000000\r\nusb_tx_dropped 0x00000040\r\nservice_hz 0x00000032\r\nrender_us_max 0x0000D4E5\r\ninput_gap_ms_max 0x000008F1\r\ninput_queue_drops 0x00000000\r\ngraphics_errors 0x00000000\r\nnmi_count 0x00000000\r\nstack_bottom 0x1FFE0280\r\nstack_top 0x1FFE4280\r\n  b0 reset poll  b1 pll poll  b2 sdram poll  b3 status reads stuck\r\n> ",
+  "emp_before": "emp\r\nmillis now 0x0004C4FC\r\ndwt cyccnt 0x5B38C178\r\nsession_id 0xD02E781B\r\nhost_seen 0x00000001\r\nrx_messages 0x00000082\r\ntx_messages 0x000001B9\r\nrx_fragments 0x00000082\r\ntx_fragments 0x000001B9\r\nrx_decode_errors 0x00000000\r\nrx_seq_gaps 0x00000006\r\ntx_dropped 0x00000000\r\nhellos 0x00000008\r\npings 0x00000073\r\nfields 0x00000000\r\nrevision_lo 0x00000000\r\n> ",
+  "persistent_boot_record": "pers\r\nimage_crc 0xD6BABFC9\r\nrec_crc 0xD6BABFC9\r\nrec_len 0x0004286C\r\nlaunches 0x00000000\r\nproven 0x4F4B4159\r\nrecord MATCHES this image> ",
+  "pings": [
+    0.22602081298828125,
+    0.19097328186035156,
+    0.17309188842773438,
+    0.18405914306640625,
+    0.21505355834960938
+  ],
+  "echo_bytes": [
+    16,
+    512,
+    900
+  ],
+  "reconnected_ready": {
+    "version": "1.2",
+    "mtu": 1016,
+    "session_id": 3492706331,
+    "capabilities": 0,
+    "max_message_rx": 8192,
+    "max_descriptor_bytes": 16384,
+    "max_fields": 64,
+    "fields_per_page": 8,
+    "applied_revision": 0,
+    "firmware": "0.1.0",
+    "build_number": 0,
+    "model": "Electra One Mini",
+    "serial": "EMB-0001",
+    "build": "Sep 30 2026 19:49:40"
+  },
+  "id_after": "id\r\nelectra-mini-fw APP @0x00120000\r\nstray_systicks 0x00000001\r\nsdram_selftest 0x00000000\r\nra8876_init_rc 0x00000000\r\nra_status_bits 0x00000000\r\nqt2120_init_rc 0x00000000\r\nusb_tx_dropped 0x00000040\r\nservice_hz 0x00000032\r\nrender_us_max 0x0000D4E5\r\ninput_gap_ms_max 0x000008F1\r\ninput_queue_drops 0x00000000\r\ngraphics_errors 0x00000000\r\nnmi_count 0x00000000\r\nstack_bottom 0x1FFE0280\r\nstack_top 0x1FFE4280\r\n  b0 reset poll  b1 pll poll  b2 sdram poll  b3 status reads stuck\r\n> ",
+  "emp_after": "emp\r\nmillis now 0x0004CCF0\r\ndwt cyccnt 0x785BAFA4\r\nsession_id 0xD02E781B\r\nhost_seen 0x00000001\r\nrx_messages 0x0000008B\r\ntx_messages 0x000001C4\r\nrx_fragments 0x0000008B\r\ntx_fragments 0x000001C4\r\nrx_decode_errors 0x00000000\r\nrx_seq_gaps 0x00000006\r\ntx_dropped 0x00000000\r\nhellos 0x00000009\r\npings 0x00000078\r\nfields 0x00000000\r\nrevision_lo 0x00000000\r\n> ",
+  "protocol_error_delta": {
+    "rx_decode_errors": 0,
+    "rx_seq_gaps": 0,
+    "tx_dropped": 0
+  },
+  "success": true
+}

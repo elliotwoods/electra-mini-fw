@@ -1,0 +1,261 @@
+{
+  "value": {
+    "submit_us": {
+      "median": 884.0,
+      "p95": 902,
+      "max": 904
+    },
+    "gpu_wait_us": {
+      "median": 381.0,
+      "p95": 3517,
+      "max": 3527
+    },
+    "pixel_spi_us": {
+      "median": 3619.0,
+      "p95": 3619,
+      "max": 3620
+    },
+    "total_us": {
+      "median": 4889.0,
+      "p95": 8027,
+      "max": 8046
+    },
+    "input_gap_ms": {
+      "median": 23.0,
+      "p95": 24,
+      "max": 24
+    },
+    "input_drops": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    },
+    "accel_errors": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    }
+  },
+  "precision": {
+    "submit_us": {
+      "median": 2405.0,
+      "p95": 3727,
+      "max": 3780
+    },
+    "gpu_wait_us": {
+      "median": 3664.0,
+      "p95": 3795,
+      "max": 3815
+    },
+    "pixel_spi_us": {
+      "median": 11311.0,
+      "p95": 18164,
+      "max": 18328
+    },
+    "total_us": {
+      "median": 17021.0,
+      "p95": 25618,
+      "max": 25917
+    },
+    "input_gap_ms": {
+      "median": 27.0,
+      "p95": 27,
+      "max": 27
+    },
+    "input_drops": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    },
+    "accel_errors": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    }
+  },
+  "eight": {
+    "submit_us": {
+      "median": 5492.0,
+      "p95": 5558,
+      "max": 5585
+    },
+    "gpu_wait_us": {
+      "median": 9023.5,
+      "p95": 9303,
+      "max": 9338
+    },
+    "pixel_spi_us": {
+      "median": 23361.0,
+      "p95": 23493,
+      "max": 23494
+    },
+    "total_us": {
+      "median": 37864.0,
+      "p95": 38263,
+      "max": 38399
+    },
+    "input_gap_ms": {
+      "median": 24.0,
+      "p95": 24,
+      "max": 24
+    },
+    "input_drops": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    },
+    "accel_errors": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    }
+  },
+  "colour": {
+    "submit_us": {
+      "median": 235.0,
+      "p95": 235,
+      "max": 235
+    },
+    "gpu_wait_us": {
+      "median": 508.0,
+      "p95": 512,
+      "max": 3671
+    },
+    "pixel_spi_us": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    },
+    "total_us": {
+      "median": 744.0,
+      "p95": 748,
+      "max": 3907
+    },
+    "input_gap_ms": {
+      "median": 20.0,
+      "p95": 23,
+      "max": 23
+    },
+    "input_drops": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    },
+    "accel_errors": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    }
+  },
+  "paging": {
+    "submit_us": {
+      "median": 9180.5,
+      "p95": 11736,
+      "max": 11738
+    },
+    "gpu_wait_us": {
+      "median": 17214.0,
+      "p95": 21310,
+      "max": 21435
+    },
+    "pixel_spi_us": {
+      "median": 34379.5,
+      "p95": 47377,
+      "max": 47378
+    },
+    "total_us": {
+      "median": 60757.0,
+      "p95": 80421,
+      "max": 80546
+    },
+    "input_gap_ms": {
+      "median": 24.0,
+      "p95": 24,
+      "max": 24
+    },
+    "input_drops": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    },
+    "accel_errors": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    }
+  },
+  "settings-calibration": {
+    "submit_us": {
+      "median": 12702.5,
+      "p95": 14608,
+      "max": 14609
+    },
+    "gpu_wait_us": {
+      "median": 21890.5,
+      "p95": 22311,
+      "max": 22417
+    },
+    "pixel_spi_us": {
+      "median": 50886.5,
+      "p95": 62232,
+      "max": 62233
+    },
+    "total_us": {
+      "median": 85461.0,
+      "p95": 98762,
+      "max": 98783
+    },
+    "input_gap_ms": {
+      "median": 50.0,
+      "p95": 50,
+      "max": 50
+    },
+    "input_drops": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    },
+    "accel_errors": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    }
+  },
+  "brightness": {
+    "submit_us": {
+      "median": 9418.5,
+      "p95": 9922,
+      "max": 9923
+    },
+    "gpu_wait_us": {
+      "median": 18365.0,
+      "p95": 19048,
+      "max": 19153
+    },
+    "pixel_spi_us": {
+      "median": 39903.5,
+      "p95": 43402,
+      "max": 43403
+    },
+    "total_us": {
+      "median": 67636.0,
+      "p95": 72326,
+      "max": 72418
+    },
+    "input_gap_ms": {
+      "median": 54.0,
+      "p95": 57,
+      "max": 57
+    },
+    "input_drops": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    },
+    "accel_errors": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    }
+  }
+}

@@ -1,0 +1,26 @@
+/private/tmp/electra-mini-legacy/build/app.elf  :
+section               size         addr
+.vectors               164      1179648
+.text                65112      1179816
+.rodata             180740      1244928
+.ARM.exidx               8      1425668
+.data                   88    536739872
+.ramfunc               504    536739960
+.stack               16384    536740464
+.bss                 89664    536756848
+.heap             16777216   2415919104
+.graphics_sdram          0   2432696320
+.debug_info         141532            0
+.debug_abbrev        17675            0
+.debug_loclists      55021            0
+.debug_aranges        5296            0
+.debug_rnglists       6491            0
+.debug_macro         19320            0
+.debug_line          99510            0
+.debug_str           59842            0
+.comment                56            0
+.ARM.attributes         50            0
+.debug_frame         16008            0
+Total             17550681
+
+

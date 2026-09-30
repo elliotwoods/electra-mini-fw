@@ -1,0 +1,3320 @@
+{
+  "clock_span_ms": 100,
+  "workload": "colour",
+  "run": 2,
+  "cycles_per_100ms": 23838569,
+  "cold": {
+    "index": 0,
+    "submit_us": 135167,
+    "gpu_wait_us": 162744,
+    "pixel_spi_us": 378011,
+    "total_us": 675923,
+    "input_gap_ms": 22,
+    "input_drops": 0,
+    "accel_errors": 0
+  },
+  "warmup": [
+    {
+      "index": 1,
+      "submit_us": 15831,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 2,
+      "submit_us": 12674,
+      "gpu_wait_us": 12996,
+      "pixel_spi_us": 28226,
+      "total_us": 53898,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 3,
+      "submit_us": 12676,
+      "gpu_wait_us": 10686,
+      "pixel_spi_us": 28228,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 4,
+      "submit_us": 15817,
+      "gpu_wait_us": 7722,
+      "pixel_spi_us": 28229,
+      "total_us": 51769,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 5,
+      "submit_us": 18986,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 54745,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 6,
+      "submit_us": 15832,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28227,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 7,
+      "submit_us": 15827,
+      "gpu_wait_us": 10059,
+      "pixel_spi_us": 28228,
+      "total_us": 54114,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 8,
+      "submit_us": 12675,
+      "gpu_wait_us": 10670,
+      "pixel_spi_us": 28228,
+      "total_us": 51574,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 9,
+      "submit_us": 15816,
+      "gpu_wait_us": 7723,
+      "pixel_spi_us": 28229,
+      "total_us": 51769,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 10,
+      "submit_us": 15830,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54745,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 11,
+      "submit_us": 15817,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28230,
+      "total_us": 51576,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 12,
+      "submit_us": 12674,
+      "gpu_wait_us": 13286,
+      "pixel_spi_us": 28228,
+      "total_us": 54189,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 13,
+      "submit_us": 12676,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 51591,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 14,
+      "submit_us": 15829,
+      "gpu_wait_us": 7650,
+      "pixel_spi_us": 28228,
+      "total_us": 51709,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 15,
+      "submit_us": 15831,
+      "gpu_wait_us": 10672,
+      "pixel_spi_us": 28228,
+      "total_us": 54732,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 16,
+      "submit_us": 15819,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 51577,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 17,
+      "submit_us": 12676,
+      "gpu_wait_us": 13288,
+      "pixel_spi_us": 28227,
+      "total_us": 54192,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 18,
+      "submit_us": 15824,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 51584,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 19,
+      "submit_us": 15832,
+      "gpu_wait_us": 7651,
+      "pixel_spi_us": 28231,
+      "total_us": 51715,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 20,
+      "submit_us": 15816,
+      "gpu_wait_us": 10684,
+      "pixel_spi_us": 28229,
+      "total_us": 54730,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 21,
+      "submit_us": 15831,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28230,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 22,
+      "submit_us": 12675,
+      "gpu_wait_us": 13272,
+      "pixel_spi_us": 28229,
+      "total_us": 54176,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 23,
+      "submit_us": 12676,
+      "gpu_wait_us": 10686,
+      "pixel_spi_us": 28228,
+      "total_us": 51591,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 24,
+      "submit_us": 15832,
+      "gpu_wait_us": 7647,
+      "pixel_spi_us": 28230,
+      "total_us": 51710,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 25,
+      "submit_us": 18990,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 54749,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 26,
+      "submit_us": 15831,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51588,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 27,
+      "submit_us": 12676,
+      "gpu_wait_us": 13271,
+      "pixel_spi_us": 28225,
+      "total_us": 54174,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 28,
+      "submit_us": 12676,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 29,
+      "submit_us": 15817,
+      "gpu_wait_us": 7723,
+      "pixel_spi_us": 28228,
+      "total_us": 51769,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 30,
+      "submit_us": 18976,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28230,
+      "total_us": 54736,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    }
+  ],
+  "measured": [
+    {
+      "index": 31,
+      "submit_us": 15832,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28227,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 32,
+      "submit_us": 15820,
+      "gpu_wait_us": 10058,
+      "pixel_spi_us": 28226,
+      "total_us": 54105,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 33,
+      "submit_us": 12675,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28227,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 34,
+      "submit_us": 15814,
+      "gpu_wait_us": 7722,
+      "pixel_spi_us": 28230,
+      "total_us": 51768,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 35,
+      "submit_us": 15832,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 54746,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 36,
+      "submit_us": 15818,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28230,
+      "total_us": 51578,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 37,
+      "submit_us": 12675,
+      "gpu_wait_us": 13218,
+      "pixel_spi_us": 28227,
+      "total_us": 54121,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 38,
+      "submit_us": 18981,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28226,
+      "total_us": 54736,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 39,
+      "submit_us": 15818,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51576,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 40,
+      "submit_us": 15831,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54746,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 41,
+      "submit_us": 12675,
+      "gpu_wait_us": 10408,
+      "pixel_spi_us": 28229,
+      "total_us": 51313,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 42,
+      "submit_us": 15833,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54747,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 43,
+      "submit_us": 18988,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 54746,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 44,
+      "submit_us": 15831,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28228,
+      "total_us": 51588,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 45,
+      "submit_us": 12673,
+      "gpu_wait_us": 13348,
+      "pixel_spi_us": 28227,
+      "total_us": 54249,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 46,
+      "submit_us": 15817,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28227,
+      "total_us": 54730,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 47,
+      "submit_us": 15834,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28230,
+      "total_us": 51594,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 48,
+      "submit_us": 15819,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 54733,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 49,
+      "submit_us": 12678,
+      "gpu_wait_us": 10424,
+      "pixel_spi_us": 28227,
+      "total_us": 51330,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 50,
+      "submit_us": 15831,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28230,
+      "total_us": 54746,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 51,
+      "submit_us": 15814,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54729,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 52,
+      "submit_us": 15831,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28230,
+      "total_us": 51591,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 53,
+      "submit_us": 12675,
+      "gpu_wait_us": 13362,
+      "pixel_spi_us": 28227,
+      "total_us": 54266,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 54,
+      "submit_us": 12676,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 55,
+      "submit_us": 15820,
+      "gpu_wait_us": 7723,
+      "pixel_spi_us": 28229,
+      "total_us": 51772,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 56,
+      "submit_us": 18988,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 54746,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 57,
+      "submit_us": 15831,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28228,
+      "total_us": 51588,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 58,
+      "submit_us": 15824,
+      "gpu_wait_us": 10060,
+      "pixel_spi_us": 28227,
+      "total_us": 54112,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 59,
+      "submit_us": 15832,
+      "gpu_wait_us": 10670,
+      "pixel_spi_us": 28227,
+      "total_us": 54730,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 60,
+      "submit_us": 15823,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28231,
+      "total_us": 51583,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 61,
+      "submit_us": 12676,
+      "gpu_wait_us": 13655,
+      "pixel_spi_us": 28227,
+      "total_us": 54559,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 62,
+      "submit_us": 15819,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54734,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 63,
+      "submit_us": 15833,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28228,
+      "total_us": 51591,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 64,
+      "submit_us": 15831,
+      "gpu_wait_us": 10686,
+      "pixel_spi_us": 28228,
+      "total_us": 54746,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 65,
+      "submit_us": 12677,
+      "gpu_wait_us": 10423,
+      "pixel_spi_us": 28229,
+      "total_us": 51330,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 66,
+      "submit_us": 18972,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 54730,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 67,
+      "submit_us": 15832,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54747,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 68,
+      "submit_us": 15829,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28230,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 69,
+      "submit_us": 12673,
+      "gpu_wait_us": 13351,
+      "pixel_spi_us": 28226,
+      "total_us": 54251,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 70,
+      "submit_us": 12676,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28227,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 71,
+      "submit_us": 15832,
+      "gpu_wait_us": 7722,
+      "pixel_spi_us": 28229,
+      "total_us": 51785,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 72,
+      "submit_us": 18980,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 54738,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 73,
+      "submit_us": 15832,
+      "gpu_wait_us": 7532,
+      "pixel_spi_us": 28229,
+      "total_us": 51594,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 74,
+      "submit_us": 12659,
+      "gpu_wait_us": 13214,
+      "pixel_spi_us": 28227,
+      "total_us": 54101,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 75,
+      "submit_us": 12675,
+      "gpu_wait_us": 10684,
+      "pixel_spi_us": 28228,
+      "total_us": 51588,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 76,
+      "submit_us": 15816,
+      "gpu_wait_us": 7721,
+      "pixel_spi_us": 28229,
+      "total_us": 51767,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 77,
+      "submit_us": 15831,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54746,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 78,
+      "submit_us": 15814,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 51572,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 79,
+      "submit_us": 12676,
+      "gpu_wait_us": 13216,
+      "pixel_spi_us": 28228,
+      "total_us": 54121,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 80,
+      "submit_us": 18971,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28227,
+      "total_us": 54728,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 81,
+      "submit_us": 15819,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28230,
+      "total_us": 51577,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 82,
+      "submit_us": 18987,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 54746,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 83,
+      "submit_us": 12662,
+      "gpu_wait_us": 10425,
+      "pixel_spi_us": 28230,
+      "total_us": 51317,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 84,
+      "submit_us": 15832,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54746,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 85,
+      "submit_us": 18980,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 54739,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 86,
+      "submit_us": 15831,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 87,
+      "submit_us": 15817,
+      "gpu_wait_us": 10278,
+      "pixel_spi_us": 28227,
+      "total_us": 54323,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 88,
+      "submit_us": 12670,
+      "gpu_wait_us": 10686,
+      "pixel_spi_us": 28228,
+      "total_us": 51585,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 89,
+      "submit_us": 15832,
+      "gpu_wait_us": 7651,
+      "pixel_spi_us": 28230,
+      "total_us": 51713,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 90,
+      "submit_us": 15818,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 54732,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 91,
+      "submit_us": 15833,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28228,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 92,
+      "submit_us": 12675,
+      "gpu_wait_us": 13272,
+      "pixel_spi_us": 28228,
+      "total_us": 54176,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 93,
+      "submit_us": 15833,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51591,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 94,
+      "submit_us": 15833,
+      "gpu_wait_us": 7635,
+      "pixel_spi_us": 28229,
+      "total_us": 51698,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 95,
+      "submit_us": 18974,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 54732,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 96,
+      "submit_us": 15832,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 97,
+      "submit_us": 15832,
+      "gpu_wait_us": 10135,
+      "pixel_spi_us": 28228,
+      "total_us": 54196,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 98,
+      "submit_us": 15834,
+      "gpu_wait_us": 7532,
+      "pixel_spi_us": 28229,
+      "total_us": 51595,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 99,
+      "submit_us": 15820,
+      "gpu_wait_us": 7650,
+      "pixel_spi_us": 28229,
+      "total_us": 51700,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 100,
+      "submit_us": 18990,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28231,
+      "total_us": 54751,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 101,
+      "submit_us": 15832,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28227,
+      "total_us": 51588,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 102,
+      "submit_us": 12666,
+      "gpu_wait_us": 13287,
+      "pixel_spi_us": 28226,
+      "total_us": 54181,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 103,
+      "submit_us": 15833,
+      "gpu_wait_us": 7531,
+      "pixel_spi_us": 28228,
+      "total_us": 51594,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 104,
+      "submit_us": 15816,
+      "gpu_wait_us": 7650,
+      "pixel_spi_us": 28229,
+      "total_us": 51697,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 105,
+      "submit_us": 18986,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 54744,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 106,
+      "submit_us": 15825,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28226,
+      "total_us": 51582,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 107,
+      "submit_us": 15831,
+      "gpu_wait_us": 10131,
+      "pixel_spi_us": 28228,
+      "total_us": 54190,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 108,
+      "submit_us": 15816,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28227,
+      "total_us": 51572,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 109,
+      "submit_us": 15832,
+      "gpu_wait_us": 7723,
+      "pixel_spi_us": 28227,
+      "total_us": 51784,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 110,
+      "submit_us": 18972,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 54730,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 111,
+      "submit_us": 15828,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 51586,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 112,
+      "submit_us": 15832,
+      "gpu_wait_us": 10060,
+      "pixel_spi_us": 28228,
+      "total_us": 54120,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 113,
+      "submit_us": 12662,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 51577,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 114,
+      "submit_us": 15831,
+      "gpu_wait_us": 7723,
+      "pixel_spi_us": 28229,
+      "total_us": 51784,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 115,
+      "submit_us": 15815,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54729,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 116,
+      "submit_us": 15831,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51588,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 117,
+      "submit_us": 12674,
+      "gpu_wait_us": 13274,
+      "pixel_spi_us": 28227,
+      "total_us": 54175,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 118,
+      "submit_us": 12677,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28227,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 119,
+      "submit_us": 15833,
+      "gpu_wait_us": 7639,
+      "pixel_spi_us": 28229,
+      "total_us": 51702,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 120,
+      "submit_us": 15830,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54746,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 121,
+      "submit_us": 15834,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 51592,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 122,
+      "submit_us": 12674,
+      "gpu_wait_us": 13201,
+      "pixel_spi_us": 28228,
+      "total_us": 54105,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 123,
+      "submit_us": 15832,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 54747,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 124,
+      "submit_us": 15815,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28230,
+      "total_us": 51574,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 125,
+      "submit_us": 18970,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28230,
+      "total_us": 54729,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 126,
+      "submit_us": 12675,
+      "gpu_wait_us": 10424,
+      "pixel_spi_us": 28229,
+      "total_us": 51329,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 127,
+      "submit_us": 15815,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54730,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 128,
+      "submit_us": 12675,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 129,
+      "submit_us": 15833,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28227,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 130,
+      "submit_us": 15816,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28227,
+      "total_us": 54729,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 131,
+      "submit_us": 15833,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 51592,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 132,
+      "submit_us": 12657,
+      "gpu_wait_us": 13147,
+      "pixel_spi_us": 28227,
+      "total_us": 54032,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 133,
+      "submit_us": 18989,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 54747,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 134,
+      "submit_us": 15815,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 51574,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 135,
+      "submit_us": 12675,
+      "gpu_wait_us": 13727,
+      "pixel_spi_us": 28228,
+      "total_us": 54630,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 136,
+      "submit_us": 12661,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 51576,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 137,
+      "submit_us": 15832,
+      "gpu_wait_us": 7651,
+      "pixel_spi_us": 28230,
+      "total_us": 51714,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 138,
+      "submit_us": 15830,
+      "gpu_wait_us": 10671,
+      "pixel_spi_us": 28228,
+      "total_us": 54729,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 139,
+      "submit_us": 15832,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 140,
+      "submit_us": 12675,
+      "gpu_wait_us": 13273,
+      "pixel_spi_us": 28228,
+      "total_us": 54177,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 141,
+      "submit_us": 12676,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 142,
+      "submit_us": 15832,
+      "gpu_wait_us": 7662,
+      "pixel_spi_us": 28229,
+      "total_us": 51724,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 143,
+      "submit_us": 15816,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 54730,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 144,
+      "submit_us": 15832,
+      "gpu_wait_us": 7531,
+      "pixel_spi_us": 28228,
+      "total_us": 51592,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 145,
+      "submit_us": 12676,
+      "gpu_wait_us": 13271,
+      "pixel_spi_us": 28227,
+      "total_us": 54175,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 146,
+      "submit_us": 12676,
+      "gpu_wait_us": 10688,
+      "pixel_spi_us": 28229,
+      "total_us": 51593,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 147,
+      "submit_us": 15832,
+      "gpu_wait_us": 7642,
+      "pixel_spi_us": 28230,
+      "total_us": 51704,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 148,
+      "submit_us": 18972,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 54731,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 149,
+      "submit_us": 15832,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 150,
+      "submit_us": 15833,
+      "gpu_wait_us": 10132,
+      "pixel_spi_us": 28227,
+      "total_us": 54194,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 151,
+      "submit_us": 12676,
+      "gpu_wait_us": 10688,
+      "pixel_spi_us": 28229,
+      "total_us": 51594,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 152,
+      "submit_us": 15817,
+      "gpu_wait_us": 7651,
+      "pixel_spi_us": 28229,
+      "total_us": 51698,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 153,
+      "submit_us": 15832,
+      "gpu_wait_us": 10684,
+      "pixel_spi_us": 28228,
+      "total_us": 54745,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 154,
+      "submit_us": 15833,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28230,
+      "total_us": 51593,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 155,
+      "submit_us": 15816,
+      "gpu_wait_us": 10132,
+      "pixel_spi_us": 28228,
+      "total_us": 54177,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 156,
+      "submit_us": 12677,
+      "gpu_wait_us": 10669,
+      "pixel_spi_us": 28229,
+      "total_us": 51576,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 157,
+      "submit_us": 15823,
+      "gpu_wait_us": 7723,
+      "pixel_spi_us": 28228,
+      "total_us": 51775,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 158,
+      "submit_us": 15833,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54748,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 159,
+      "submit_us": 15821,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28227,
+      "total_us": 51578,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 160,
+      "submit_us": 15832,
+      "gpu_wait_us": 10060,
+      "pixel_spi_us": 28226,
+      "total_us": 54120,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 161,
+      "submit_us": 12675,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 162,
+      "submit_us": 15832,
+      "gpu_wait_us": 7723,
+      "pixel_spi_us": 28229,
+      "total_us": 51785,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 163,
+      "submit_us": 18980,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 54738,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 164,
+      "submit_us": 15830,
+      "gpu_wait_us": 7532,
+      "pixel_spi_us": 28229,
+      "total_us": 51592,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 165,
+      "submit_us": 15831,
+      "gpu_wait_us": 10060,
+      "pixel_spi_us": 28228,
+      "total_us": 54120,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 166,
+      "submit_us": 12662,
+      "gpu_wait_us": 10689,
+      "pixel_spi_us": 28228,
+      "total_us": 51580,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 167,
+      "submit_us": 15834,
+      "gpu_wait_us": 7723,
+      "pixel_spi_us": 28229,
+      "total_us": 51787,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 168,
+      "submit_us": 18973,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28228,
+      "total_us": 54729,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 169,
+      "submit_us": 15832,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 170,
+      "submit_us": 15815,
+      "gpu_wait_us": 10061,
+      "pixel_spi_us": 28228,
+      "total_us": 54105,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 171,
+      "submit_us": 15820,
+      "gpu_wait_us": 10686,
+      "pixel_spi_us": 28228,
+      "total_us": 54734,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 172,
+      "submit_us": 15833,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 51592,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 173,
+      "submit_us": 15843,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54757,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 174,
+      "submit_us": 12675,
+      "gpu_wait_us": 10352,
+      "pixel_spi_us": 28228,
+      "total_us": 51256,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 175,
+      "submit_us": 15815,
+      "gpu_wait_us": 10686,
+      "pixel_spi_us": 28228,
+      "total_us": 54730,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 176,
+      "submit_us": 15832,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28228,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 177,
+      "submit_us": 15832,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28227,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 178,
+      "submit_us": 18989,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 54747,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 179,
+      "submit_us": 15832,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 180,
+      "submit_us": 12675,
+      "gpu_wait_us": 13140,
+      "pixel_spi_us": 28227,
+      "total_us": 54043,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 181,
+      "submit_us": 12676,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28226,
+      "total_us": 51588,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 182,
+      "submit_us": 15816,
+      "gpu_wait_us": 7722,
+      "pixel_spi_us": 28227,
+      "total_us": 51767,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 183,
+      "submit_us": 15822,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54736,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 184,
+      "submit_us": 15831,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 185,
+      "submit_us": 12660,
+      "gpu_wait_us": 13217,
+      "pixel_spi_us": 28228,
+      "total_us": 54105,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 186,
+      "submit_us": 15833,
+      "gpu_wait_us": 10688,
+      "pixel_spi_us": 28227,
+      "total_us": 54749,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 187,
+      "submit_us": 15832,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 188,
+      "submit_us": 15831,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28231,
+      "total_us": 54748,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 189,
+      "submit_us": 12658,
+      "gpu_wait_us": 10424,
+      "pixel_spi_us": 28228,
+      "total_us": 51312,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 190,
+      "submit_us": 15832,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 54746,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 191,
+      "submit_us": 15833,
+      "gpu_wait_us": 10669,
+      "pixel_spi_us": 28228,
+      "total_us": 54731,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 192,
+      "submit_us": 15826,
+      "gpu_wait_us": 7530,
+      "pixel_spi_us": 28228,
+      "total_us": 51585,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 193,
+      "submit_us": 15833,
+      "gpu_wait_us": 10206,
+      "pixel_spi_us": 28228,
+      "total_us": 54268,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 194,
+      "submit_us": 12658,
+      "gpu_wait_us": 10686,
+      "pixel_spi_us": 28229,
+      "total_us": 51573,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 195,
+      "submit_us": 15833,
+      "gpu_wait_us": 7723,
+      "pixel_spi_us": 28228,
+      "total_us": 51785,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 196,
+      "submit_us": 15831,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 54744,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 197,
+      "submit_us": 15833,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51591,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 198,
+      "submit_us": 15818,
+      "gpu_wait_us": 10060,
+      "pixel_spi_us": 28228,
+      "total_us": 54108,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 199,
+      "submit_us": 18980,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28227,
+      "total_us": 54737,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 200,
+      "submit_us": 15833,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28231,
+      "total_us": 51593,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 201,
+      "submit_us": 15818,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 54733,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 202,
+      "submit_us": 12675,
+      "gpu_wait_us": 10424,
+      "pixel_spi_us": 28229,
+      "total_us": 51329,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 203,
+      "submit_us": 15833,
+      "gpu_wait_us": 10686,
+      "pixel_spi_us": 28228,
+      "total_us": 54748,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 204,
+      "submit_us": 15818,
+      "gpu_wait_us": 10686,
+      "pixel_spi_us": 28230,
+      "total_us": 54736,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 205,
+      "submit_us": 15832,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28228,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 206,
+      "submit_us": 12656,
+      "gpu_wait_us": 13362,
+      "pixel_spi_us": 28228,
+      "total_us": 54247,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 207,
+      "submit_us": 12676,
+      "gpu_wait_us": 10686,
+      "pixel_spi_us": 28229,
+      "total_us": 51592,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 208,
+      "submit_us": 15820,
+      "gpu_wait_us": 7723,
+      "pixel_spi_us": 28228,
+      "total_us": 51772,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 209,
+      "submit_us": 15834,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 54747,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 210,
+      "submit_us": 15815,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 51573,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 211,
+      "submit_us": 12674,
+      "gpu_wait_us": 13217,
+      "pixel_spi_us": 28227,
+      "total_us": 54119,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 212,
+      "submit_us": 15833,
+      "gpu_wait_us": 10669,
+      "pixel_spi_us": 28229,
+      "total_us": 54731,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 213,
+      "submit_us": 15818,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 51577,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 214,
+      "submit_us": 15831,
+      "gpu_wait_us": 10686,
+      "pixel_spi_us": 28230,
+      "total_us": 54747,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 215,
+      "submit_us": 12666,
+      "gpu_wait_us": 10424,
+      "pixel_spi_us": 28229,
+      "total_us": 51320,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 216,
+      "submit_us": 15831,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54746,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 217,
+      "submit_us": 15833,
+      "gpu_wait_us": 10674,
+      "pixel_spi_us": 28228,
+      "total_us": 54735,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 218,
+      "submit_us": 15833,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51592,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 219,
+      "submit_us": 12674,
+      "gpu_wait_us": 13345,
+      "pixel_spi_us": 28228,
+      "total_us": 54248,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 220,
+      "submit_us": 15801,
+      "gpu_wait_us": 10686,
+      "pixel_spi_us": 28228,
+      "total_us": 54715,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 221,
+      "submit_us": 15832,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28227,
+      "total_us": 51588,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 222,
+      "submit_us": 18973,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 54731,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 223,
+      "submit_us": 12676,
+      "gpu_wait_us": 10425,
+      "pixel_spi_us": 28229,
+      "total_us": 51331,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 224,
+      "submit_us": 15832,
+      "gpu_wait_us": 10680,
+      "pixel_spi_us": 28229,
+      "total_us": 54742,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 225,
+      "submit_us": 15845,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 54759,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 226,
+      "submit_us": 15832,
+      "gpu_wait_us": 7530,
+      "pixel_spi_us": 28229,
+      "total_us": 51591,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 227,
+      "submit_us": 12674,
+      "gpu_wait_us": 13356,
+      "pixel_spi_us": 28228,
+      "total_us": 54259,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 228,
+      "submit_us": 12676,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 51591,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 229,
+      "submit_us": 15818,
+      "gpu_wait_us": 7723,
+      "pixel_spi_us": 28229,
+      "total_us": 51771,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 230,
+      "submit_us": 15824,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28230,
+      "total_us": 54740,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 231,
+      "submit_us": 15833,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51591,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 232,
+      "submit_us": 15820,
+      "gpu_wait_us": 10060,
+      "pixel_spi_us": 28228,
+      "total_us": 54109,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 233,
+      "submit_us": 12676,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 234,
+      "submit_us": 15815,
+      "gpu_wait_us": 7723,
+      "pixel_spi_us": 28230,
+      "total_us": 51769,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 235,
+      "submit_us": 15831,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54746,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 236,
+      "submit_us": 15818,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 51576,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 237,
+      "submit_us": 12675,
+      "gpu_wait_us": 13216,
+      "pixel_spi_us": 28228,
+      "total_us": 54120,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 238,
+      "submit_us": 18975,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 54733,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 239,
+      "submit_us": 15822,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28230,
+      "total_us": 51582,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 240,
+      "submit_us": 15832,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54747,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 241,
+      "submit_us": 12676,
+      "gpu_wait_us": 10412,
+      "pixel_spi_us": 28227,
+      "total_us": 51316,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 242,
+      "submit_us": 15832,
+      "gpu_wait_us": 10686,
+      "pixel_spi_us": 28229,
+      "total_us": 54748,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 243,
+      "submit_us": 18972,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28228,
+      "total_us": 54730,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 244,
+      "submit_us": 15832,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 245,
+      "submit_us": 15824,
+      "gpu_wait_us": 10206,
+      "pixel_spi_us": 28229,
+      "total_us": 54259,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 246,
+      "submit_us": 18974,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 54733,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 247,
+      "submit_us": 15832,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 51591,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 248,
+      "submit_us": 15830,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 54744,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 249,
+      "submit_us": 12675,
+      "gpu_wait_us": 10424,
+      "pixel_spi_us": 28228,
+      "total_us": 51329,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 250,
+      "submit_us": 15830,
+      "gpu_wait_us": 10684,
+      "pixel_spi_us": 28228,
+      "total_us": 54743,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 251,
+      "submit_us": 15816,
+      "gpu_wait_us": 10684,
+      "pixel_spi_us": 28228,
+      "total_us": 54729,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 252,
+      "submit_us": 15829,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 51587,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 253,
+      "submit_us": 12658,
+      "gpu_wait_us": 13359,
+      "pixel_spi_us": 28230,
+      "total_us": 54247,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 254,
+      "submit_us": 15830,
+      "gpu_wait_us": 10684,
+      "pixel_spi_us": 28229,
+      "total_us": 54743,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 255,
+      "submit_us": 15824,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28230,
+      "total_us": 51585,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 256,
+      "submit_us": 15823,
+      "gpu_wait_us": 10684,
+      "pixel_spi_us": 28228,
+      "total_us": 54736,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 257,
+      "submit_us": 12676,
+      "gpu_wait_us": 10423,
+      "pixel_spi_us": 28229,
+      "total_us": 51329,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 258,
+      "submit_us": 15826,
+      "gpu_wait_us": 10684,
+      "pixel_spi_us": 28230,
+      "total_us": 54741,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 259,
+      "submit_us": 15831,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 54744,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 260,
+      "submit_us": 15822,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28227,
+      "total_us": 51580,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 261,
+      "submit_us": 12674,
+      "gpu_wait_us": 13364,
+      "pixel_spi_us": 28226,
+      "total_us": 54266,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 262,
+      "submit_us": 12675,
+      "gpu_wait_us": 10681,
+      "pixel_spi_us": 28227,
+      "total_us": 51585,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 263,
+      "submit_us": 15832,
+      "gpu_wait_us": 7722,
+      "pixel_spi_us": 28229,
+      "total_us": 51784,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 264,
+      "submit_us": 18973,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28230,
+      "total_us": 54732,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 265,
+      "submit_us": 15818,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28227,
+      "total_us": 51575,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 266,
+      "submit_us": 15832,
+      "gpu_wait_us": 10060,
+      "pixel_spi_us": 28227,
+      "total_us": 54119,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 267,
+      "submit_us": 12671,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28229,
+      "total_us": 51586,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 268,
+      "submit_us": 15833,
+      "gpu_wait_us": 7723,
+      "pixel_spi_us": 28230,
+      "total_us": 51787,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 269,
+      "submit_us": 18975,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28228,
+      "total_us": 54733,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 270,
+      "submit_us": 15833,
+      "gpu_wait_us": 7532,
+      "pixel_spi_us": 28229,
+      "total_us": 51595,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 271,
+      "submit_us": 15827,
+      "gpu_wait_us": 10060,
+      "pixel_spi_us": 28226,
+      "total_us": 54114,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 272,
+      "submit_us": 12675,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 273,
+      "submit_us": 15834,
+      "gpu_wait_us": 7708,
+      "pixel_spi_us": 28229,
+      "total_us": 51772,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 274,
+      "submit_us": 15830,
+      "gpu_wait_us": 10684,
+      "pixel_spi_us": 28227,
+      "total_us": 54742,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 275,
+      "submit_us": 15830,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28228,
+      "total_us": 51587,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 276,
+      "submit_us": 15831,
+      "gpu_wait_us": 10047,
+      "pixel_spi_us": 28226,
+      "total_us": 54105,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 277,
+      "submit_us": 18988,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28227,
+      "total_us": 54745,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 278,
+      "submit_us": 15818,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28228,
+      "total_us": 51575,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 279,
+      "submit_us": 15820,
+      "gpu_wait_us": 10686,
+      "pixel_spi_us": 28229,
+      "total_us": 54736,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 280,
+      "submit_us": 12675,
+      "gpu_wait_us": 10424,
+      "pixel_spi_us": 28229,
+      "total_us": 51329,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 281,
+      "submit_us": 15818,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 54732,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 282,
+      "submit_us": 18991,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 54748,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 283,
+      "submit_us": 15817,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 51576,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 284,
+      "submit_us": 15832,
+      "gpu_wait_us": 10206,
+      "pixel_spi_us": 28227,
+      "total_us": 54266,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 285,
+      "submit_us": 15830,
+      "gpu_wait_us": 10673,
+      "pixel_spi_us": 28228,
+      "total_us": 54732,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 286,
+      "submit_us": 15819,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28230,
+      "total_us": 51578,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 287,
+      "submit_us": 15831,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28227,
+      "total_us": 54745,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 288,
+      "submit_us": 12675,
+      "gpu_wait_us": 10406,
+      "pixel_spi_us": 28229,
+      "total_us": 51311,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 289,
+      "submit_us": 15830,
+      "gpu_wait_us": 10684,
+      "pixel_spi_us": 28227,
+      "total_us": 54742,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 290,
+      "submit_us": 18979,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 54738,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 291,
+      "submit_us": 15832,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 292,
+      "submit_us": 15814,
+      "gpu_wait_us": 10277,
+      "pixel_spi_us": 28226,
+      "total_us": 54318,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 293,
+      "submit_us": 12675,
+      "gpu_wait_us": 10684,
+      "pixel_spi_us": 28228,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 294,
+      "submit_us": 15832,
+      "gpu_wait_us": 7632,
+      "pixel_spi_us": 28229,
+      "total_us": 51694,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 295,
+      "submit_us": 18973,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28228,
+      "total_us": 54729,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 296,
+      "submit_us": 15833,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 51592,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 297,
+      "submit_us": 15831,
+      "gpu_wait_us": 10115,
+      "pixel_spi_us": 28228,
+      "total_us": 54175,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 298,
+      "submit_us": 12676,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 299,
+      "submit_us": 15833,
+      "gpu_wait_us": 7722,
+      "pixel_spi_us": 28229,
+      "total_us": 51785,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 300,
+      "submit_us": 15814,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28230,
+      "total_us": 54729,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 301,
+      "submit_us": 15831,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51588,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 302,
+      "submit_us": 12674,
+      "gpu_wait_us": 13215,
+      "pixel_spi_us": 28226,
+      "total_us": 54116,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 303,
+      "submit_us": 12673,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 51587,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 304,
+      "submit_us": 15822,
+      "gpu_wait_us": 7722,
+      "pixel_spi_us": 28229,
+      "total_us": 51774,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 305,
+      "submit_us": 18987,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28230,
+      "total_us": 54748,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 306,
+      "submit_us": 15831,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28228,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 307,
+      "submit_us": 12660,
+      "gpu_wait_us": 13214,
+      "pixel_spi_us": 28227,
+      "total_us": 54102,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 308,
+      "submit_us": 15832,
+      "gpu_wait_us": 10671,
+      "pixel_spi_us": 28229,
+      "total_us": 54733,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 309,
+      "submit_us": 15820,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28228,
+      "total_us": 51578,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 310,
+      "submit_us": 12676,
+      "gpu_wait_us": 13655,
+      "pixel_spi_us": 28230,
+      "total_us": 54562,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 311,
+      "submit_us": 18982,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 54742,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 312,
+      "submit_us": 15832,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28228,
+      "total_us": 51589,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 313,
+      "submit_us": 15831,
+      "gpu_wait_us": 10683,
+      "pixel_spi_us": 28229,
+      "total_us": 54744,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 314,
+      "submit_us": 12676,
+      "gpu_wait_us": 10423,
+      "pixel_spi_us": 28230,
+      "total_us": 51330,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 315,
+      "submit_us": 18970,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 54728,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 316,
+      "submit_us": 15831,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 54744,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 317,
+      "submit_us": 15832,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 51592,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 318,
+      "submit_us": 12675,
+      "gpu_wait_us": 13347,
+      "pixel_spi_us": 28227,
+      "total_us": 54250,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 319,
+      "submit_us": 12677,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28228,
+      "total_us": 51592,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 320,
+      "submit_us": 15835,
+      "gpu_wait_us": 7722,
+      "pixel_spi_us": 28228,
+      "total_us": 51785,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 321,
+      "submit_us": 18973,
+      "gpu_wait_us": 7528,
+      "pixel_spi_us": 28229,
+      "total_us": 54731,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 322,
+      "submit_us": 15832,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 51590,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 323,
+      "submit_us": 15815,
+      "gpu_wait_us": 10059,
+      "pixel_spi_us": 28228,
+      "total_us": 54103,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 324,
+      "submit_us": 12675,
+      "gpu_wait_us": 10685,
+      "pixel_spi_us": 28227,
+      "total_us": 51588,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 325,
+      "submit_us": 15820,
+      "gpu_wait_us": 7722,
+      "pixel_spi_us": 28229,
+      "total_us": 51771,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 326,
+      "submit_us": 15832,
+      "gpu_wait_us": 10687,
+      "pixel_spi_us": 28227,
+      "total_us": 54747,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 327,
+      "submit_us": 15816,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 51574,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 328,
+      "submit_us": 12675,
+      "gpu_wait_us": 13217,
+      "pixel_spi_us": 28227,
+      "total_us": 54120,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 329,
+      "submit_us": 18976,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28227,
+      "total_us": 54733,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 330,
+      "submit_us": 15822,
+      "gpu_wait_us": 7529,
+      "pixel_spi_us": 28229,
+      "total_us": 51580,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    }
+  ]
+}

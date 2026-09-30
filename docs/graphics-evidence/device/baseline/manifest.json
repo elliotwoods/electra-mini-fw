@@ -1,0 +1,10 @@
+{
+  "utc": "2026-09-30T13:53:44Z",
+  "transport": "physical Mini / macOS IOKit",
+  "image_sha256": "07ea89c0fcf5d0bde93b8b29a075a6a4c6f2f5e66b7ae62076f89d766af3e729",
+  "identity": "id\r\nelectra-mini-fw APP @0x00120000\r\nstray_systicks 0x00000001\r\nsdram_selftest 0x00000000\r\nra8876_init_rc 0x00000000\r\nra_status_bits 0x00000000\r\nqt2120_init_rc 0x00000000\r\nusb_tx_dropped 0x00000040\r\nservice_hz 0x00000000\r\nrender_us_max 0x00000000\r\ninput_gap_ms_max 0x00000000\r\ninput_queue_drops 0x00000000\r\ngraphics_errors 0x00000000\r\nnmi_count 0x00000000\r\nstack_bottom 0x1FFE0270\r\nstack_top 0x1FFE4270\r\n  b0 reset poll  b1 pll poll  b2 sdram poll  b3 status reads stuck\r\n> ",
+  "emp_before": "emp\r\nmillis now 0x0000029E\r\ndwt cyccnt 0x6F7F6899\r\nsession_id 0x5255157A\r\nhost_seen 0x00000000\r\nrx_messages 0x00000003\r\ntx_messages 0x00000004\r\nrx_fragments 0x00000003\r\ntx_fragments 0x00000004\r\nrx_decode_errors 0x00000000\r\nrx_seq_gaps 0x00000000\r\ntx_dropped 0x00000000\r\nhellos 0x00000001\r\npings 0x00000001\r\nfields 0x00000000\r\nrevision_lo 0x00000000\r\n> ",
+  "mixed_seconds": 2.7921050786972046e-06,
+  "identity_after": "id\r\nelectra-mini-fw APP @0x00120000\r\nstray_systicks 0x00000001\r\nsdram_selftest 0x00000000\r\nra8876_init_rc 0x00000000\r\nra_status_bits 0x00000000\r\nqt2120_init_rc 0x00000000\r\nusb_tx_dropped 0x00000040\r\nservice_hz 0x00000004\r\nrender_us_max 0x00000000\r\ninput_gap_ms_max 0x00000035\r\ninput_queue_drops 0x00000000\r\ngraphics_errors 0x00000000\r\nnmi_count 0x00000000\r\nstack_bottom 0x1FFE0270\r\nstack_top 0x1FFE4270\r\n  b0 reset poll  b1 pll poll  b2 sdram poll  b3 status reads stuck\r\n> ",
+  "emp_after": "emp\r\nmillis now 0x00045C66\r\ndwt cyccnt 0x5E490CE1\r\nsession_id 0x5255157A\r\nhost_seen 0x00000000\r\nrx_messages 0x00000003\r\ntx_messages 0x00000040\r\nrx_fragments 0x00000003\r\ntx_fragments 0x00000040\r\nrx_decode_errors 0x00000000\r\nrx_seq_gaps 0x00000000\r\ntx_dropped 0x00000000\r\nhellos 0x00000001\r\npings 0x00000001\r\nfields 0x0000000C\r\nrevision_lo 0x0000DE30\r\n> "
+}

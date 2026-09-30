@@ -1,0 +1,10 @@
+{
+  "utc": "2026-09-30T13:59:58Z",
+  "transport": "physical Mini / macOS IOKit",
+  "image_sha256": "429960304ccb72b917466ca44e8ac459bd5c053473f15b2bc3ea7ed8e3fab02b",
+  "identity": "id\r\nelectra-mini-fw APP @0x00120000\r\nstray_systicks 0x00000001\r\nsdram_selftest 0x00000000\r\nra8876_init_rc 0x00000000\r\nra_status_bits 0x00000000\r\nqt2120_init_rc 0x00000000\r\nusb_tx_dropped 0x00000040\r\nservice_hz 0x00000000\r\nrender_us_max 0x00000000\r\ninput_gap_ms_max 0x00000000\r\ninput_queue_drops 0x00000000\r\ngraphics_errors 0x00000000\r\nnmi_count 0x00000000\r\nstack_bottom 0x1FFE0280\r\nstack_top 0x1FFE4280\r\n  b0 reset poll  b1 pll poll  b2 sdram poll  b3 status reads stuck\r\n> ",
+  "emp_before": "emp\r\nmillis now 0x000002D9\r\ndwt cyccnt 0x5B0ECBDE\r\nsession_id 0x3CEA720D\r\nhost_seen 0x00000000\r\nrx_messages 0x00000003\r\ntx_messages 0x00000004\r\nrx_fragments 0x00000003\r\ntx_fragments 0x00000004\r\nrx_decode_errors 0x00000000\r\nrx_seq_gaps 0x00000000\r\ntx_dropped 0x00000000\r\nhellos 0x00000001\r\npings 0x00000001\r\nfields 0x00000000\r\nrevision_lo 0x00000000\r\n> ",
+  "mixed_seconds": 4.9578957259655e-06,
+  "identity_after": "id\r\nelectra-mini-fw APP @0x00120000\r\nstray_systicks 0x00000001\r\nsdram_selftest 0x00000000\r\nra8876_init_rc 0x00000000\r\nra_status_bits 0x00000000\r\nqt2120_init_rc 0x00000000\r\nusb_tx_dropped 0x00000040\r\nservice_hz 0x00000004\r\nrender_us_max 0x00000000\r\ninput_gap_ms_max 0x00000027\r\ninput_queue_drops 0x00000000\r\ngraphics_errors 0x00000000\r\nnmi_count 0x00000000\r\nstack_bottom 0x1FFE0280\r\nstack_top 0x1FFE4280\r\n  b0 reset poll  b1 pll poll  b2 sdram poll  b3 status reads stuck\r\n> ",
+  "emp_after": "emp\r\nmillis now 0x000467C1\r\ndwt cyccnt 0x7294A9B2\r\nsession_id 0x3CEA720D\r\nhost_seen 0x00000000\r\nrx_messages 0x00000003\r\ntx_messages 0x0000004D\r\nrx_fragments 0x00000003\r\ntx_fragments 0x0000004D\r\nrx_decode_errors 0x00000000\r\nrx_seq_gaps 0x00000000\r\ntx_dropped 0x00000000\r\nhellos 0x00000001\r\npings 0x00000001\r\nfields 0x0000000C\r\nrevision_lo 0x0000DE30\r\n> "
+}

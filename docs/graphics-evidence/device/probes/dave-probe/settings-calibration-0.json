@@ -1,0 +1,88 @@
+{
+  "workload": "settings-calibration",
+  "run": 0,
+  "cycles_per_100ms": 23812614,
+  "cold": {
+    "index": 0,
+    "submit_us": 265960,
+    "gpu_wait_us": 301,
+    "pixel_spi_us": 1043703,
+    "total_us": 1309965,
+    "input_gap_ms": 27,
+    "input_drops": 0,
+    "accel_errors": 0
+  },
+  "warmup": [
+    {
+      "index": 1,
+      "submit_us": 272198,
+      "gpu_wait_us": 83,
+      "pixel_spi_us": 1043705,
+      "total_us": 1315987,
+      "input_gap_ms": 27,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 2,
+      "submit_us": 218144,
+      "gpu_wait_us": 246,
+      "pixel_spi_us": 1043705,
+      "total_us": 1262096,
+      "input_gap_ms": 27,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 3,
+      "submit_us": 200379,
+      "gpu_wait_us": 24,
+      "pixel_spi_us": 1043705,
+      "total_us": 1244109,
+      "input_gap_ms": 27,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 4,
+      "submit_us": 218112,
+      "gpu_wait_us": 246,
+      "pixel_spi_us": 1043709,
+      "total_us": 1262068,
+      "input_gap_ms": 27,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 5,
+      "submit_us": 200361,
+      "gpu_wait_us": 24,
+      "pixel_spi_us": 1043709,
+      "total_us": 1244095,
+      "input_gap_ms": 27,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 6,
+      "submit_us": 218177,
+      "gpu_wait_us": 246,
+      "pixel_spi_us": 1043708,
+      "total_us": 1262133,
+      "input_gap_ms": 27,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 7,
+      "submit_us": 200335,
+      "gpu_wait_us": 24,
+      "pixel_spi_us": 1043710,
+      "total_us": 1244069,
+      "input_gap_ms": 27,
+      "input_drops": 0,
+      "accel_errors": 0
+    }
+  ],
+  "measured": []
+}

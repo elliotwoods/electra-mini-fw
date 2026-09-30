@@ -1,0 +1,26 @@
+/Users/elliot/dev/electra-mini-fw/build/dave/app.elf  :
+section               size         addr
+.vectors               164      1179648
+.text                95896      1179816
+.rodata             203264      1275712
+.ARM.exidx               8      1478976
+.data                   96    536739872
+.ramfunc               504    536739968
+.stack               16392    536740472
+.bss                104364    536756864
+.heap             16777216   2415919104
+.graphics_sdram   10883072   2432696320
+.debug_info         285334            0
+.debug_abbrev        32096            0
+.debug_loclists     111792            0
+.debug_aranges        8192            0
+.debug_rnglists       9221            0
+.debug_macro         24434            0
+.debug_line         163850            0
+.debug_str           82137            0
+.comment                56            0
+.ARM.attributes         50            0
+.debug_frame         24656            0
+Total             28822794
+
+

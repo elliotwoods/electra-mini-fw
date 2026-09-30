@@ -1,0 +1,32 @@
+[
+  {
+    "scene": "ui",
+    "different_pixels": 0,
+    "ra": "ra/ui.png",
+    "dave": "dave/ui.png"
+  },
+  {
+    "scene": "focus",
+    "different_pixels": 0,
+    "ra": "ra/focus.png",
+    "dave": "dave/focus.png"
+  },
+  {
+    "scene": "color",
+    "different_pixels": 0,
+    "ra": "ra/color.png",
+    "dave": "dave/color.png"
+  },
+  {
+    "scene": "operator",
+    "different_pixels": 0,
+    "ra": "ra/operator.png",
+    "dave": "dave/operator.png"
+  },
+  {
+    "scene": "operator-settings",
+    "different_pixels": 0,
+    "ra": "ra/operator-settings.png",
+    "dave": "dave/operator-settings.png"
+  }
+]

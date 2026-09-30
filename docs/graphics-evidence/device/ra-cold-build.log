@@ -1,0 +1,118 @@
+-- The C compiler identification is GNU 12.3.1
+-- The ASM compiler identification is GNU
+-- Found assembler: /Users/elliot/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-gcc
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /Users/elliot/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-gcc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Configuring done (0.4s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Users/elliot/dev/electra-mini-fw/build/ra-cold
+[1/53] Building C object CMakeFiles/bootloader.dir/src/bsp/electra_pin_cfg.c.obj
+[2/53] Building C object CMakeFiles/bootloader.dir/src/bsp/icu.c.obj
+[3/53] Building C object CMakeFiles/bootloader.dir/src/bsp/sdram.c.obj
+[4/53] Building C object CMakeFiles/bootloader.dir/src/bsp/ioport.c.obj
+[5/53] Building C object CMakeFiles/bootloader.dir/src/hal/spi.c.obj
+[6/53] Building C object CMakeFiles/bootloader.dir/src/boot/app_launch.c.obj
+[7/53] Building C object CMakeFiles/bootloader.dir/src/startup/startup.c.obj
+[8/53] Building C object CMakeFiles/bootloader.dir/src/boot/usb_service.c.obj
+[9/53] Building C object CMakeFiles/bootloader.dir/src/startup/vectors.c.obj
+[10/53] Building C object CMakeFiles/bootloader.dir/src/boot/boot_screen.c.obj
+[11/53] Building C object CMakeFiles/bootloader.dir/src/bsp/clock.c.obj
+[12/53] Building C object CMakeFiles/bootloader.dir/src/boot/main.c.obj
+[13/53] Building C object CMakeFiles/bootloader.dir/src/hal/usb_desc_cdc.c.obj
+[14/53] Building C object CMakeFiles/bootloader.dir/src/common/console.c.obj
+[15/53] Building C object CMakeFiles/app.dir/src/startup/vectors.c.obj
+[16/53] Building C object CMakeFiles/bootloader.dir/src/boot/flash_faci.c.obj
+[17/53] Building C object CMakeFiles/app.dir/src/bsp/icu.c.obj
+[18/53] Building C object CMakeFiles/app.dir/src/bsp/electra_pin_cfg.c.obj
+[19/53] Building C object CMakeFiles/app.dir/src/bsp/sdram.c.obj
+[20/53] Building C object CMakeFiles/app.dir/src/bsp/ioport.c.obj
+[21/53] Building C object CMakeFiles/app.dir/src/hal/inputs.c.obj
+[22/53] Building C object CMakeFiles/app.dir/src/bsp/clock.c.obj
+[23/53] Building C object CMakeFiles/bootloader.dir/src/boot/text.c.obj
+[24/53] Building C object CMakeFiles/app.dir/src/hal/spi.c.obj
+[25/53] Building C object CMakeFiles/bootloader.dir/src/hal/ra8876.c.obj
+[26/53] Building C object CMakeFiles/app.dir/src/hal/usb_desc_vendor.c.obj
+[27/53] Building C object CMakeFiles/app.dir/src/startup/startup.c.obj
+[28/53] Building C object CMakeFiles/bootloader.dir/src/common/persist.c.obj
+[29/53] Building C object CMakeFiles/app.dir/src/hal/riic.c.obj
+[30/53] Building C object CMakeFiles/app.dir/src/boot/app_launch.c.obj
+[31/53] Building C object CMakeFiles/bootloader.dir/src/hal/usb_fs.c.obj
+[32/53] Building C object CMakeFiles/bootloader.dir/src/boot/font_data.c.obj
+[33/53] Building C object CMakeFiles/app.dir/src/hal/ra8876.c.obj
+[34/53] Building C object CMakeFiles/app.dir/src/common/console.c.obj
+[35/53] Building C object CMakeFiles/app.dir/src/proto/diag.c.obj
+[36/53] Building C object CMakeFiles/app.dir/src/app/history.c.obj
+[37/53] Building C object CMakeFiles/app.dir/src/boot/flash_faci.c.obj
+[38/53] Building C object CMakeFiles/app.dir/src/hal/qt2120.c.obj
+[39/53] Building C object CMakeFiles/app.dir/src/common/persist.c.obj
+[40/53] Building C object CMakeFiles/app.dir/src/app/text.c.obj
+[41/53] Building C object CMakeFiles/app.dir/src/app/touch_cal.c.obj
+[42/53] Building C object CMakeFiles/app.dir/src/hal/usb_fs.c.obj
+[43/53] Building C object CMakeFiles/app.dir/src/proto/txq.c.obj
+[44/53] Building C object CMakeFiles/app.dir/src/proto/frame.c.obj
+[45/53] Building C object CMakeFiles/app.dir/src/proto/session.c.obj
+[46/53] Building C object CMakeFiles/app.dir/src/app/graphics.c.obj
+[47/53] Building C object CMakeFiles/app.dir/src/app/ui_state.c.obj
+[48/53] Building C object CMakeFiles/app.dir/src/app/font_data.c.obj
+[49/53] Building C object CMakeFiles/app.dir/src/proto/surface.c.obj
+[50/53] Linking C executable bootloader.elf; Generating and gating bootloader.srec
+/Users/elliot/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/bin/ld: warning: bootloader.elf has a LOAD segment with RWX permissions
+Memory region         Used Size  Region Size  %age Used
+      STOCK_BOOT:          0 GB         1 MB      0.00%
+             EMB:       50320 B       128 KB     38.39%
+             APP:          0 GB      2944 KB      0.00%
+             RAM:       19820 B     655328 B      3.02%
+           SDRAM:          0 GB        32 MB      0.00%
+            QSPI:          0 GB        32 MB      0.00%
+      DATA_FLASH:          0 GB        64 KB      0.00%
+   text	   data	    bss	    dec	    hex	filename
+  50320	      0	  19316	  69636	  11004	/Users/elliot/dev/electra-mini-fw/build/ra-cold/bootloader.elf
+
+checking bootloader.srec
+
+  ok    S-record parses, 3147 data records, all checksums valid
+  ok    loads at 0x00100000
+  ok    does not intrude on the bootloader region
+  ok    fits in flash (49.1 KiB, ends 0x0010c490)
+  ok    initial SP 0x1ffe4220 is in SRAM
+  ok    reset vector 0x00100135 has the Thumb bit set
+  ok    reset vector points inside the image
+  ok    entry record present (0x00100135)
+
+all checks passed.
+
+[51/53] Building C object CMakeFiles/app.dir/src/app/ui.c.obj
+[52/53] Building C object CMakeFiles/app.dir/src/main.c.obj
+[53/53] Linking C executable app.elf; Generating and gating app.srec
+/Users/elliot/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/bin/ld: warning: app.elf has a LOAD segment with RWX permissions
+Memory region         Used Size  Region Size  %age Used
+      STOCK_BOOT:          0 GB         1 MB      0.00%
+             EMB:          0 GB       128 KB      0.00%
+             APP:      276172 B      2944 KB      9.16%
+             RAM:      121296 B     655328 B     18.51%
+           SDRAM:         16 MB        32 MB     50.00%
+            QSPI:          0 GB        32 MB      0.00%
+      DATA_FLASH:          0 GB        64 KB      0.00%
+   text	   data	    bss	    dec	    hex	filename
+ 276072	     96	16897912	17174080	1060e40	/Users/elliot/dev/electra-mini-fw/build/ra-cold/app.elf
+
+checking app.srec
+
+  ok    S-record parses, 17263 data records, all checksums valid
+  warn  2 segments — the flasher fills inter-section gaps with 0xFF
+          0x00120000–0x001200a4
+          0x001200a8–0x001636cc
+          gap 0x001200a4–0x001200a8 (4 bytes)
+  ok    loads at 0x00120000
+  ok    does not intrude on the bootloader region
+  ok    fits in flash (269.7 KiB, ends 0x001636cc)
+  ok    initial SP 0x1ffe4280 is in SRAM
+  ok    reset vector 0x00120b69 has the Thumb bit set
+  ok    reset vector points inside the image
+  ok    entry record present (0x00120b69)
+
+passed with 1 warning(s).
+

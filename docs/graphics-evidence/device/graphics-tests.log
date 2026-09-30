@@ -1,0 +1,7 @@
+  clipping, endpoint quantization, rounded edges, staging and VRAM copies passed
+  actual gradient background, restoration, cache hit/invalidation and clipped glyphs passed
+  focus/touch release and editor orientation match a clean repaint
+  both operator pages restore touched/pressed cues to a clean repaint
+  500 changed values remain identical after cache shelf/entry eviction
+  sparse pages, lower-row placement, long suffixes, negative and read-only fixtures passed
+5258 graphics checks passed

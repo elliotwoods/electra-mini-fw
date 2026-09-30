@@ -1,0 +1,26 @@
+/Users/elliot/dev/electra-mini-fw/build/ra-bench/app.elf  :
+section               size         addr
+.vectors               164      1179648
+.text                72368      1179816
+.rodata             203004      1252184
+.ARM.exidx               8      1455188
+.data                   96    536739872
+.ramfunc               504    536739968
+.stack               16392    536740472
+.bss                104304    536756864
+.heap             16777216   2415919104
+.graphics_sdram          0   2432696320
+.debug_info         150135            0
+.debug_abbrev        18446            0
+.debug_loclists      58973            0
+.debug_aranges        5544            0
+.debug_rnglists       6904            0
+.debug_macro         20292            0
+.debug_line         107904            0
+.debug_str           61974            0
+.comment                56            0
+.ARM.attributes         50            0
+.debug_frame         17068            0
+Total             17621402
+
+

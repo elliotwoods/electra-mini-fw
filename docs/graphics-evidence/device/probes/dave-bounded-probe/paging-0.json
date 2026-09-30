@@ -1,0 +1,88 @@
+{
+  "workload": "paging",
+  "run": 0,
+  "cycles_per_100ms": 23945554,
+  "cold": {
+    "index": 0,
+    "submit_us": 362321,
+    "gpu_wait_us": 162604,
+    "pixel_spi_us": 378013,
+    "total_us": 902940,
+    "input_gap_ms": 22,
+    "input_drops": 0,
+    "accel_errors": 0
+  },
+  "warmup": [
+    {
+      "index": 1,
+      "submit_us": 420881,
+      "gpu_wait_us": 184494,
+      "pixel_spi_us": 465791,
+      "total_us": 1071168,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 2,
+      "submit_us": 381130,
+      "gpu_wait_us": 182025,
+      "pixel_spi_us": 465781,
+      "total_us": 1028936,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 3,
+      "submit_us": 367706,
+      "gpu_wait_us": 185029,
+      "pixel_spi_us": 465784,
+      "total_us": 1018521,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 4,
+      "submit_us": 360503,
+      "gpu_wait_us": 172150,
+      "pixel_spi_us": 465783,
+      "total_us": 998437,
+      "input_gap_ms": 22,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 5,
+      "submit_us": 387996,
+      "gpu_wait_us": 180166,
+      "pixel_spi_us": 465787,
+      "total_us": 1033951,
+      "input_gap_ms": 25,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 6,
+      "submit_us": 376939,
+      "gpu_wait_us": 181748,
+      "pixel_spi_us": 465787,
+      "total_us": 1024475,
+      "input_gap_ms": 28,
+      "input_drops": 0,
+      "accel_errors": 0
+    },
+    {
+      "index": 7,
+      "submit_us": 370855,
+      "gpu_wait_us": 190345,
+      "pixel_spi_us": 465786,
+      "total_us": 1026988,
+      "input_gap_ms": 28,
+      "input_drops": 0,
+      "accel_errors": 0
+    }
+  ],
+  "measured": []
+}

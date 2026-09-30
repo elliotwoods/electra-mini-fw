@@ -1,0 +1,9 @@
+Pillow 12.3.0 FreeType 2.14.3
+wrote /Users/elliot/dev/electra-mini-fw/src/app/font_data.c
+  ui        26 px   20719 glyph bytes  line height 33  (proportional, for labels)
+  value     38 px   40443 glyph bytes  line height 51  (monospaced, so digits do not jitter)
+  compact   26 px   20635 glyph bytes  line height 35  (monospaced compact values)
+  small     19 px   10907 glyph bytes  line height 24  (proportional, for units and secondary)
+  display  112 px   88599 glyph bytes  line height 149  (the focused readout: digits only)
+  icons     34 px    3963 glyph bytes  line height 41  (remapped to bytes; see icons.h)
+  total 185266 bytes of flash for 6 faces

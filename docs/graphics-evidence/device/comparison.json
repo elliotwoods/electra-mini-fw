@@ -1,0 +1,1409 @@
+[
+  {
+    "backend": "baseline",
+    "workload": "value",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 884.0,
+      "p95": 902,
+      "max": 904
+    },
+    "gpu_wait_us": {
+      "median": 381.0,
+      "p95": 3517,
+      "max": 3527
+    },
+    "pixel_spi_us": {
+      "median": 3619.0,
+      "p95": 3619,
+      "max": 3620
+    },
+    "total_us": {
+      "median": 4889.0,
+      "p95": 8027,
+      "max": 8046
+    },
+    "input_gap_ms": {
+      "median": 23.0,
+      "p95": 24,
+      "max": 24
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 10580,
+        "gpu_wait_us": 20048,
+        "pixel_spi_us": 45574,
+        "total_us": 76202,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 10580,
+        "gpu_wait_us": 19691,
+        "pixel_spi_us": 45574,
+        "total_us": 75846,
+        "input_gap_ms": 24,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 10580,
+        "gpu_wait_us": 19521,
+        "pixel_spi_us": 45573,
+        "total_us": 75675,
+        "input_gap_ms": 23,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "baseline",
+    "workload": "precision",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 2405.0,
+      "p95": 3727,
+      "max": 3780
+    },
+    "gpu_wait_us": {
+      "median": 3664.0,
+      "p95": 3795,
+      "max": 3815
+    },
+    "pixel_spi_us": {
+      "median": 11311.0,
+      "p95": 18164,
+      "max": 18328
+    },
+    "total_us": {
+      "median": 17021.0,
+      "p95": 25618,
+      "max": 25917
+    },
+    "input_gap_ms": {
+      "median": 27.0,
+      "p95": 27,
+      "max": 27
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 8405,
+        "gpu_wait_us": 13481,
+        "pixel_spi_us": 38429,
+        "total_us": 60316,
+        "input_gap_ms": 20,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 8405,
+        "gpu_wait_us": 13636,
+        "pixel_spi_us": 38429,
+        "total_us": 60472,
+        "input_gap_ms": 20,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 8405,
+        "gpu_wait_us": 13649,
+        "pixel_spi_us": 38428,
+        "total_us": 60483,
+        "input_gap_ms": 20,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "baseline",
+    "workload": "eight",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 5492.0,
+      "p95": 5558,
+      "max": 5585
+    },
+    "gpu_wait_us": {
+      "median": 9023.5,
+      "p95": 9303,
+      "max": 9338
+    },
+    "pixel_spi_us": {
+      "median": 23361.0,
+      "p95": 23493,
+      "max": 23494
+    },
+    "total_us": {
+      "median": 37864.0,
+      "p95": 38263,
+      "max": 38399
+    },
+    "input_gap_ms": {
+      "median": 24.0,
+      "p95": 24,
+      "max": 24
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 10499,
+        "gpu_wait_us": 17028,
+        "pixel_spi_us": 43943,
+        "total_us": 71471,
+        "input_gap_ms": 24,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 10499,
+        "gpu_wait_us": 19357,
+        "pixel_spi_us": 43943,
+        "total_us": 73800,
+        "input_gap_ms": 22,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 10499,
+        "gpu_wait_us": 16841,
+        "pixel_spi_us": 43942,
+        "total_us": 71283,
+        "input_gap_ms": 20,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "baseline",
+    "workload": "colour",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 235.0,
+      "p95": 235,
+      "max": 235
+    },
+    "gpu_wait_us": {
+      "median": 508.0,
+      "p95": 512,
+      "max": 3671
+    },
+    "pixel_spi_us": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    },
+    "total_us": {
+      "median": 744.0,
+      "p95": 748,
+      "max": 3907
+    },
+    "input_gap_ms": {
+      "median": 20.0,
+      "p95": 23,
+      "max": 23
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 5464,
+        "gpu_wait_us": 10622,
+        "pixel_spi_us": 19582,
+        "total_us": 35669,
+        "input_gap_ms": 20,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 5463,
+        "gpu_wait_us": 10466,
+        "pixel_spi_us": 19582,
+        "total_us": 35512,
+        "input_gap_ms": 20,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 5465,
+        "gpu_wait_us": 9986,
+        "pixel_spi_us": 19581,
+        "total_us": 35034,
+        "input_gap_ms": 23,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "baseline",
+    "workload": "paging",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 9180.5,
+      "p95": 11736,
+      "max": 11738
+    },
+    "gpu_wait_us": {
+      "median": 17214.0,
+      "p95": 21310,
+      "max": 21435
+    },
+    "pixel_spi_us": {
+      "median": 34379.5,
+      "p95": 47377,
+      "max": 47378
+    },
+    "total_us": {
+      "median": 60757.0,
+      "p95": 80421,
+      "max": 80546
+    },
+    "input_gap_ms": {
+      "median": 24.0,
+      "p95": 24,
+      "max": 24
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 11757,
+        "gpu_wait_us": 8781,
+        "pixel_spi_us": 47368,
+        "total_us": 67906,
+        "input_gap_ms": 0,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 11758,
+        "gpu_wait_us": 20162,
+        "pixel_spi_us": 47368,
+        "total_us": 79289,
+        "input_gap_ms": 23,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 11757,
+        "gpu_wait_us": 21025,
+        "pixel_spi_us": 47369,
+        "total_us": 80151,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "baseline",
+    "workload": "settings-calibration",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 12702.5,
+      "p95": 14608,
+      "max": 14609
+    },
+    "gpu_wait_us": {
+      "median": 21890.5,
+      "p95": 22311,
+      "max": 22417
+    },
+    "pixel_spi_us": {
+      "median": 50886.5,
+      "p95": 62232,
+      "max": 62233
+    },
+    "total_us": {
+      "median": 85461.0,
+      "p95": 98762,
+      "max": 98783
+    },
+    "input_gap_ms": {
+      "median": 50.0,
+      "p95": 50,
+      "max": 50
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 10799,
+        "gpu_wait_us": 22559,
+        "pixel_spi_us": 39544,
+        "total_us": 72903,
+        "input_gap_ms": 27,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 10799,
+        "gpu_wait_us": 22680,
+        "pixel_spi_us": 39544,
+        "total_us": 73024,
+        "input_gap_ms": 26,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 10799,
+        "gpu_wait_us": 24738,
+        "pixel_spi_us": 39544,
+        "total_us": 75081,
+        "input_gap_ms": 27,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "baseline",
+    "workload": "brightness",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 9418.5,
+      "p95": 9922,
+      "max": 9923
+    },
+    "gpu_wait_us": {
+      "median": 18365.0,
+      "p95": 19048,
+      "max": 19153
+    },
+    "pixel_spi_us": {
+      "median": 39903.5,
+      "p95": 43402,
+      "max": 43403
+    },
+    "total_us": {
+      "median": 67636.0,
+      "p95": 72326,
+      "max": 72418
+    },
+    "input_gap_ms": {
+      "median": 54.0,
+      "p95": 57,
+      "max": 57
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 9922,
+        "gpu_wait_us": 18327,
+        "pixel_spi_us": 43400,
+        "total_us": 71650,
+        "input_gap_ms": 54,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 9922,
+        "gpu_wait_us": 17946,
+        "pixel_spi_us": 43401,
+        "total_us": 71270,
+        "input_gap_ms": 57,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 9922,
+        "gpu_wait_us": 18917,
+        "pixel_spi_us": 43402,
+        "total_us": 72242,
+        "input_gap_ms": 41,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "ra",
+    "workload": "value",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 933.5,
+      "p95": 6566,
+      "max": 7227
+    },
+    "gpu_wait_us": {
+      "median": 2389.0,
+      "p95": 5498,
+      "max": 6363
+    },
+    "pixel_spi_us": {
+      "median": 0.0,
+      "p95": 2992,
+      "max": 3397
+    },
+    "total_us": {
+      "median": 3383.5,
+      "p95": 11946,
+      "max": 13359
+    },
+    "input_gap_ms": {
+      "median": 21.0,
+      "p95": 21,
+      "max": 21
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 69032,
+        "gpu_wait_us": 55460,
+        "pixel_spi_us": 43858,
+        "total_us": 168350,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 75367,
+        "gpu_wait_us": 46654,
+        "pixel_spi_us": 43854,
+        "total_us": 165876,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 81666,
+        "gpu_wait_us": 40009,
+        "pixel_spi_us": 43855,
+        "total_us": 165531,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "ra",
+    "workload": "precision",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 4514.0,
+      "p95": 13605,
+      "max": 17006
+    },
+    "gpu_wait_us": {
+      "median": 3497.0,
+      "p95": 6638,
+      "max": 7476
+    },
+    "pixel_spi_us": {
+      "median": 3750.0,
+      "p95": 10519,
+      "max": 10668
+    },
+    "total_us": {
+      "median": 14586.5,
+      "p95": 30298,
+      "max": 31941
+    },
+    "input_gap_ms": {
+      "median": 22.0,
+      "p95": 22,
+      "max": 22
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 58477,
+        "gpu_wait_us": 25398,
+        "pixel_spi_us": 36854,
+        "total_us": 120730,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 58487,
+        "gpu_wait_us": 24904,
+        "pixel_spi_us": 36854,
+        "total_us": 120246,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 58496,
+        "gpu_wait_us": 26039,
+        "pixel_spi_us": 36853,
+        "total_us": 121389,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "ra",
+    "workload": "eight",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 13552.5,
+      "p95": 18015,
+      "max": 20302
+    },
+    "gpu_wait_us": {
+      "median": 21032.5,
+      "p95": 24279,
+      "max": 27604
+    },
+    "pixel_spi_us": {
+      "median": 6743.0,
+      "p95": 8975,
+      "max": 10188
+    },
+    "total_us": {
+      "median": 41427.0,
+      "p95": 47174,
+      "max": 51562
+    },
+    "input_gap_ms": {
+      "median": 22.0,
+      "p95": 22,
+      "max": 22
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 58645,
+        "gpu_wait_us": 48601,
+        "pixel_spi_us": 32601,
+        "total_us": 139848,
+        "input_gap_ms": 20,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 64972,
+        "gpu_wait_us": 42523,
+        "pixel_spi_us": 32601,
+        "total_us": 140097,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 49193,
+        "gpu_wait_us": 58168,
+        "pixel_spi_us": 32601,
+        "total_us": 139963,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "ra",
+    "workload": "colour",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 5164.0,
+      "p95": 8320,
+      "max": 8322
+    },
+    "gpu_wait_us": {
+      "median": 2588.0,
+      "p95": 5773,
+      "max": 5818
+    },
+    "pixel_spi_us": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    },
+    "total_us": {
+      "median": 7774.0,
+      "p95": 10958,
+      "max": 10996
+    },
+    "input_gap_ms": {
+      "median": 21.0,
+      "p95": 21,
+      "max": 21
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 47877,
+        "gpu_wait_us": 51555,
+        "pixel_spi_us": 20947,
+        "total_us": 120381,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 57332,
+        "gpu_wait_us": 42704,
+        "pixel_spi_us": 20946,
+        "total_us": 120984,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 54181,
+        "gpu_wait_us": 45922,
+        "pixel_spi_us": 20947,
+        "total_us": 121051,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "ra",
+    "workload": "paging",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 29546.5,
+      "p95": 36084,
+      "max": 39239
+    },
+    "gpu_wait_us": {
+      "median": 53476.0,
+      "p95": 56949,
+      "max": 60000
+    },
+    "pixel_spi_us": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    },
+    "total_us": {
+      "median": 82321.5,
+      "p95": 89016,
+      "max": 90323
+    },
+    "input_gap_ms": {
+      "median": 21.0,
+      "p95": 21,
+      "max": 21
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 83145,
+        "gpu_wait_us": 53860,
+        "pixel_spi_us": 45655,
+        "total_us": 182661,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 76813,
+        "gpu_wait_us": 54925,
+        "pixel_spi_us": 45657,
+        "total_us": 177397,
+        "input_gap_ms": 22,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 76838,
+        "gpu_wait_us": 58511,
+        "pixel_spi_us": 45657,
+        "total_us": 181006,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "ra",
+    "workload": "settings-calibration",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 8957.0,
+      "p95": 12115,
+      "max": 18414
+    },
+    "gpu_wait_us": {
+      "median": 40953.0,
+      "p95": 44130,
+      "max": 45303
+    },
+    "pixel_spi_us": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    },
+    "total_us": {
+      "median": 49139.0,
+      "p95": 53939,
+      "max": 54445
+    },
+    "input_gap_ms": {
+      "median": 24.0,
+      "p95": 24,
+      "max": 24
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 54768,
+        "gpu_wait_us": 42689,
+        "pixel_spi_us": 39095,
+        "total_us": 136552,
+        "input_gap_ms": 23,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 54787,
+        "gpu_wait_us": 44155,
+        "pixel_spi_us": 39095,
+        "total_us": 138039,
+        "input_gap_ms": 23,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 57921,
+        "gpu_wait_us": 37934,
+        "pixel_spi_us": 39096,
+        "total_us": 134952,
+        "input_gap_ms": 23,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "ra",
+    "workload": "brightness",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 3861.0,
+      "p95": 7017,
+      "max": 7041
+    },
+    "gpu_wait_us": {
+      "median": 37054.5,
+      "p95": 37691,
+      "max": 37850
+    },
+    "pixel_spi_us": {
+      "median": 0.0,
+      "p95": 0,
+      "max": 0
+    },
+    "total_us": {
+      "median": 40971.0,
+      "p95": 41587,
+      "max": 44596
+    },
+    "input_gap_ms": {
+      "median": 24.0,
+      "p95": 27,
+      "max": 27
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 53050,
+        "gpu_wait_us": 42219,
+        "pixel_spi_us": 49693,
+        "total_us": 144963,
+        "input_gap_ms": 24,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 56178,
+        "gpu_wait_us": 40866,
+        "pixel_spi_us": 49694,
+        "total_us": 146739,
+        "input_gap_ms": 23,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 53032,
+        "gpu_wait_us": 40713,
+        "pixel_spi_us": 49693,
+        "total_us": 143439,
+        "input_gap_ms": 27,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "dave",
+    "workload": "value",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 8594.0,
+      "p95": 11716,
+      "max": 15777
+    },
+    "gpu_wait_us": {
+      "median": 7857.0,
+      "p95": 13141,
+      "max": 16872
+    },
+    "pixel_spi_us": {
+      "median": 28228.0,
+      "p95": 28230,
+      "max": 28231
+    },
+    "total_us": {
+      "median": 44651.0,
+      "p95": 50916,
+      "max": 55156
+    },
+    "input_gap_ms": {
+      "median": 22.0,
+      "p95": 22,
+      "max": 22
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 158097,
+        "gpu_wait_us": 164229,
+        "pixel_spi_us": 378014,
+        "total_us": 700341,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 151781,
+        "gpu_wait_us": 161629,
+        "pixel_spi_us": 378011,
+        "total_us": 691422,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 151744,
+        "gpu_wait_us": 161684,
+        "pixel_spi_us": 378011,
+        "total_us": 691439,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "dave",
+    "workload": "precision",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 18171.0,
+      "p95": 25739,
+      "max": 32064
+    },
+    "gpu_wait_us": {
+      "median": 13459.0,
+      "p95": 17042,
+      "max": 19820
+    },
+    "pixel_spi_us": {
+      "median": 41578.0,
+      "p95": 52511,
+      "max": 52515
+    },
+    "total_us": {
+      "median": 71762.0,
+      "p95": 91148,
+      "max": 98495
+    },
+    "input_gap_ms": {
+      "median": 22.0,
+      "p95": 22,
+      "max": 22
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 108001,
+        "gpu_wait_us": 95005,
+        "pixel_spi_us": 213286,
+        "total_us": 416294,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 108005,
+        "gpu_wait_us": 95963,
+        "pixel_spi_us": 213284,
+        "total_us": 417253,
+        "input_gap_ms": 22,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 101719,
+        "gpu_wait_us": 94474,
+        "pixel_spi_us": 213287,
+        "total_us": 409481,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "dave",
+    "workload": "eight",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 65451.5,
+      "p95": 70130,
+      "max": 74860
+    },
+    "gpu_wait_us": {
+      "median": 70255.5,
+      "p95": 74867,
+      "max": 77698
+    },
+    "pixel_spi_us": {
+      "median": 225830.0,
+      "p95": 225834,
+      "max": 225838
+    },
+    "total_us": {
+      "median": 362490.0,
+      "p95": 367958,
+      "max": 369667
+    },
+    "input_gap_ms": {
+      "median": 22.0,
+      "p95": 22,
+      "max": 22
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 135200,
+        "gpu_wait_us": 172374,
+        "pixel_spi_us": 378014,
+        "total_us": 685590,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 138357,
+        "gpu_wait_us": 169225,
+        "pixel_spi_us": 378010,
+        "total_us": 685594,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 141500,
+        "gpu_wait_us": 167129,
+        "pixel_spi_us": 378008,
+        "total_us": 686638,
+        "input_gap_ms": 21,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "dave",
+    "workload": "colour",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 15829.0,
+      "p95": 18985,
+      "max": 19023
+    },
+    "gpu_wait_us": {
+      "median": 10059.0,
+      "p95": 13287,
+      "max": 13727
+    },
+    "pixel_spi_us": {
+      "median": 28228.0,
+      "p95": 28230,
+      "max": 28231
+    },
+    "total_us": {
+      "median": 51785.0,
+      "p95": 54746,
+      "max": 54783
+    },
+    "input_gap_ms": {
+      "median": 22.0,
+      "p95": 22,
+      "max": 22
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 135138,
+        "gpu_wait_us": 163765,
+        "pixel_spi_us": 378013,
+        "total_us": 676917,
+        "input_gap_ms": 22,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 135156,
+        "gpu_wait_us": 163753,
+        "pixel_spi_us": 378013,
+        "total_us": 676924,
+        "input_gap_ms": 22,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 135167,
+        "gpu_wait_us": 162744,
+        "pixel_spi_us": 378011,
+        "total_us": 675923,
+        "input_gap_ms": 22,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "dave",
+    "workload": "paging",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 136962.5,
+      "p95": 143291,
+      "max": 149205
+    },
+    "gpu_wait_us": {
+      "median": 181020.0,
+      "p95": 190189,
+      "max": 190272
+    },
+    "pixel_spi_us": {
+      "median": 465783.0,
+      "p95": 465790,
+      "max": 465797
+    },
+    "total_us": {
+      "median": 784459.0,
+      "p95": 792997,
+      "max": 794008
+    },
+    "input_gap_ms": {
+      "median": 28.0,
+      "p95": 28,
+      "max": 28
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 101770,
+        "gpu_wait_us": 158156,
+        "pixel_spi_us": 465807,
+        "total_us": 725734,
+        "input_gap_ms": 0,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 177695,
+        "gpu_wait_us": 187669,
+        "pixel_spi_us": 465784,
+        "total_us": 831149,
+        "input_gap_ms": 22,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 187171,
+        "gpu_wait_us": 189347,
+        "pixel_spi_us": 465789,
+        "total_us": 842307,
+        "input_gap_ms": 22,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "dave",
+    "workload": "settings-calibration",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 109088.0,
+      "p95": 115841,
+      "max": 115951
+    },
+    "gpu_wait_us": {
+      "median": 159453.5,
+      "p95": 161663,
+      "max": 161736
+    },
+    "pixel_spi_us": {
+      "median": 521855.0,
+      "p95": 521859,
+      "max": 521861
+    },
+    "total_us": {
+      "median": 791629.5,
+      "p95": 796203,
+      "max": 796298
+    },
+    "input_gap_ms": {
+      "median": 28.0,
+      "p95": 28,
+      "max": 28
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 156795,
+        "gpu_wait_us": 169900,
+        "pixel_spi_us": 521851,
+        "total_us": 848547,
+        "input_gap_ms": 28,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 156798,
+        "gpu_wait_us": 169874,
+        "pixel_spi_us": 521856,
+        "total_us": 848529,
+        "input_gap_ms": 26,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 156803,
+        "gpu_wait_us": 169857,
+        "pixel_spi_us": 521858,
+        "total_us": 848519,
+        "input_gap_ms": 26,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  },
+  {
+    "backend": "dave",
+    "workload": "brightness",
+    "measured_samples": 900,
+    "submit_us": {
+      "median": 103573.0,
+      "p95": 103602,
+      "max": 103673
+    },
+    "gpu_wait_us": {
+      "median": 145635.5,
+      "p95": 146684,
+      "max": 146716
+    },
+    "pixel_spi_us": {
+      "median": 521855.0,
+      "p95": 521859,
+      "max": 521863
+    },
+    "total_us": {
+      "median": 771049.0,
+      "p95": 772127,
+      "max": 772173
+    },
+    "input_gap_ms": {
+      "median": 28.0,
+      "p95": 28,
+      "max": 28
+    },
+    "cold": [
+      {
+        "index": 0,
+        "submit_us": 162964,
+        "gpu_wait_us": 146660,
+        "pixel_spi_us": 521855,
+        "total_us": 831481,
+        "input_gap_ms": 26,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 162954,
+        "gpu_wait_us": 146639,
+        "pixel_spi_us": 521858,
+        "total_us": 831453,
+        "input_gap_ms": 25,
+        "input_drops": 0,
+        "accel_errors": 0
+      },
+      {
+        "index": 0,
+        "submit_us": 162973,
+        "gpu_wait_us": 146715,
+        "pixel_spi_us": 521856,
+        "total_us": 831545,
+        "input_gap_ms": 25,
+        "input_drops": 0,
+        "accel_errors": 0
+      }
+    ],
+    "protocol_error_delta": {
+      "rx_decode_errors": 0,
+      "rx_seq_gaps": 0,
+      "tx_dropped": 0
+    }
+  }
+]
