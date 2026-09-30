@@ -59,7 +59,8 @@ static void incremental_tests(void)
     ui_state_push(0,1,1020);ui_state_push(0,0,1040);ui_render();
     ui_state_touch(1u<<4,1060);ui_render();ui_state_touch(0,1080);ui_render();
     ui_state_push(0,1,1100);ui_state_push(0,0,1120);ui_render();
-    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);ui_render();
     unsigned diff=0;for(unsigned i=0;i<LCD_WIDTH*LCD_HEIGHT;i++) if(reference[i]!=sim_framebuffer()[i]) diff++;
     CHECK(diff==0);
     puts("  focus/touch release and editor orientation match a clean repaint");

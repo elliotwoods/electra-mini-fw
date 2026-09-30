@@ -302,7 +302,7 @@ void ui_reset(void)
     gfx_begin();
     forget_everything();
     clear_screen();
-    gfx_end();
+    /* Keep the visible frame intact; ui_render publishes the completed replacement. */
 }
 
 /* ------------------------------------------------------------------ page position */

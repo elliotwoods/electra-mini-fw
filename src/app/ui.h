@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 
-void ui_reset(void);          /* clear and force a full repaint */
+void ui_reset(void);          /* stage a clear and force a full repaint; publish with ui_render */
 void ui_render(void);         /* repaint only what changed; reads ui_state() */
 
 /* The power-on sequence, one incremental frame at a time: the eight cells fill left-to-right
