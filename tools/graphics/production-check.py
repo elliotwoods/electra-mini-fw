@@ -9,7 +9,8 @@ from flash_usb import router_maintenance
 from report import counters
 p=argparse.ArgumentParser();p.add_argument('--out',required=True);a=p.parse_args();out=Path(a.out);out.mkdir(parents=True,exist_ok=True);url=router_maintenance(True);link=None;r={}
 try:
- link=Link();r['ready']=hello(link);r['id_before']=command(link.c,'id').decode('latin1');r['emp_before']=command(link.c,'emp').decode('latin1');r['persistent_boot_record']=command(link.c,'pers').decode('latin1')
+ link=Link();r['ready']=hello(link);r['id_before']=command(link.c,'id').decode('latin1');r['emp_before']=command(link.c,'emp').decode('latin1');r['persistent_boot_record']=command(link.c,'pers',b'> ',timeout=10).decode('latin1')
+ assert 'record MATCHES this image' in r['persistent_boot_record'] and counters(r['persistent_boot_record'])['proven']==0x4F4B4159,'Image not proven'
  link.dec.buf.clear();link.dec.need=0;r['pings']=[];r['echo_bytes']=[]
  for i in range(5):
   link.send(OP_PING,struct.pack('<IQ',i,1000+i));m,dt=link.wait_for(OP_PONG,5)
