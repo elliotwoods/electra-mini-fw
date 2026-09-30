@@ -1,0 +1,4 @@
+control router: hardware released
+device capture production 800 480
+Production identity, five pings, three exact echoes, reconnect and zero diagnostics passed.
+control router: reconnecting

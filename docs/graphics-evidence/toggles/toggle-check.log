@@ -1,0 +1,13 @@
+control router: hardware released
+device capture toggles 800 480
+toggles different pixels 0
+device capture toggle-focus-off 800 480
+toggle-focus-off different pixels 0
+device capture toggle-focus-on 800 480
+toggle-focus-on different pixels 0
+device capture toggle-focus-bottom-off 800 480
+toggle-focus-bottom-off different pixels 0
+device capture toggle-focus-bottom-on 800 480
+toggle-focus-bottom-on different pixels 0
+100 eight-toggle batches, exact framebuffer parity and zero new errors passed.
+control router: reconnecting

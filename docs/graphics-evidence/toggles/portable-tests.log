@@ -1,0 +1,124 @@
+/Users/elliot/dev/electra-mini-fw/tests/desc_tests.c:54:13: warning: unused function 'bf32' [-Wunused-function]
+   54 | static void bf32(buf_t *b, float f)
+      |             ^~~~
+1 warning generated.
+EMP/1 codec tests (host)
+  crc32c                                     ok
+  wire constants                             ok
+  header codec                               ok
+  single fragment                            ok
+  multi frag hid                             ok
+  multi frag bulk                            ok
+  control unfragmented                       ok
+  crc catches flip                           ok
+  opcode mismatch                            ok
+  truncation safe                            ok
+  padding                                    ok
+  seq gap counted                            ok
+  interleaved singles                        ok
+  reasm abandonable                          ok
+
+transmit queue tests (host)
+  deltas accumulate                          ok
+  deltas cancel                              ok
+  absolute edits supersede                   ok
+  fields stay separate                       ok
+  buttons never coalesce                     ok
+  screen updates coalesce                    ok
+  control goes first                         ok
+  gesture order preserved                    ok
+  superseded keeps place                     ok
+  a full transport waits                     ok
+  overflow is reported                       ok
+  knobs never overflow                       ok
+  clear drops the backlog                    ok
+  large control survives                     ok
+
+descriptor transfer tests (host)
+  1-4 controls use lower row; 5-8 use reading order; input IDs stay stable ok
+  sparse short pages pack left-to-right without changing IDs or page reports ok
+  descriptor round trip and initial screen   ok
+  sparse slots stay blank and never cross page boundaries ok
+  duplicate and out-of-range slots reject the transaction ok
+  live descriptor survives a transfer in flight ok
+  a CRC mismatch leaves the live descriptor alone ok
+  a broken sequence leaves the live descriptor alone ok
+  a truncated field leaves the live descriptor alone ok
+  an aborted transfer leaves the live descriptor alone ok
+  a descriptor too large to hold is refused without disturbing the live one ok
+  values at a revision that failed to load are refused ok
+  values skip holes and still reach later slots ok
+  reveal validates revision/id and clear confirms an empty screen ok
+  successive descriptors replace cleanly     ok
+  the string pool does not accumulate across transfers ok
+  an extension value tag is stepped over, not misread ok
+  a Text value is retained without shifting the next field ok
+  action ignores rotation                    ok
+  action press emits revision/sequence/id    ok
+  action held/released never repeats         ok
+  next physical press executes again         ok
+  operator layout opted in                   ok
+  operator setting never drills              ok
+  operator stop retains its physical slot    ok
+  operator More retains bottom-right knob    ok
+  RGB colour is stored as one native field   ok
+  RGBA edit encoding carries every component ok
+  malformed and non-finite colours preserve the live descriptor ok
+  a reserved value tag abandons the record rather than guessing ok
+  an extension default is dropped without losing the field ok
+  an unreadable value costs one control, not the batch ok
+  a diagnostic is raised inside the decoder and sent by the tick ok
+  repeated diagnostics coalesce into one message with a count ok
+  a non-finite value is refused, and the field says so ok
+  a non-finite edit is refused rather than encoded ok
+  a label dropped for want of pool is reported, and the field still loads ok
+
+interaction model tests (host)
+  msd                                        ok
+  window bounds                              ok
+  digit at place                             ok
+  round to precision                         ok
+  touch calibration margin policy            ok
+  full pages use reading order, short pages use bottom row ok
+  row split is distinct from page size       ok
+  press drills in, bottom press exits        ok
+  press acts on the edge, not the level      ok
+  top press moves between fields, repeat exits ok
+  touch only highlights a digit              ok
+  drilling is symmetric between the rows     ok
+  digit knobs follow the opposite row        ok
+  paging by button, stable absolute groups   ok
+  outer buttons zoom and editor press exits  ok
+  a read-only field ignores its knob         ok
+  choice steps at threshold and clamps       ok
+  choice labels are stored and readable      ok
+  bottom row edits digits only while drilled ok
+  rotary outline feedback latches then expires ok
+  colour intensity, RGB drill, focus, reset and history ok
+  one twiddle is one undo step               ok
+  undo commits a pending change first        ok
+  leaving a field commits its history        ok
+  affordances reflect what would happen      ok
+  system and individual calibration actions  ok
+  button 5 reboots or calibrates all by context ok
+  calibration buttons follow phase           ok
+  three-item settings navigation clamps      ok
+  host reveal, replace and disconnect preserve local settings and cancel ok
+  brightness live preview, any dial, clamps, cancel ok
+  brightness Done persists only after save success ok
+  brightness percent maps monotonically to safe PWM ok
+
+touch calibration tests (host)
+  legacy calibration migrates masks and per-dial settings together ok
+  clear touch restarts two-second baseline   ok
+  active-stage wrong dial fails              ok
+  failure preserves its raw timing and movement sample ok
+  retry restores failed dial in batch        ok
+  final validation requires uninterrupted clear ok
+  retry advances to next batch baseline      ok
+  retry advances from dial 1 to dial 2       ok
+  retry retains remaining batch mask         ok
+  new top-left calibration saves in legacy physical slot ok
+  saved calibration round trip retains the same physical dial ok
+
+all tests passed

@@ -261,4 +261,4 @@ use bounded strips to avoid remnants of the previous page.
 
 ## Graphics refresh
 
-The application uses a shared clipped RGB565 compositor, Inter labels, JetBrains Mono values and the av-frameworks palette. RA8876 is the production backend; the pinned Renesas D/AVE backend requires an explicit benchmark build. See [graphics refresh and qualification](docs/graphics-refresh.md) for reproducible build/test commands, screen evidence, measurement definitions and qualification status.
+The application uses a shared clipped RGB565 compositor, Inter labels, JetBrains Mono values and the av-frameworks palette. On/off values use rounded switches with moving thumbs and explicit state words. RA8876 is the production backend; the pinned Renesas D/AVE backend requires an explicit benchmark build. See [graphics refresh and qualification](docs/graphics-refresh.md) for reproducible build/test commands, screen evidence, measurement definitions and qualification status.
