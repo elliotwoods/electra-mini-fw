@@ -429,12 +429,39 @@ void ra8876_set_bg(uint16_t rgb565) { set_colour(R_BGCR, rgb565); }
  * that digit", and a hard edge reads as deliberate at that width. */
 void ra8876_line(int16_t x0, int16_t y0, int16_t x1, int16_t y1)
 {
+#if defined(ELECTRA_GRAPHICS) && ELECTRA_GRAPHICS && !defined(GRAPHICS_DAVE2D)
+    /* Native diagonal-line ties differ by a pixel from the shared integer raster. Use
+       hardware rectangles for its horizontal/vertical runs so both backends agree exactly. */
+    int dx=x1>x0?x1-x0:x0-x1,dy=y1>y0?y1-y0:y0-y1;
+    int sx=x0<x1?1:-1,sy=y0<y1?1:-1,err=dx-dy;
+    int ax=x0,ay=y0,bx=x0,by=y0;
+    for(unsigned steps=0;;steps++) {
+        if(x0==x1&&y0==y1) {
+            ra8876_fill_rect((int16_t)(ax<bx?ax:bx),(int16_t)(ay<by?ay:by),
+                            (int16_t)(bx>ax?bx-ax+1:ax-bx+1),(int16_t)(by>ay?by-ay+1:ay-by+1));
+            break;
+        }
+        int twice=2*err;
+        if(twice>-dy){err-=dy;x0=(int16_t)(x0+sx);}
+        if(twice<dx){err+=dx;y0=(int16_t)(y0+sy);}
+        if((x0==bx+sx&&y0==by&&ay==by)||(y0==by+sy&&x0==bx&&ax==bx)) {
+            bx=x0;by=y0;
+        } else {
+            ra8876_fill_rect((int16_t)(ax<bx?ax:bx),(int16_t)(ay<by?ay:by),
+                            (int16_t)(bx>ax?bx-ax+1:ax-bx+1),(int16_t)(by>ay?by-ay+1:ay-by+1));
+            ax=bx=x0;ay=by=y0;
+        }
+        if((steps&31u)==31u)ra8876_yield();
+    }
+#else
+
     ra_write_reg16(0x68, (uint16_t)(x0 + origin_x));
     ra_write_reg16(0x6A, (uint16_t)(y0 + origin_y));
     ra_write_reg16(0x6C, (uint16_t)(x1 + origin_x));
     ra_write_reg16(0x6E, (uint16_t)(y1 + origin_y));
     ra_write_reg8(R_DCR0, 0x80);
     wait_core();
+#endif
 }
 
 void ra8876_fill_rect(int16_t x, int16_t y, int16_t w, int16_t h)
