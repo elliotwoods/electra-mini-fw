@@ -11,8 +11,9 @@ are unchanged.
 Mini framebuffer readbacks. `interface/` contains physical framebuffer readbacks reached
 through Channel 5, the host hub, control daemon and USB. Automated touches were injected
 with the firmware console; these captures do not prove physical sensor behavior or browser
-pointer routing. Browser DOM routing is covered by the focused Vitest tests. A manual GUI
-confirmation was requested separately. No latency or ten-minute endurance claim is made here.
+pointer routing. Browser DOM routing is covered by the focused Vitest tests. On 2026-10-01 the operator confirmed that all three requested GUI/device behaviors looked
+correct after reloading the test interface. This is manual acceptance, separate from the
+console-injected tests. No latency or ten-minute endurance claim is made here.
 
 ## Reproduction and results
 
