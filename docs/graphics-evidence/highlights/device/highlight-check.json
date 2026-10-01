@@ -1,0 +1,64 @@
+{
+  "kind": "physical Mini; console-injected touch, no physical-finger claim",
+  "image_sha256": "e63872fe7dc592a010dcbe4c0aaf8f5b5683e0731abe23d78d7b03d00287c599",
+  "captures": [
+    {
+      "scene": "toggles-remote",
+      "different_pixels": 0
+    },
+    {
+      "scene": "toggles-group",
+      "different_pixels": 0
+    },
+    {
+      "scene": "toggles-local",
+      "different_pixels": 0
+    },
+    {
+      "scene": "toggles-clear",
+      "different_pixels": 0
+    },
+    {
+      "scene": "toggles-clear",
+      "different_pixels": 0
+    }
+  ],
+  "ready": {
+    "version": "1.4",
+    "mtu": 1016,
+    "session_id": 2660771961,
+    "capabilities": 0,
+    "max_message_rx": 8192,
+    "max_descriptor_bytes": 16384,
+    "max_fields": 64,
+    "fields_per_page": 8,
+    "applied_revision": 1790822900759,
+    "firmware": "0.1.0",
+    "build_number": 0,
+    "model": "Electra One Mini",
+    "serial": "EMB-0001",
+    "build": "Oct  1 2026 11:44:37"
+  },
+  "emp_before": "emp\r\nmillis now 0x000552B1\r\ndwt cyccnt 0x3078E215\r\nsession_id 0x9E982879\r\nhost_seen 0x00000001\r\nrx_messages 0x00000363\r\ntx_messages 0x00000321\r\nrx_fragments 0x00000363\r\ntx_fragments 0x00000321\r\nrx_decode_errors 0x00000000\r\nrx_seq_gaps 0x00000019\r\ntx_dropped 0x00000001\r\nhellos 0x0000001A\r\npings 0x00000098\r\nfields 0x00000008\r\nrevision_lo 0x00000003\r\n> ",
+  "id_before": "id\r\nelectra-mini-fw APP @0x00120000\r\nstray_systicks 0x00000001\r\nsdram_selftest 0x00000000\r\nra8876_init_rc 0x00000000\r\nra_status_bits 0x00000000\r\nqt2120_init_rc 0x00000000\r\nusb_tx_dropped 0x00000040\r\nservice_hz 0x00000032\r\nrender_us_max 0x0002D0EB\r\ninput_gap_ms_max 0x000008F8\r\ninput_queue_drops 0x00000000\r\ngraphics_errors 0x00000000\r\nnmi_count 0x00000000\r\nstack_bottom 0x1FFE0280\r\nstack_top 0x1FFE4280\r\n  b0 reset poll  b1 pll poll  b2 sdram poll  b3 status reads stuck\r\n> ",
+  "group_ids": [
+    0,
+    1
+  ],
+  "update_batches": 100,
+  "pongs": 100,
+  "emp_after": "emp\r\nmillis now 0x0006337C\r\ndwt cyccnt 0x67B3845D\r\nsession_id 0x9E982879\r\nhost_seen 0x00000001\r\nrx_messages 0x00000495\r\ntx_messages 0x000003B9\r\nrx_fragments 0x00000495\r\ntx_fragments 0x000003B9\r\nrx_decode_errors 0x00000000\r\nrx_seq_gaps 0x00000019\r\ntx_dropped 0x00000001\r\nhellos 0x0000001A\r\npings 0x000000FC\r\nfields 0x00000008\r\nrevision_lo 0x00000003\r\n> ",
+  "id_after": "id\r\nelectra-mini-fw APP @0x00120000\r\nstray_systicks 0x00000001\r\nsdram_selftest 0x00000000\r\nra8876_init_rc 0x00000000\r\nra_status_bits 0x00000000\r\nqt2120_init_rc 0x00000000\r\nusb_tx_dropped 0x00000040\r\nservice_hz 0x00000015\r\nrender_us_max 0x0002D0EB\r\ninput_gap_ms_max 0x0000092B\r\ninput_queue_drops 0x00000000\r\ngraphics_errors 0x00000000\r\nnmi_count 0x00000000\r\nstack_bottom 0x1FFE0280\r\nstack_top 0x1FFE4280\r\n  b0 reset poll  b1 pll poll  b2 sdram poll  b3 status reads stuck\r\n> ",
+  "protocol_error_delta": {
+    "rx_decode_errors": 0,
+    "rx_seq_gaps": 0,
+    "tx_dropped": 0
+  },
+  "device_error_delta": {
+    "graphics_errors": 0,
+    "input_queue_drops": 0,
+    "usb_tx_dropped": 0,
+    "nmi_count": 0
+  },
+  "success": true
+}

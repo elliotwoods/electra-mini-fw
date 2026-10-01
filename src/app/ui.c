@@ -286,6 +286,7 @@ typedef struct {
     uint8_t  pressed;
     uint8_t  drilled;
     uint8_t  active;
+    uint8_t  remote;
     uint8_t  color_count;
     float    color[4];
     int16_t  bar_px;
@@ -442,11 +443,28 @@ static uint16_t cell_frame_color(int touched, int pressed, int drilled, int acti
     return C_OUTLINE;
 }
 
-static void draw_cell_frame(unsigned knob, int touched, int pressed, int drilled, int active)
+/* Match the browser: local activity is solid cyan, mirrored activity dashed cyan. */
+static void activity_outline(int16_t x, int16_t y, int16_t w, int16_t h, int local, int remote)
+{
+    if (local) { frame(x,y,w,h,2,C_ACCENT); return; }
+    if (!remote) return;
+    gfx_set_fg(C_ACCENT);
+    for (int16_t a=6; a<w-6; a+=14) {
+        int16_t n=(int16_t)(w-6-a); if(n>8)n=8;
+        gfx_fill_rect(x+a,y,n,2); gfx_fill_rect(x+a,y+h-2,n,2);
+    }
+    for (int16_t a=6; a<h-6; a+=14) {
+        int16_t n=(int16_t)(h-6-a); if(n>8)n=8;
+        gfx_fill_rect(x,y+a,2,n); gfx_fill_rect(x+w-2,y+a,2,n);
+    }
+}
+
+static void draw_cell_frame(unsigned knob, int touched, int pressed, int drilled, int active, int remote)
 {
     int16_t x, y;
     cell_geometry(knob, &x, &y);
     frame(x, y, CELL_W, ROW_H, 2, cell_frame_color(touched, pressed, drilled, active));
+    activity_outline(x,y,CELL_W,ROW_H,touched || active,remote);
     gfx_set_fg(C_CELL); gfx_fill_rect(x + 7, y + 3, CELL_W - 14, 3);
     if (touched || active) { gfx_set_fg(C_LIVE); gfx_fill_rect(x + CELL_W/2 - 14, y + 3, 28, 3); }
     if (pressed) frame(x + 4, y + 4, CELL_W - 8, ROW_H - 8, 1, C_INDICATOR);
@@ -575,13 +593,12 @@ static void draw_cell_label(int16_t x, int16_t y, char *label)
 }
 
 static void draw_cell(unsigned knob, const surf_field_t *f,
-                      int touched, int pressed, int drilled, int active)
+                      int touched, int pressed, int drilled, int active, int remote)
 {
     int16_t x, y;
     cell_geometry(knob, &x, &y);
     gfx_set_fg(C_CELL);
     gfx_fill_rect(x, y, CELL_W, ROW_H);
-    draw_cell_frame(knob, touched, pressed, drilled, active);
 
     if (f) {
         char label[48];
@@ -589,6 +606,7 @@ static void draw_cell(unsigned knob, const surf_field_t *f,
         draw_cell_label((int16_t)(x + 2 * SP), (int16_t)(y + SP), label);
     }
     draw_cell_dynamic(knob, f);
+    draw_cell_frame(knob, touched, pressed, drilled, active, remote);
 }
 
 /* Draw the cells in [first, last). The overview draws all eight; a drilled view draws the row
@@ -604,6 +622,7 @@ static void render_cells(int full, unsigned first, unsigned last)
         int touched = (st->touch_mask & (1u << k)) != 0;
         int pressed = (st->press_mask & (1u << k)) != 0;
         int active = st->active_pot == (int8_t)k;
+        int remote = idx >= 0 && (st->remote_highlights & (UINT64_C(1) << idx)) != 0;
 
         uint8_t drilled = (uint8_t)(idx >= 0 && idx == st->focused);
         int static_dirty = full || !last_cell[k].valid
@@ -613,7 +632,8 @@ static void render_cells(int full, unsigned first, unsigned last)
                         || last_cell[k].touched != (uint8_t)touched
                         || last_cell[k].pressed != (uint8_t)pressed
                         || last_cell[k].drilled != drilled
-                        || last_cell[k].active != (uint8_t)active;
+                        || last_cell[k].active != (uint8_t)active
+                        || last_cell[k].remote != (uint8_t)remote;
 
         int16_t bh = (int16_t)(ROW_H - 48 - 2 * SP);
         int value_dirty = static_dirty;
@@ -628,10 +648,10 @@ static void render_cells(int full, unsigned first, unsigned last)
         if (!static_dirty && !chrome_dirty && !value_dirty) continue;
 
         if (static_dirty)
-            draw_cell(k, f, touched, pressed, drilled, active);
+            draw_cell(k, f, touched, pressed, drilled, active, remote);
         else {
             if (value_dirty) draw_cell_dynamic(k, f);
-            if (chrome_dirty) draw_cell_frame(k, touched, pressed, drilled, active);
+            if (chrome_dirty) draw_cell_frame(k, touched, pressed, drilled, active, remote);
         }
 
         last_cell[k].valid   = 1;
@@ -639,6 +659,7 @@ static void render_cells(int full, unsigned first, unsigned last)
         last_cell[k].pressed = (uint8_t)pressed;
         last_cell[k].drilled = drilled;
         last_cell[k].active  = (uint8_t)active;
+        last_cell[k].remote  = (uint8_t)remote;
         last_cell[k].id      = f ? f->id : 0xFFFF;
         if (f) memcpy(last_text[k], f->text, sizeof(f->text)); else last_text[k][0] = 0;
         last_cell[k].tag     = f ? f->value_tag : 0;
@@ -659,6 +680,7 @@ static void render_operator(int full)
 {
     static char previous[8][96];
     static uint16_t previous_press,previous_touch;
+    static uint64_t previous_remote;
     const ui_state_t *st = ui_state();
     const uint16_t ground = C_BG, panel = C_CELL, ink = C_VALUE, muted = C_TITLE;
     const uint16_t stop_bg = C_STOP;
@@ -678,13 +700,14 @@ static void render_operator(int full)
         int touched = (st->touch_mask & (1u << (k ^ 4u))) != 0;
         if (!full && strcmp(previous[k], value) == 0 &&
             ((previous_press ^ st->press_mask) & (1u << (k ^ 4u))) == 0 &&
-            ((previous_touch ^ st->touch_mask) & (1u << (k ^ 4u))) == 0) continue;
+            ((previous_touch ^ st->touch_mask) & (1u << (k ^ 4u))) == 0 &&
+            !((previous_remote ^ st->remote_highlights) & (UINT64_C(1) << k))) continue;
         memcpy(previous[k], value, sizeof(value));
         if (k >= 4) {
             int16_t x = (int16_t)(16 + (k - 4) * 196);
             uint16_t bg = k == 7 ? stop_bg : panel;
             if (pressed) bg = k == 7 ? C_STOP : C_CELL_DOWN;
-            gfx_set_fg(bg); gfx_fill_rect(x, 12, 184, 88);
+            gfx_card((gfx_rect_t){x,12,184,88},bg);
             char label[48] = {0}; if (f) str_of(label, sizeof(label), f->label_off, f->label_len);
             /* Whole words on two lines beat truncating the action an operator will execute. */
             if (k == 7) { text_draw_centred(&font_ui, x + 92, 22, "STOP", ink, bg);
@@ -706,12 +729,12 @@ static void render_operator(int full)
             if (text_width(face, value) > 740) face = &font_value;
             fit_text(face, value, 740);
             text_draw(face, 24, numeric ? 158 : 208, value, ink, ground);
-            gfx_set_fg(panel);gfx_fill_rect(604,366,180,102);
+            gfx_card((gfx_rect_t){604,366,180,102},panel);
             text_draw(&font_small,616,374,"MORE SETTINGS",muted,panel);
             text_draw(&font_ui,616,414,"PRESS  >",ink,panel);
         } else {
             int16_t x = (int16_t)(16 + k * 196);
-            gfx_set_fg(panel); gfx_fill_rect(x, 366, 184, 102);
+            gfx_card((gfx_rect_t){x,366,184,102},panel);
             const char *label = k == 0 ? "AXIS" : k == 1 ? "STEP / rev" : "SPEED / ustep/s";
             text_draw(&font_small, x + 12, 374, label, muted, panel);
             const font_t *face = k == 0 ? &font_ui : &font_value;
@@ -720,10 +743,13 @@ static void render_operator(int full)
         }
         int16_t px=(int16_t)(16+(k>=4?k-4:k)*196),py=k>=4?12:366;
         int16_t pw=k==3?180:184,ph=k>=4?88:102;
+        activity_outline(px,py,pw,ph,touched,(st->remote_highlights & (UINT64_C(1) << k)) != 0);
+        if (k==3) activity_outline(24,157,752,154,touched,(st->remote_highlights & (UINT64_C(1) << 3)) != 0);
         if(touched){gfx_set_fg(C_LIVE);gfx_fill_rect(px+pw/2-20,py+3,40,3);}
         if(pressed)frame(px+4,py+4,pw-8,ph-8,2,C_INDICATOR);
     }
     previous_press = st->press_mask;previous_touch=st->touch_mask;
+    previous_remote = st->remote_highlights;
 }
 
 /* Settings stay on the same visual scale and never take over the Stop knob. */
@@ -731,6 +757,7 @@ static void render_operator_settings(int full)
 {
     static char previous[8][96];
     static uint16_t previous_press,previous_touch;
+    static uint64_t previous_remote;
     const ui_state_t *st = ui_state();
     const uint16_t ground = C_BG, panel = C_CELL, ink = C_VALUE, muted = C_TITLE;
     if (full) {
@@ -746,12 +773,13 @@ static void render_operator_settings(int full)
         char value[96] = {0}; if (f) value_text(f, value, sizeof(value));
         uint16_t bit=(uint16_t)(1u<<(k^4u));
         int pressed=(st->press_mask&bit)!=0,touched=(st->touch_mask&bit)!=0;
-        if (!full && strcmp(previous[k], value) == 0 && !((previous_press ^ st->press_mask) & bit) && !((previous_touch ^ st->touch_mask)&bit)) continue;
+        if (!full && strcmp(previous[k], value) == 0 && !((previous_press ^ st->press_mask) & bit) && !((previous_touch ^ st->touch_mask)&bit) &&
+            !((previous_remote ^ st->remote_highlights) & (UINT64_C(1) << (8+k)))) continue;
         memcpy(previous[k], value, sizeof(value));
         if (k < 4) {
             int16_t x = (int16_t)(16 + k * 196);
             const char *labels[] = { "COMMAND VIA", "ACCEL / ustep/s2", "MIN SPEED", "TARGET / rev" };
-            gfx_set_fg(panel); gfx_fill_rect(x, 366, 184, 102);
+            gfx_card((gfx_rect_t){x,366,184,102},panel);
             text_draw(&font_small, x + 12, 374, labels[k], muted, panel);
             const font_t *face = k == 0 ? &font_ui : &font_value;
             fit_text(face, value, 160); text_draw(face, x + 12, 411, value, ink, panel);
@@ -759,7 +787,7 @@ static void render_operator_settings(int full)
             int16_t x = k == 4 ? 16 : 604;
             uint16_t bg = k == 7 ? C_STOP : panel;
             if (st->press_mask & (1u << (k ^ 4u))) bg = k == 7 ? C_STOP : C_CELL_DOWN;
-            gfx_set_fg(bg); gfx_fill_rect(x, 12, 184, 88);
+            gfx_card((gfx_rect_t){x,12,184,88},bg);
             text_draw_centred(&font_ui, x + 92, 22, k == 4 ? "Move" : "STOP", ink, bg);
             text_draw_centred(&font_small, x + 92, 60, k == 4 ? "TO TARGET" : "PRESS / ESCAPE", ink, bg);
         } else if (k == 5) {
@@ -773,13 +801,17 @@ static void render_operator_settings(int full)
             text_draw(&font_small, 24, 170, "OPERATION", muted, ground);
             fit_text(&font_ui, value, 744); text_draw(&font_ui, 24, 218, value, ink, ground);
         }
+        if(k==5) activity_outline(212,12,380,88,touched,(st->remote_highlights & (UINT64_C(1) << 13)) != 0);
+        if(k==6) activity_outline(24,170,752,124,touched,(st->remote_highlights & (UINT64_C(1) << 14)) != 0);
         if(k<4||k==4||k==7) {
             int16_t px=(int16_t)(16+(k>=4?k-4:k)*196),py=k>=4?12:366,ph=k>=4?88:102;
+            activity_outline(px,py,184,ph,touched,(st->remote_highlights & (UINT64_C(1) << (8+k))) != 0);
             if(touched){gfx_set_fg(C_LIVE);gfx_fill_rect(px+72,py+3,40,3);}
             if(pressed)frame(px+4,py+4,176,ph-8,2,C_INDICATOR);
         }
     }
     previous_press = st->press_mask;previous_touch=st->touch_mask;
+    previous_remote = st->remote_highlights;
 }
 
 static void render_overview(int full)

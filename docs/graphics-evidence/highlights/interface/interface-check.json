@@ -1,0 +1,14 @@
+{
+  "kind": "live host/USB integration; touch console-injected",
+  "url": "http://127.0.0.1:8766",
+  "checks": [
+    "interface hover reaches dashed device outline",
+    "mouse leave clears device outline",
+    "whole-pad hover outlines both X and Y device fields",
+    "component hover outlines Y only",
+    "device Y touch reaches lane 1 interface snapshot",
+    "touch release/reconnect clears lane activity"
+  ],
+  "focused_lane": 1,
+  "success": true
+}

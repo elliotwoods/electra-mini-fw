@@ -121,6 +121,9 @@ int main(int argc, char **argv)
             surf_set_bool((uint16_t)knob,strstr(scene,"on")!=NULL);
             ui_state_push(knob,1,100);ui_state_push(knob,0,120);
         }
+        if(strstr(scene,"group")) ui_state_highlights(3,1500);
+        if(strstr(scene,"remote")) ui_state_highlight(0,1500);
+        if(strstr(scene,"local")) ui_state_touch(1,100);
         ui_render();
     }
     else if (strcmp(scene,"holes")==0) {fixture_sparse(4,1);ui_render();}

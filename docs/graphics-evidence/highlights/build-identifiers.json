@@ -1,0 +1,8 @@
+{
+  "firmware_base_revision": "e795eb6b34d477c2c4fcb3a5e05f9dfc5f0607aa",
+  "firmware_tracked_diff_sha256": "777cc8af143ad3129da4a10548d0e34e4d9abfd8b2c72034fb0402cba1cec3b1",
+  "application_srec_sha256": "e63872fe7dc592a010dcbe4c0aaf8f5b5683e0731abe23d78d7b03d00287c599",
+  "framework_base_revision": "bb279c5d689b3be85044b75e7558d7863b6045d3",
+  "router_sha256": "19f5ec7b01167250508e0aca29a8c88350a8c3b8496215c6e70ebc8f35b6f9f2",
+  "interface_sha256": "798c803b9ad5b798783ffbdbb85b7e2b1682c110a7fd87ef68a864d7e31b80e8"
+}

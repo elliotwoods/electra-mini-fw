@@ -432,6 +432,45 @@ static void test_values_apply_across_a_hole(void)
           !surf_field(7) && surf_field(8) && surf_field(8)->number == 0.875);
 }
 
+static void test_highlight_validation(void)
+{
+    surf_init(); ui_state_init(); xfer_t x; xfer_begin(&x,42,1);
+    xfer_number(&x,0,0,"Gain",0.5); xfer_end(&x,0,0); ui_state_tick(100);
+    buf_t b; b_init(&b); b64(&b,42); b8(&b,1); b16(&b,0); b16(&b,1500);
+    surf_handle(EMP_OP_HIGHLIGHT,b.b,b.n);
+    int ok=ui_state()->remote_highlights==1 && ui_state()->focused==-1 && ui_state()->touch_mask==0;
+    ui_state_highlight(-1,0); b.b[0]=41; surf_handle(EMP_OP_HIGHLIGHT,b.b,b.n);
+    ok=ok && ui_state()->remote_highlights==0;
+    b.b[0]=42; surf_handle(EMP_OP_HIGHLIGHT,b.b,b.n-1);
+    ok=ok && ui_state()->remote_highlights==0;
+    b.b[8]=2; surf_handle(EMP_OP_HIGHLIGHT,b.b,b.n);
+    ok=ok && ui_state()->remote_highlights==0;
+    b.b[8]=1; b.b[9]=7; surf_handle(EMP_OP_HIGHLIGHT,b.b,b.n);
+    ok=ok && ui_state()->remote_highlights==0;
+    b.b[9]=0; surf_handle(EMP_OP_HIGHLIGHT,b.b,b.n); b.b[8]=0;
+    surf_handle(EMP_OP_HIGHLIGHT,b.b,b.n); ok=ok && ui_state()->remote_highlights==0;
+    check("highlight validates revision, length, flag and occupied slot; clear is immediate",ok);
+    load_sparse();
+    b_init(&b); b64(&b,42); b8(&b,2); b16(&b,0); b16(&b,8); b16(&b,1500);
+    surf_handle(EMP_OP_HIGHLIGHTS,b.b,b.n);
+    ok=ui_state()->remote_highlights==(UINT64_C(1)|UINT64_C(1)<<8);
+    b.b[0]=41;surf_handle(EMP_OP_HIGHLIGHTS,b.b,b.n);
+    ok=ok && ui_state()->remote_highlights==257;
+    b.b[0]=42;surf_handle(EMP_OP_HIGHLIGHTS,b.b,b.n-1);
+    ok=ok && ui_state()->remote_highlights==257;
+    b.b[11]=0;surf_handle(EMP_OP_HIGHLIGHTS,b.b,b.n); /* duplicate id */
+    ok=ok && ui_state()->remote_highlights==257;
+    b.b[11]=7;surf_handle(EMP_OP_HIGHLIGHTS,b.b,b.n); /* unoccupied id */
+    ok=ok && ui_state()->remote_highlights==257;
+    b.b[11]=64;surf_handle(EMP_OP_HIGHLIGHTS,b.b,b.n);
+    ok=ok && ui_state()->remote_highlights==257;
+    b.b[8]=65;surf_handle(EMP_OP_HIGHLIGHTS,b.b,b.n);
+    ok=ok && ui_state()->remote_highlights==257;
+    b_init(&b);b64(&b,42);b8(&b,0);b16(&b,0);surf_handle(EMP_OP_HIGHLIGHTS,b.b,b.n);
+    ok=ok && ui_state()->remote_highlights==0;
+    check("group highlight is atomic; stale, malformed, duplicate, empty and out-of-range ids cannot partially apply",ok);
+}
+
 static void test_reveal_and_clear_confirm_physical_screen(void)
 {
     load_sparse();
@@ -886,6 +925,7 @@ int desc_run_selftests(desc_report_fn report)
     test_stale_values_do_not_apply();
     test_values_apply_across_a_hole();
     test_reveal_and_clear_confirm_physical_screen();
+    test_highlight_validation();
     test_successive_descriptors_replace();
     test_pool_does_not_accumulate();
 

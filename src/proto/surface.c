@@ -628,6 +628,36 @@ static void handle_reveal(const uint8_t *msg, uint32_t len)
     if (surf_field(id)) (void)ui_state_reveal(id);
 }
 
+/* EMP/1.3: revision u64, have-id u8, id u16, lease-ms u16. */
+static void handle_highlight(const uint8_t *msg, uint32_t len)
+{
+    if (len != 13u) return;
+    rd_t r; rd_init(&r, msg, len);
+    uint64_t revision = rd64(&r);
+    uint8_t have = rd8(&r);
+    uint16_t id = rd16(&r), lease = rd16(&r);
+    if (r.bad || have > 1u || revision != LIVE->revision) return;
+    (void)ui_state_highlight(have ? (int32_t)id : -1, lease);
+}
+
+/* EMP/1.4: revision u64, count u8, absolute ids u16[count], lease-ms u16. */
+static void handle_highlights(const uint8_t *msg, uint32_t len)
+{
+    if (len < 11u) return;
+    rd_t r; rd_init(&r, msg, len);
+    uint64_t revision = rd64(&r);
+    uint8_t count = rd8(&r);
+    if (revision != LIVE->revision || count > SURF_MAX_FIELDS || len != 11u + 2u * count) return;
+    uint64_t slots = 0;
+    for (unsigned i = 0; i < count; ++i) {
+        uint16_t id = rd16(&r);
+        if (id >= SURF_MAX_FIELDS || !surf_field(id) || (slots & (UINT64_C(1) << id))) return;
+        slots |= UINT64_C(1) << id;
+    }
+    uint16_t lease = rd16(&r);
+    if (!r.bad) (void)ui_state_highlights(slots, lease);
+}
+
 static void handle_values(const uint8_t *msg, uint32_t len)
 {
     rd_t r;
@@ -717,6 +747,8 @@ void surf_handle(uint8_t opcode, const uint8_t *msg, uint32_t len)
     case EMP_OP_DESC_ABORT: staging_open = 0;     break;
     case EMP_OP_VALUES:     handle_values(msg, len); break;
     case EMP_OP_REVEAL:     handle_reveal(msg, len); break;
+    case EMP_OP_HIGHLIGHT:  handle_highlight(msg, len); break;
+    case EMP_OP_HIGHLIGHTS: handle_highlights(msg, len); break;
     case EMP_OP_CLEAR:
         surf_init();
         ui_state_surface_cleared();

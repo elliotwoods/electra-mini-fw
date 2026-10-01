@@ -111,6 +111,42 @@ static void operator_tests(void)
     CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
     puts("  both operator pages restore touched/pressed cues to a clean repaint");
 }
+static void highlight_tests(void)
+{
+    for(unsigned layout=0;layout<3;layout++) {
+        clean(); if(layout==0)fixture_toggles(); else {surf_demo_operator();ui_state_init();if(layout==2)ui_state_reveal(8);}
+        ui_reset();ui_render();ui_render();
+        for(unsigned k=0;k<8;k++) {
+            uint16_t id=(uint16_t)(layout==2?8+k:k);
+            if(!surf_field(id))continue;
+            CHECK(ui_state_highlight(id,1500));ui_render();
+            memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+            CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+            int32_t knob=ui_state_knob_for(id);ui_state_touch((uint16_t)(1u<<knob),10);ui_render();
+            memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+            CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+            ui_state_touch(0,20);ui_state_highlight(-1,0);ui_render();
+            memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+            CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+        }
+    }
+    for (unsigned layout=0;layout<3;layout++) {
+        clean();if(layout==0)fixture_toggles();else{surf_demo_operator();ui_state_init();if(layout==2)ui_state_reveal(8);}
+        ui_reset();ui_render();
+        unsigned base=layout==2?8:0;
+        uint64_t group=(UINT64_C(1)<<base)|(UINT64_C(1)<<(base+1));
+        CHECK(ui_state_highlights(group,1500));ui_render();
+        memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+        CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+        CHECK(ui_state_highlights(UINT64_C(1)<<(base+1),1500));ui_render();
+        memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+        CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+        CHECK(ui_state_highlights(0,0));ui_render();
+        memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+        CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    }
+    puts("  single/group outline movement, local precedence and release match clean repaints in all layouts");
+}
 static void eviction_tests(void)
 {
     clean();gfx_rect_t card={20,20,200,184},value={24,80,180,95};base(card);
@@ -136,6 +172,6 @@ static void layout_tests(void)
 }
 int main(void)
 {
-    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();eviction_tests();layout_tests();
+    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();
     printf("%u graphics checks passed\n",checks);return 0;
 }

@@ -1,0 +1,13 @@
+control router: hardware released
+device capture toggles-remote 800 480
+toggles-remote matches simulator
+device capture toggles-group 800 480
+toggles-group matches simulator
+device capture toggles-local 800 480
+toggles-local matches simulator
+device capture toggles-clear 800 480
+toggles-clear matches simulator
+device capture toggles-clear 800 480
+toggles-clear matches simulator
+100 highlight/clear pairs and pongs; stale revision, expiry and zero new errors passed.
+control router: reconnecting

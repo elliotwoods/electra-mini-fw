@@ -6,6 +6,7 @@
 
 static ui_state_t st;
 static uint16_t   prev_touch;
+static uint32_t service_now_ms, next_touch_report_ms;
 static int32_t    discrete_accum[UI_FIELDS_PER_PAGE];
 static int32_t    digit_accum[UI_DIGITS];
 static ui_action_t pending_action;
@@ -115,6 +116,8 @@ static void enter_focus(int32_t idx)
 void ui_state_init(void)
 {
     memset(&st, 0, sizeof(st));
+    st.remote_highlights = 0;
+    service_now_ms = next_touch_report_ms = 0;
     st.focused    = -1;
     st.held_digit = -1;
     st.active_pot = -1;
@@ -186,6 +189,7 @@ static void set_page(int32_t start)
     if ((uint16_t)start == st.page) return;
 
     leave_focus();                    /* the focused field may not be on the new page */
+    st.remote_highlights = 0;
     st.page = (uint16_t)start;
     memset(discrete_accum, 0, sizeof(discrete_accum));
     surf_set_page(st.page);
@@ -193,6 +197,7 @@ static void set_page(int32_t start)
 
 void ui_state_surface_changed(void)
 {
+    st.remote_highlights = 0;
     leave_focus();
     st.page = 0;
     hist_init();
@@ -224,25 +229,50 @@ int ui_state_reveal(uint16_t slot)
     return 1;
 }
 
+int ui_state_highlights(uint64_t slots, uint16_t lease_ms)
+{
+    if (slots && (lease_ms == 0 || lease_ms > 3000)) return 0;
+    for (unsigned i = 0; i < SURF_MAX_FIELDS; ++i)
+        if ((slots & (UINT64_C(1) << i)) && !surf_field((uint16_t)i)) return 0;
+    st.remote_highlights = slots;
+    st.remote_until_ms = service_now_ms + lease_ms;
+    return 1;
+}
+
+int ui_state_highlight(int32_t slot, uint16_t lease_ms)
+{
+    if (slot < -1 || slot >= (int32_t)SURF_MAX_FIELDS) return 0;
+    return ui_state_highlights(slot < 0 ? 0 : UINT64_C(1) << slot, lease_ms);
+}
+
+static void report_touch(void)
+{
+    int32_t slot = st.focused;
+    if (st.mode != UI_MODE_SURFACE) slot = -1;
+    else for (unsigned p = 0; p < UI_FIELDS_PER_PAGE; ++p) {
+        if (!(st.touch_mask & (1u << p))) continue;
+        unsigned base = ui_digit_row_first();
+        slot = st.focused >= 0 && p >= base && p < base + UI_DIGITS
+             ? st.focused : ui_state_field_for(p);
+        if (slot >= 0) break;
+    }
+    surf_send_focus(slot, st.touch_mask);
+}
+
 /* ------------------------------------------------------------------ touch */
 
 void ui_state_touch(uint16_t touch_mask, uint32_t now_ms)
 {
-    (void)now_ms;
+    service_now_ms = now_ms;
     st.touch_mask = touch_mask;
 
     uint16_t changed = (uint16_t)(touch_mask ^ prev_touch);
     prev_touch = touch_mask;
     if (!changed) return;
 
-    if (st.focused >= 0) {
-        const surf_field_t *f = surf_field((uint16_t)st.focused);
-        if (f && f->kind == EMP_KIND_COLOR) surf_send_focus(st.focused, touch_mask);
-    }
-
-    /* Touch does exactly one thing now: say which digit a finger rests on, so the readout can
-     * emphasise it. Nothing latches on it and nothing navigates by it, which is precisely why
-     * its unreliability stopped mattering. */
+    report_touch();
+    next_touch_report_ms = now_ms + 500u;
+    /* Touch reports activity and the held digit, without navigating or latching an editor. */
     unsigned base = ui_digit_row_first();
     for (unsigned p = base; p < base + UI_DIGITS; p++) {
         uint16_t bit = (uint16_t)(1u << p);
@@ -473,6 +503,12 @@ void ui_state_button(unsigned button, int pressed, uint32_t now_ms)
 
 void ui_state_tick(uint32_t now_ms)
 {
+    service_now_ms = now_ms;
+    if (st.remote_highlights != 0 && (int32_t)(now_ms - st.remote_until_ms) >= 0)
+        st.remote_highlights = 0;
+    if (st.touch_mask && (int32_t)(now_ms - next_touch_report_ms) >= 0) {
+        report_touch(); next_touch_report_ms = now_ms + 500u;
+    }
     hist_tick(now_ms);
     if (st.active_pot >= 0 && (int32_t)(now_ms - st.active_until_ms) >= 0)
         st.active_pot = -1;

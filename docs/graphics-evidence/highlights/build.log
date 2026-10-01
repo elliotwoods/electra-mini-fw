@@ -1,0 +1,42 @@
+[1/11] Building C object CMakeFiles/app.dir/src/app/history.c.obj
+[2/11] Building C object CMakeFiles/app.dir/src/proto/diag.c.obj
+[3/11] Building C object CMakeFiles/app.dir/src/proto/txq.c.obj
+[4/11] Building C object CMakeFiles/app.dir/src/proto/frame.c.obj
+[5/11] Building C object CMakeFiles/app.dir/src/proto/session.c.obj
+[6/11] Building C object CMakeFiles/app.dir/src/app/ui_state.c.obj
+[7/11] Building C object CMakeFiles/app.dir/src/app/graphics.c.obj
+[8/11] Building C object CMakeFiles/app.dir/src/proto/surface.c.obj
+[9/11] Building C object CMakeFiles/app.dir/src/main.c.obj
+[10/11] Building C object CMakeFiles/app.dir/src/app/ui.c.obj
+[11/11] Linking C executable app.elf; Generating and gating app.srec
+/Users/elliot/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/bin/ld: warning: app.elf has a LOAD segment with RWX permissions
+Memory region         Used Size  Region Size  %age Used
+      STOCK_BOOT:          0 GB         1 MB      0.00%
+             EMB:          0 GB       128 KB      0.00%
+             APP:      275004 B      2944 KB      9.12%
+             RAM:      121336 B     655328 B     18.52%
+           SDRAM:         16 MB        32 MB     50.00%
+            QSPI:          0 GB        32 MB      0.00%
+      DATA_FLASH:          0 GB        64 KB      0.00%
+   text	   data	    bss	    dec	    hex	filename
+ 274900	     96	16897952	17172948	10609d4	/Users/elliot/dev/electra-mini-fw/build/highlight-production/app.elf
+
+checking app.srec
+
+  ok    S-record parses, 17190 data records, all checksums valid
+  warn  3 segments — the flasher fills inter-section gaps with 0xFF
+          0x00120000–0x001200a4
+          0x001200a8–0x001318cc
+          0x001318d0–0x0016323c
+          gap 0x001200a4–0x001200a8 (4 bytes)
+          gap 0x001318cc–0x001318d0 (4 bytes)
+  ok    loads at 0x00120000
+  ok    does not intrude on the bootloader region
+  ok    fits in flash (268.6 KiB, ends 0x0016323c)
+  ok    initial SP 0x1ffe4280 is in SRAM
+  ok    reset vector 0x00120b35 has the Thumb bit set
+  ok    reset vector points inside the image
+  ok    entry record present (0x00120b35)
+
+passed with 1 warning(s).
+

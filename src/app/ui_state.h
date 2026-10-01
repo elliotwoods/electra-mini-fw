@@ -107,6 +107,9 @@ typedef struct {
     int8_t   active_pot;      /* last surface pot that changed a value, or -1 */
     uint32_t active_until_ms; /* short visual latch; expiry is wrap-safe in ui_state_tick */
 
+    uint64_t remote_highlights; /* absolute host-hover slots, zero when inactive */
+    uint32_t remote_until_ms;
+
     uint16_t touch_mask;     /* live, 8 bits, panel order -- highlighting only */
     uint16_t press_mask;     /* live pot-switch state, for the pressed affordance */
     uint16_t btn_mask;       /* live front-panel button state, likewise */
@@ -145,6 +148,9 @@ void ui_state_surface_changed(void);
 void ui_state_surface_cleared(void);
 /* Reveal the stable page containing an occupied absolute slot. */
 int ui_state_reveal(uint16_t slot);
+/* Transient feedback only; does not reveal, focus, edit or simulate physical touch. */
+int ui_state_highlight(int32_t slot, uint16_t lease_ms);
+int ui_state_highlights(uint64_t slots, uint16_t lease_ms);
 
 /* Called every service pass; runs the history settle timer. */
 void ui_state_tick(uint32_t now_ms);

@@ -757,6 +757,33 @@ static void test_brightness_pwm_conversion(void)
     check("brightness percent maps monotonically to safe PWM", ok);
 }
 
+static void test_touch_reports_and_remote_lease(void)
+{
+    surf_demo_descriptor(); ui_state_init(); sim_wire_reset();
+    ui_state_touch(1u<<2,100);
+    const sim_wire_msg_t *m=sim_wire_last(EMP_OP_FOCUS);
+    int ok=m && m->len==14 && m->payload[8]==1 && m->payload[9]==2 && m->payload[12]==4
+        && ui_state()->focused==-1;
+    unsigned count=sim_wire_count(); ui_state_tick(599);
+    ok=ok && sim_wire_count()==count;
+    ui_state_tick(600); ok=ok && sim_wire_count()>count;
+    ui_state_touch(0,620); m=sim_wire_last(EMP_OP_FOCUS);
+    ok=ok && m && m->payload[8]==0 && m->payload[12]==0;
+    tap(4,640); ui_state_touch(1u<<1,660); m=sim_wire_last(EMP_OP_FOCUS);
+    ok=ok && m && m->payload[9]==4 && ui_state()->focused==4;
+    uint16_t page=ui_state()->page; uint16_t touch=ui_state()->touch_mask;
+    ok=ok && ui_state_highlight(1,1500) && ui_state()->remote_highlights==2
+        && ui_state()->focused==4 && ui_state()->page==page && ui_state()->touch_mask==touch;
+    ok=ok && !ui_state_highlight(63,1500) && !ui_state_highlight(1,0) && !ui_state_highlight(1,3001);
+    ui_state_tick(2159); ok=ok && ui_state()->remote_highlights==2;
+    ui_state_tick(2160); ok=ok && ui_state()->remote_highlights==0;
+    ui_state_highlight(0,1500); ui_state_surface_changed();
+    ok=ok && ui_state()->remote_highlights==0;
+    surf_demo_operator(); ui_state_init(); ui_state_touch(1,2200); m=sim_wire_last(EMP_OP_FOCUS);
+    ok=ok && m && m->payload[9]==4;
+    check("touch reports activity without navigation; remote lease is isolated and expires",ok);
+}
+
 /* ------------------------------------------------------------------ runner */
 
 int ui_run_selftests(ui_report_fn report)
@@ -777,6 +804,7 @@ int ui_run_selftests(ui_report_fn report)
     test_press_is_edge_not_level();
     test_top_press_moves_between_fields();
     test_touch_only_highlights();
+    test_touch_reports_and_remote_lease();
     test_drill_is_symmetric();
     test_digit_knobs_follow_the_row();
 

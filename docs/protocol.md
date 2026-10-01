@@ -1,4 +1,4 @@
-# EMP/1 — Electra Mini Protocol v1.1
+# EMP/1 — Electra Mini Protocol v1.4
 
 Normative wire spec for `electra-mini-fw` ↔ `av-frameworks`. MUST / MUST NOT / SHOULD / MAY
 per RFC 2119. Both codecs (C in `src/proto/`, Rust in the host crate) are written against
@@ -113,7 +113,7 @@ implementation manages it anyway, the CRC fails and the seq gap is reported, so 
 | Name | Value |
 |---|---|
 | `EMP_MAGIC` | `0xE1` |
-| `EMP_VERSION` | major 1, minor 1 |
+| `EMP_VERSION` | major 1, minor 4 |
 | `EMP_HEADER_BYTES` | 8 |
 | `EMP_PREFIX_BYTES` | 8 |
 | `EMP_MTU_HID` / `EMP_MTU_BULK` | 56 / 1016 |
@@ -250,6 +250,7 @@ of an image. Raise, then flush from the service loop.
 
 `0x20 DESC_BEGIN` · `0x21 DESC_FIELD` · `0x22 DESC_END` · `0x23 DESC_ABORT` ·
 `0x24 VALUES` · `0x25 REVEAL` · `0x26 TRANSPORT` · `0x27 CLEAR`
+· `0x28 HIGHLIGHT` (minor 3+) · `0x29 HIGHLIGHTS` (minor 4+)
 
 **The descriptor is a transaction of per-field messages, not one giant message.** A 64-field
 descriptor becomes ~64 messages of 60–250 bytes, most single-fragment even at `mtu=56`. The
@@ -497,3 +498,37 @@ place slot 0 at the top left. Page 0 uses
 9 acceleration, 10 minimum speed, 11 target, 12 move, 13 connection Boolean,
 14 operation text, 15 stop. Button 1 returns to page 0. Settings turn in place;
 they never borrow the action row for digit editing. Other apps opt out by default.
+
+## EMP/1.3: transient control activity
+
+Host `0x28 HIGHLIGHT` on channel 1 is `revision u64 | have_id u8 | id u16 | lease_ms u16`
+(exactly 13 bytes). The revision must equal the active descriptor. `have_id` is 0 or 1;
+when 1 the ID must name an occupied slot and the lease must be 1..3000 ms. Invalid requests
+are dropped. `have_id=0` clears immediately. Highlighting never changes the page, focused
+editor, physical touch mask or field value. Descriptor replacement, page changes and clear
+invalidate it; expiry is wrap-safe. The host renews a 1500 ms lease every 500 ms while the
+interface control is active. Hosts negotiate minor 3 before sending it; older devices receive
+no HIGHLIGHT operations.
+
+Physical touch now emits the existing `FOCUS` packet as soon as the mask changes, even in
+an overview, and renews every 500 ms while held. Sparse and operator layouts use the same
+physical mapping as edits. A digit-editor knob reports its edited field. Releasing the last
+touch reports the retained pressed editor, or no ID in overview. Touch does not open an editor.
+The firmware and interface both draw local activity as solid cyan and mirrored activity as
+dashed cyan; local activity wins when both name the same control.
+
+
+## EMP/1.4: grouped transient control activity
+
+Host `0x29 HIGHLIGHTS` on channel 1 is `revision u64 | count u8 | ids u16[count] | lease_ms u16`
+(exactly `11 + 2*count` bytes). Count is 0..64. Every ID must name a distinct occupied
+absolute slot below 64, the revision must equal the active descriptor, and a nonempty group
+requires a lease of 1..3000 ms. Validation is atomic: an invalid member, duplicate, length,
+revision or lease leaves the previous group unchanged. Count 0 clears the whole group.
+This replaces the complete highlight set without changing page, editor, values or physical
+input. The group expires and is invalidated under the same rules as EMP/1.3 HIGHLIGHT.
+
+Hosts negotiate minor 4 before sending HIGHLIGHTS. Whole-control hover names every mapped
+field (e.g. both XY components); component hover names only that component. Firmware retains
+minor 3 HIGHLIGHT support for old hosts. Hosts fall back to the first field on a minor 3 device
+and omit activity updates on older devices. Touch FOCUS remains one exact field/component.
