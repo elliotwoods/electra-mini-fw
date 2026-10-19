@@ -10,9 +10,9 @@
  *   - Pressing a knob's own switch drills into that field. The control you press is the control
  *     you edit, so there is no separate notion of a selected field to display or move.
  *   - While a number is drilled, the opposite row becomes a sliding four-place digit window;
- *     the outer buttons shift that window and pressing an editor-row knob leaves.
- *   - Choice and Colour use dedicated drilled editors on the opposite row; their outer buttons
- *     are disabled.
+ *     holding Zoom and turning any dial slides that window, and Exit or pressing an editor-row
+ *     knob leaves.
+ *   - Choice and Colour use dedicated drilled editors on the opposite row and have no Zoom.
  *
  * Drill state is deliberately MECHANICAL rather than capacitive. The previous model held the
  * drilled view for as long as a finger rested on a knob, and the sensor cannot support that: a
@@ -45,7 +45,16 @@
 #define UI_DIGIT_STEP      4         /* detents per step of a numeric digit */
 #define UI_ACTIVE_MS       180u      /* keep rotary feedback visible after the last edit */
 
-/* Front-panel buttons, left to right. The outer pair page in overview and zoom numbers drilled. */
+/* Front-panel buttons, left to right.
+ *
+ *   overview:  previous page  -     -     -      settings  next page
+ *   drilled:   exit           undo  redo  store  reset     zoom (hold, then turn any dial)
+ *
+ * The drilled row used to spend both outer buttons on shifting the digit window one place each
+ * way. One held button and a dial do the same job in either direction, which freed the left
+ * button for an explicit Exit and the fourth for Store. Reset and Store carry the same glyphs as
+ * the on-screen inspector's column, and like that column they are present only while the value
+ * differs from its default. */
 #define UI_BTN_BACK        0u
 #define UI_BTN_UNDO        1u
 #define UI_BTN_REDO        2u
@@ -54,10 +63,13 @@
 #define UI_BTN_PAGE_NEXT   5u
 #define UI_BTN_COUNT       6u
 
-/* Compatibility names used by older tests and call sites. */
-#define UI_BTN_EXIT        UI_BTN_BACK
-#define UI_BTN_RESET       UI_BTN_SYSTEM
-#define UI_BTN_PAGE_PREV   UI_BTN_BACK
+#define UI_BTN_EXIT        UI_BTN_BACK       /* drilled */
+#define UI_BTN_STORE       UI_BTN_AUX        /* drilled */
+#define UI_BTN_RESET       UI_BTN_SYSTEM     /* drilled */
+#define UI_BTN_ZOOM        UI_BTN_PAGE_NEXT  /* drilled, held */
+#define UI_BTN_PAGE_PREV   UI_BTN_BACK       /* overview */
+
+#define UI_ZOOM_STEP       4                 /* detents per digit-window place while zooming */
 
 typedef enum {
     UI_MODE_SURFACE = 0,
@@ -103,6 +115,10 @@ typedef struct {
      * short and point at the hand that is actually working -- and it leaves the row containing
      * the drilled field showing its cells, so you can still see it in context. */
     uint8_t  digit_top;
+
+    /* Zoom is held: every dial moves the digit window instead of editing. Shown on the panel,
+     * because a dial that has silently stopped editing is indistinguishable from a broken one. */
+    uint8_t  zoom_held;
 
     int8_t   active_pot;      /* last surface pot that changed a value, or -1 */
     uint32_t active_until_ms; /* short visual latch; expiry is wrap-safe in ui_state_tick */

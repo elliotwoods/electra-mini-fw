@@ -15,6 +15,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include "emp.h"
 #include "frame.h"
@@ -904,6 +905,68 @@ static void test_pool_exhaustion_is_reported(void)
           && diag_seen(EMP_DIAG_STRING_TRUNCATED, 0, 0));
 }
 
+
+static int near(double a, double b) { return fabs(a - b) < 1e-9; }
+
+/* Store and Reset mirror the screen's column: present only while a value differs from its
+ * default. Store is optimistic and keeps the drill; DEFAULTS updates in place. */
+static void defaults_msg(uint64_t revision, uint16_t id, int has, double value)
+{
+    buf_t b; b_init(&b);
+    b64(&b, revision); b16(&b, 1); b16(&b, id); b8(&b, (uint8_t)(has != 0));
+    if (has) { b8(&b, EMP_VAL_NUMBER); bf64(&b, value); }
+    surf_handle(EMP_OP_DEFAULTS, b.b, b.n);
+}
+
+static void test_defaults_store_and_reset(void)
+{
+    load_sparse();                                  /* revision 42, field 1 holds 0.1 */
+    int ok = !surf_field_modified(surf_field(1));   /* no default declared */
+
+    defaults_msg(42, 1, 1, 0.5);
+    ok = ok && surf_field_modified(surf_field(1));
+    defaults_msg(41, 1, 1, 0.1);                    /* stale revision: refused */
+    ok = ok && surf_field_modified(surf_field(1));
+    defaults_msg(42, 1, 1, 0.1 * (1.0 + 1e-8));     /* an f32 round trip is not a change */
+    ok = ok && !surf_field_modified(surf_field(1));
+    defaults_msg(42, 1, 1, 0.5);
+
+    unsigned knob = (unsigned)ui_state_knob_for(1);
+    ui_state_push(knob, 1, 1000); ui_state_push(knob, 0, 1005);
+    ok = ok && ui_state()->focused == 1
+            && ui_state_button_enabled(UI_BTN_STORE)
+            && ui_state_button_enabled(UI_BTN_RESET);
+
+    (void)ui_state_rotate(ui_digit_row_first() + 3u, UI_DIGIT_STEP, 1100);
+    double edited = surf_field(1)->number;
+    sim_wire_reset();
+    ui_state_button(UI_BTN_STORE, 1, 1200);
+    ui_state_button(UI_BTN_STORE, 0, 1210);
+    const sim_wire_msg_t *m = sim_wire_last(EMP_OP_SAVE_DEFAULT);
+    ok = ok && m && m->len == 10 && m->payload[0] == 42 && m->payload[8] == 1 && m->payload[9] == 0;
+    ok = ok && ui_state()->focused == 1                         /* still drilled */
+            && !surf_field_modified(surf_field(1))
+            && near(surf_field(1)->default_number, edited)
+            && !ui_state_button_enabled(UI_BTN_STORE)
+            && !ui_state_button_enabled(UI_BTN_RESET)
+            && ui_state_button_enabled(UI_BTN_UNDO);             /* history kept */
+
+    /* The host's confirmation is a DEFAULTS message, not a descriptor: still drilled. */
+    defaults_msg(42, 1, 1, edited);
+    ok = ok && ui_state()->focused == 1 && ui_state_button_enabled(UI_BTN_UNDO);
+
+    /* Reset returns to the stored default. */
+    ui_state_button(UI_BTN_UNDO, 1, 1300); ui_state_button(UI_BTN_UNDO, 0, 1310);
+    ok = ok && surf_field_modified(surf_field(1)) && ui_state_button_enabled(UI_BTN_RESET);
+    ui_state_button(UI_BTN_RESET, 1, 1400); ui_state_button(UI_BTN_RESET, 0, 1410);
+    ok = ok && near(surf_field(1)->number, edited) && !surf_field_modified(surf_field(1));
+
+    /* A cleared default removes both. */
+    defaults_msg(42, 1, 0, 0.0);
+    ok = ok && !(surf_field(1)->present & EMP_PRESENT_DEFAULT) && !ui_state_button_enabled(UI_BTN_RESET);
+    check("defaults update in place; store and reset follow the modified state", ok);
+}
+
 /* ------------------------------------------------------------------ runner */
 
 int desc_run_selftests(desc_report_fn report)
@@ -926,6 +989,7 @@ int desc_run_selftests(desc_report_fn report)
     test_values_apply_across_a_hole();
     test_reveal_and_clear_confirm_physical_screen();
     test_highlight_validation();
+    test_defaults_store_and_reset();
     test_successive_descriptors_replace();
     test_pool_does_not_accumulate();
 

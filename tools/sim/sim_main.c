@@ -137,6 +137,9 @@ int main(int argc, char **argv)
     else if (strcmp(scene, "focus")    == 0) ui_render_demo_focused();
     else if (strcmp(scene, "page2")    == 0) ui_render_demo_page2();
     else if (strcmp(scene, "focustop") == 0) ui_render_demo_focused_top();
+    else if (strcmp(scene, "modified") == 0) ui_render_demo_modified();
+    else if (strcmp(scene, "modified-focus") == 0) ui_render_demo_modified_focused();
+    else if (strcmp(scene, "focus-zoom") == 0) ui_render_demo_focused_zoom();
     else if (strcmp(scene, "focus-toggle") == 0) ui_render_demo_focused_toggle();
     else if (strcmp(scene, "focus-negative") == 0) ui_render_demo_focused_negative();
     else if (strcmp(scene, "focus-choice") == 0) ui_render_demo_focused_choice();

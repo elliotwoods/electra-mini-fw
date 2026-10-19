@@ -35,7 +35,9 @@ VENDOR = os.path.join(os.path.dirname(__file__), "vendor")
 # that mapping is POSITIONAL -- reordering either list silently swaps the icons.
 ICON_CODEPOINTS = [
     0x2715,   # MULTIPLICATION X                 -> ICON_EXIT
-    0x21BB,   # CLOCKWISE OPEN CIRCLE ARROW      -> ICON_RESET
+    # The same glyph as the on-screen inspector's reset (web ResettableControl, U+27F2). The
+    # clockwise circle arrow this replaced sat beside the undo semicircle and read as its twin.
+    0x27F2,   # ANTICLOCKWISE GAPPED CIRCLE ARROW -> ICON_RESET
     0x21B6,   # ANTICLOCKWISE TOP SEMICIRCLE ARROW -> ICON_UNDO
     0x21B7,   # CLOCKWISE TOP SEMICIRCLE ARROW   -> ICON_REDO
     # Triangles rather than guillemets: at this size the guillemets rendered visibly lighter
@@ -43,6 +45,8 @@ ICON_CODEPOINTS = [
     0x25C0,   # BLACK LEFT-POINTING TRIANGLE     -> ICON_PREV
     0x25B6,   # BLACK RIGHT-POINTING TRIANGLE    -> ICON_NEXT
     0x2699,   # GEAR                              -> ICON_SETTINGS
+    0x21A7,   # DOWNWARDS ARROW FROM BAR          -> ICON_STORE (the inspector's save-as-default)
+    0x2194,   # LEFT RIGHT ARROW                  -> ICON_ZOOM (hold, then turn a dial)
 ]
 
 FACES = [

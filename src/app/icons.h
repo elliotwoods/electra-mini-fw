@@ -15,11 +15,13 @@
 #define ELECTRA_ICONS_H
 
 #define ICON_EXIT   "\x20"    /* U+2715 MULTIPLICATION X            */
-#define ICON_RESET  "\x21"    /* U+21BB CLOCKWISE OPEN CIRCLE ARROW */
+#define ICON_RESET  "\x21"    /* U+27F2 ANTICLOCKWISE GAPPED CIRCLE ARROW, as on screen */
 #define ICON_UNDO   "\x22"    /* U+21B6 ANTICLOCKWISE SEMICIRCLE    */
 #define ICON_REDO   "\x23"    /* U+21B7 CLOCKWISE SEMICIRCLE        */
 #define ICON_PREV   "\x24"    /* U+25C0 LEFT-POINTING TRIANGLE      */
 #define ICON_NEXT   "\x25"    /* U+25B6 RIGHT-POINTING TRIANGLE     */
 #define ICON_SETTINGS "\x26"  /* U+2699 GEAR                        */
+#define ICON_STORE  "\x27"    /* U+21A7 DOWNWARDS ARROW FROM BAR, as on screen */
+#define ICON_ZOOM   "\x28"    /* U+2194 LEFT RIGHT ARROW            */
 
 #endif /* ELECTRA_ICONS_H */

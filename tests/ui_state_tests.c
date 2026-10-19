@@ -301,17 +301,48 @@ static void test_outer_buttons_zoom_while_drilled(void)
     surf_set_number(0, 123.45);
     tap(0, 1000);
     int ok = ui_state()->focused == 0 && ui_state()->ws == 2
-          && !ui_state_button_enabled(UI_BTN_BACK)
-          && ui_state_button_enabled(UI_BTN_PAGE_NEXT);
-    ui_state_button(UI_BTN_PAGE_NEXT, 1, 1100);
-    ok = ok && ui_state()->focused == 0 && ui_state()->page == 0 && ui_state()->ws == 1
-            && ui_state_button_enabled(UI_BTN_BACK)
-            && !ui_state_button_enabled(UI_BTN_PAGE_NEXT);
-    ui_state_button(UI_BTN_BACK, 1, 1200);
-    ok = ok && ui_state()->focused == 0 && ui_state()->ws == 2;
-    tap(UI_ROW_SPLIT, 1300);
+          && ui_state_button_enabled(UI_BTN_EXIT)
+          && ui_state_button_enabled(UI_BTN_ZOOM);
+
+    /* Held, any dial moves the window and none of them edits. */
+    ui_state_button(UI_BTN_ZOOM, 1, 1100);
+    ok = ok && ui_state()->zoom_held;
+    (void)ui_state_rotate(UI_ROW_SPLIT, UI_ZOOM_STEP - 1, 1110);     /* below the threshold */
+    ok = ok && ui_state()->ws == 2;
+    (void)ui_state_rotate(UI_ROW_SPLIT, 1, 1120);
+    ok = ok && ui_state()->ws == 1 && near(surf_field(0)->number, 123.45);
+    (void)ui_state_rotate(1, 5 * UI_ZOOM_STEP, 1130);                /* the cell row too */
+    ok = ok && ui_state()->ws == ui_min_ws(2) && near(surf_field(0)->number, 123.45);
+    (void)ui_state_rotate(2, -20 * UI_ZOOM_STEP, 1140);              /* clamped coarse end */
+    ok = ok && ui_state()->ws == 2 && near(surf_field(0)->number, 123.45);
+
+    /* Released, the digit row edits again. */
+    ui_state_button(UI_BTN_ZOOM, 0, 1200);
+    ok = ok && !ui_state()->zoom_held;
+    (void)ui_state_rotate(UI_ROW_SPLIT, UI_DIGIT_STEP, 1210);
+    ok = ok && !near(surf_field(0)->number, 123.45);       /* edited (and clamped to max 1) */
+
+    /* Exit is a button now, and pressing an editor knob still leaves too. */
+    ui_state_button(UI_BTN_EXIT, 1, 1300);
+    ok = ok && ui_state()->focused < 0 && ui_state()->page == 0;
+    tap(0, 1400);
+    tap(UI_ROW_SPLIT, 1500);
     ok = ok && ui_state()->focused < 0;
-    check("outer buttons zoom and editor press exits", ok);
+    check("hold zoom and turn any dial; exit button and editor press both leave", ok);
+}
+
+static void test_zoom_release_is_never_lost(void)
+{
+    surf_demo_descriptor();
+    ui_state_init();
+    surf_set_number(0, 123.45);
+    tap(0, 1000);
+    ui_state_button(UI_BTN_ZOOM, 1, 1100);
+    tap(UI_ROW_SPLIT, 1200);                       /* leaves while zoom is still held */
+    int ok = ui_state()->focused < 0 && !ui_state()->zoom_held;
+    ui_state_button(UI_BTN_ZOOM, 0, 1300);         /* release lands in the overview */
+    ok = ok && ui_state()->page == 0;
+    check("leaving a field drops zoom, and its release does not page", ok);
 }
 
 /* ------------------------------------------------------------------ editing */
@@ -347,8 +378,8 @@ static void test_choice_steps_and_clamps(void)
     if (ok) {
         tap(knob, 1050);
         ok = ui_state()->focused == idx
-          && !ui_state_button_enabled(UI_BTN_BACK)
-          && !ui_state_button_enabled(UI_BTN_PAGE_NEXT);
+          && ui_state_button_enabled(UI_BTN_EXIT)
+          && !ui_state_button_enabled(UI_BTN_ZOOM);
         uint32_t start = surf_field(idx)->choice;
         (void)ui_state_rotate(knob, 1, 1100);                 /* below the threshold */
         ok = ok && surf_field(idx)->choice == start;
@@ -478,6 +509,35 @@ static void test_history_commits_on_settle(void)
     check("one twiddle is one undo step", ok);
 }
 
+/* The first entry of a field's history used to land in ring[1], leaving ring[0] zeroed -- and a
+ * zeroed entry has tag 0, which is EMP_VAL_BOOL. Undo was still enabled at the start, so one press
+ * too many turned a number into `false` and the drilled editor drew an on/off switch. */
+static void test_undo_past_the_start_does_nothing(void)
+{
+    surf_demo_descriptor();
+    ui_state_init();
+    tap(0, 1000);
+
+    double start = surf_field(0)->number;
+    (void)ui_state_rotate(0, 5, 1100);
+    ui_state_tick(1100 + HIST_SETTLE_MS + 1);
+
+    ui_state_button(UI_BTN_UNDO, 1, 2000);
+    ui_state_button(UI_BTN_UNDO, 0, 2010);
+    int ok = near(surf_field(0)->number, start)
+          && !ui_state_button_enabled(UI_BTN_UNDO);   /* nothing earlier than the start */
+    ui_state_button(UI_BTN_UNDO, 1, 2100);           /* pressed anyway */
+    ui_state_button(UI_BTN_UNDO, 0, 2110);
+    ok = ok && surf_field(0)->value_tag == EMP_VAL_NUMBER
+            && near(surf_field(0)->number, start);
+    ui_state_button(UI_BTN_REDO, 1, 2200);
+    ui_state_button(UI_BTN_REDO, 0, 2210);
+    ui_state_button(UI_BTN_UNDO, 1, 2300);
+    ok = ok && surf_field(0)->value_tag == EMP_VAL_NUMBER
+            && near(surf_field(0)->number, start);
+    check("undo stops at the start and never changes a value's type", ok);
+}
+
 static void test_undo_commits_a_pending_change_first(void)
 {
     surf_demo_descriptor();
@@ -525,10 +585,11 @@ static void test_affordances_reflect_what_would_happen(void)
           && ui_state_button_enabled(UI_BTN_PAGE_NEXT);
 
     tap(0, 1000);
-    ok = ok && !ui_state_button_enabled(UI_BTN_BACK); /* already at the significant bound */
+    ok = ok && ui_state_button_enabled(UI_BTN_EXIT);
     ok = ok && !ui_state_button_enabled(UI_BTN_UNDO);     /* nothing recorded yet */
     ok = ok && !ui_state_button_enabled(UI_BTN_REDO);
-    ok = ok && !ui_state_button_enabled(UI_BTN_SYSTEM);   /* reset hidden: no declared default */
+    ok = ok && !ui_state_button_enabled(UI_BTN_RESET);    /* hidden: no declared default */
+    ok = ok && !ui_state_button_enabled(UI_BTN_STORE);
     check("affordances reflect what would happen", ok);
 }
 
@@ -810,6 +871,7 @@ int ui_run_selftests(ui_report_fn report)
 
     test_page_buttons();
     test_outer_buttons_zoom_while_drilled();
+    test_zoom_release_is_never_lost();
 
     test_readonly_is_not_editable();
     test_choice_steps_and_clamps();
@@ -819,6 +881,7 @@ int ui_run_selftests(ui_report_fn report)
     test_colour_interaction();
 
     test_history_commits_on_settle();
+    test_undo_past_the_start_does_nothing();
     test_undo_commits_a_pending_change_first();
     test_exit_commits_history();
     test_affordances_reflect_what_would_happen();

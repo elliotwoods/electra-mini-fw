@@ -288,6 +288,7 @@ typedef struct {
     uint8_t  active;
     uint8_t  remote;
     uint8_t  color_count;
+    uint8_t  modified;
     float    color[4];
     int16_t  bar_px;
 } cell_cache_t;
@@ -301,7 +302,7 @@ static uint32_t     last_choice;
 static uint8_t      last_boolean, last_value_tag;
 static uint8_t      last_color_count;
 static float        last_color[4];
-static int8_t       last_ws, last_held;
+static int8_t       last_ws, last_held, last_zoom;
 static uint8_t      last_legend[UI_BTN_COUNT];
 static int          legend_valid;
 
@@ -314,6 +315,7 @@ static void forget_everything(void)
     last_value_tag = 0xFFu;
     last_ws      = -99;
     last_held    = -99;
+    last_zoom    = -1;
     legend_valid = 0;
 }
 
@@ -363,13 +365,24 @@ static void draw_page_strip(int16_t y)
      * Repeating it here used the middle strip for drill-specific ink and crowded the page map. */
 }
 
+/* While Zoom is held the strip between the rows says so, in place of the page map: the dials have
+ * stopped editing, and the panel must not look as though they still do. */
+static void draw_zoom_banner(int16_t y)
+{
+    gfx_set_fg(C_BG);
+    gfx_fill_rect(0, y, LCD_WIDTH, 32);
+    text_draw_centred(&font_small, LCD_WIDTH / 2, (int16_t)(y + (32 - text_height(&font_small)) / 2),
+                      "ZOOM  -  turn any dial to move the digit window", C_ACCENT, C_BG);
+}
+
 /* ------------------------------------------------------------------ button legend */
 
 /* What the six buttons do, drawn where they are. Irrelevant controls are absent, not disabled. */
 static void draw_legend(int full)
 {
+    /* The drilled set; the overview swaps in page arrows and settings below. */
     static const char *const glyph[UI_BTN_COUNT] = {
-        ICON_EXIT, ICON_UNDO, ICON_REDO, ICON_RESET, ICON_RESET, ICON_NEXT
+        ICON_EXIT, ICON_UNDO, ICON_REDO, ICON_STORE, ICON_RESET, ICON_ZOOM
     };
 
     /* Two bits per button: whether it would act, and whether it is being held. Packed together
@@ -414,10 +427,11 @@ static void draw_legend(int full)
             if (b == UI_BTN_BACK) label = "CANCEL";
             else if (b == UI_BTN_SYSTEM) label = "DONE";
         }
-        if (b == UI_BTN_BACK && ui_state()->mode == UI_MODE_SURFACE)
-            icon = ICON_PREV;
-        if (b == UI_BTN_SYSTEM && ui_state()->mode == UI_MODE_SURFACE
-            && ui_state()->focused < 0) icon = ICON_SETTINGS;
+        if (ui_state()->mode == UI_MODE_SURFACE && ui_state()->focused < 0) {
+            if (b == UI_BTN_BACK) icon = ICON_PREV;
+            else if (b == UI_BTN_SYSTEM) icon = ICON_SETTINGS;
+            else if (b == UI_BTN_PAGE_NEXT) icon = ICON_NEXT;
+        }
         const font_t *face = label ? &font_small : &font_icons;
         text_draw_centred(face, (int16_t)(x + w / 2),
                           (int16_t)(LEGEND_Y + (LEGEND_H - text_height(face)) / 2),
@@ -478,6 +492,17 @@ static void draw_cell_frame(unsigned knob, int touched, int pressed, int drilled
     else gfx_restore((gfx_rect_t){x+3,y+12,3,ROW_H-24},C_CELL);
 }
 
+/* A value away from its default carries the screen's reset glyph in the cell's free bottom-left
+ * corner, and its readout takes the accent. On screen the same state shows the reset/store
+ * column beside the control, so one look at either says which values somebody has changed. */
+static void draw_modified_badge(int16_t x, int16_t y)
+{
+    /* Bottom right, beside the fader: the one corner no value, unit or switch reaches. */
+    int16_t right = (int16_t)(x + CELL_W - 2 * SP - 12 - SP);
+    text_draw_right(&font_icons, right, (int16_t)(y + ROW_H - text_height(&font_icons) - 2),
+                    ICON_RESET, C_ACCENT, C_CELL);
+}
+
 /* Clear and repaint only the value region. Keeping the label and cell background untouched is
  * what prevents title strobing while a rotary is producing a fast stream of value updates. */
 static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
@@ -506,6 +531,8 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
      * is far easier to compare down the panel than one that shifts with every digit count. */
     int16_t vy = (int16_t)(y + 14 + h / 2 - text_height(&font_value) / 2);
     value_text(f, buf, sizeof(buf));
+    int modified = surf_field_modified(f);
+    if (modified) draw_modified_badge(x, y);
 
     if (f->value_tag == EMP_VAL_BOOL) {
         const int16_t sw = 148, sh = 54;
@@ -532,7 +559,7 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
     if (text_width(vf, buf) > avail) vf = (f->value_tag == EMP_VAL_NUMBER) ? &font_compact : &font_small;
     fit_text(vf, buf, avail);
 
-    uint16_t vc = C_VALUE;
+    uint16_t vc = modified ? C_ACCENT : C_VALUE;
     if (f->kind == EMP_KIND_READONLY) {
         vc = C_VALUE;
         text_draw_right(&font_small, x + CELL_W - 2*SP, y + h - 30, "READ ONLY", C_UNIT, bg);
@@ -642,6 +669,7 @@ static void render_cells(int full, unsigned first, unsigned last)
                        || last_cell[k].choice  != f->choice
                        || last_cell[k].number  != f->number
                        || last_cell[k].color_count != f->color_count
+                       || last_cell[k].modified != (uint8_t)surf_field_modified(f)
                        || memcmp(last_cell[k].color, f->color, sizeof(f->color)) != 0
                        || last_cell[k].bar_px  != bar_extent(f, bh);
         }
@@ -667,6 +695,7 @@ static void render_cells(int full, unsigned first, unsigned last)
         last_cell[k].choice  = f ? f->choice : 0;
         last_cell[k].boolean = f ? f->boolean : 0;
         last_cell[k].color_count = f ? f->color_count : 0;
+        last_cell[k].modified = (uint8_t)(f ? surf_field_modified(f) : 0);
         if (f) memcpy(last_cell[k].color, f->color, sizeof(f->color));
         else memset(last_cell[k].color, 0, sizeof(last_cell[k].color));
         last_cell[k].bar_px  = f ? bar_extent(f, bh) : 0;
@@ -1274,11 +1303,11 @@ static void render_drilled(int full, const surf_field_t *f)
 
     /* Captions and link lines repaint only when the window or the held knob changes, never on a
      * value change: clearing this band on each detent made the top third of the panel flash. */
-    static int8_t  links_ws = -99, links_held = -99, links_top = -1;
+    static int8_t  links_ws = -99, links_held = -99, links_top = -1, links_zoom = -1;
     static int16_t links_x0 = -1;
 
     if (full || links_ws != st->ws || links_held != st->held_digit || links_x0 != x0
-             || links_top != (int8_t)top) {
+             || links_top != (int8_t)top || links_zoom != (int8_t)st->zoom_held) {
         int16_t clr_y = top ? cap_y : link_nr;
         int16_t clr_h = top ? (int16_t)(link_nr - cap_y)
                             : (int16_t)(cap_y + 28 - link_nr);
@@ -1295,7 +1324,7 @@ static void render_drilled(int full, const surf_field_t *f)
             (void)text_format(buf, sizeof(buf), place, (uint8_t)(e < 0 ? -e : 0));
 
             text_draw_centred(&font_small, KNOB_CX(k), cap_y, buf,
-                              held ? C_ACCENT : C_TITLE, C_BG);
+                              held || st->zoom_held ? C_ACCENT : C_TITLE, C_BG);
 
             /* The line from the knob down to the digit it edits. Without it, the correspondence
              * between four identical dials and four positions in a number has to be memorised. */
@@ -1308,7 +1337,7 @@ static void render_drilled(int full, const surf_field_t *f)
                 int16_t knob_end  = top ? link_far : (int16_t)(link_far - 10);
                 int16_t digit_end = top ? (int16_t)(link_nr - 10) : link_nr;
 
-                gfx_set_fg(held ? C_ACCENT : C_LINK);
+                gfx_set_fg(held || st->zoom_held ? C_ACCENT : C_LINK);
                 gfx_fill_rect((int16_t)(KNOB_CX(k) - 1), knob_end, 2, 10);
                 gfx_line((int16_t)KNOB_CX(k), (int16_t)(top ? knob_end + 10 : knob_end),
                             dx, (int16_t)(top ? digit_end : digit_end + 10));
@@ -1320,6 +1349,7 @@ static void render_drilled(int full, const surf_field_t *f)
         links_held = st->held_digit;
         links_x0   = x0;
         links_top  = (int8_t)top;
+        links_zoom = (int8_t)st->zoom_held;
     }
 
     /* The number, one digit at a time. Repainting the whole band per change cost about 50 ms of
@@ -1346,6 +1376,7 @@ static void render_drilled(int full, const surf_field_t *f)
     for (unsigned i = 0; i < n; i++) {
         uint16_t c;
         if (d[i].grey)                                          c = C_DIM;
+        else if (st->zoom_held && d[i].knob >= 0)               c = C_ACCENT;
         else if (d[i].knob >= 0 && d[i].knob == st->held_digit) c = C_VALUE;
         else                                                    c = dim(C_VALUE, other);
 
@@ -1506,6 +1537,7 @@ static void render_impl(void)
                        || st->focused    != last_focus
                        || st->ws         != last_ws
                        || st->held_digit != last_held
+                       || st->zoom_held  != last_zoom
                        || f->number      != last_value
                        || f->choice      != last_choice
                        || f->boolean     != last_boolean
@@ -1517,14 +1549,18 @@ static void render_impl(void)
             if (changed) {
                 int rebuild = full || st->focused != last_focus;
                 render_drilled(rebuild, f);
-                if (rebuild) draw_page_strip(PAGE_Y);
-                else         draw_legend(0);       /* undo/redo availability moves as you edit */
+                if (rebuild || st->zoom_held != last_zoom) {
+                    if (st->zoom_held) draw_zoom_banner(PAGE_Y);
+                    else               draw_page_strip(PAGE_Y);
+                }
+                if (!rebuild) draw_legend(0);      /* undo/redo availability moves as you edit */
                 render_cells(rebuild, ui_cell_row_first(),
                              ui_cell_row_first() + UI_DIGITS);
 
                 last_focus = st->focused;
                 last_ws    = st->ws;
                 last_held  = st->held_digit;
+                last_zoom  = (int8_t)st->zoom_held;
                 last_value = f->number;
                 last_choice = f->choice;
                 last_boolean = f->boolean;
@@ -1611,6 +1647,56 @@ void ui_render_demo_focused(void)
  * below the band. The mirror of ui_render_demo_focused, and the reason both exist: the two
  * halves are laid out by the same code with the geometry flipped, so a mistake in one and not
  * the other is exactly what wants catching side by side. */
+/* Declare `def` as field `slot`'s default through the real DEFAULTS handler. */
+static void demo_default(uint16_t slot, double def)
+{
+    uint8_t m[24]; unsigned n = 0;
+    uint64_t rev = surf_applied_revision();
+    for (unsigned i = 0; i < 8; i++) m[n++] = (uint8_t)(rev >> (8u * i));
+    m[n++] = 1; m[n++] = 0;
+    m[n++] = (uint8_t)slot; m[n++] = (uint8_t)(slot >> 8);
+    m[n++] = 1; m[n++] = EMP_VAL_NUMBER;
+    uint64_t bits; memcpy(&bits, &def, sizeof(bits));
+    for (unsigned i = 0; i < 8; i++) m[n++] = (uint8_t)(bits >> (8u * i));
+    surf_handle(EMP_OP_DEFAULTS, m, n);
+}
+
+/* Two of the first page's values away from their defaults, one at it. */
+static void demo_modified_fixture(void)
+{
+    surf_demo_descriptor();
+    ui_state_init();
+    ui_reset();
+    demo_default(0, 0.5);       /* Cutoff 0.53: modified */
+    demo_default(1, 0.21);      /* Resonance 0.21: at its default */
+    demo_default(4, 1.0);       /* Drive -6.5: modified */
+}
+
+void ui_render_demo_modified(void)
+{
+    demo_modified_fixture();
+    ui_render();
+}
+
+void ui_render_demo_modified_focused(void)
+{
+    demo_modified_fixture();
+    ui_state_push(UI_ROW_SPLIT, 1, 1000);       /* drill into Drive */
+    ui_state_push(UI_ROW_SPLIT, 0, 1010);
+    ui_render();
+}
+
+void ui_render_demo_focused_zoom(void)
+{
+    demo_modified_fixture();
+    ui_state_push(UI_ROW_SPLIT, 1, 1000);
+    ui_state_push(UI_ROW_SPLIT, 0, 1010);
+    surf_set_number(4, 12.345);                 /* wider than the window, so zoom can move */
+    ui_state_button(UI_BTN_ZOOM, 1, 1100);      /* held: the strip and window say so */
+    (void)ui_state_rotate(0, -UI_ZOOM_STEP, 1110);
+    ui_render();
+}
+
 void ui_render_demo_focused_top(void)
 {
     surf_demo_descriptor();

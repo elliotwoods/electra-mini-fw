@@ -9,6 +9,7 @@ static uint16_t   prev_touch;
 static uint32_t service_now_ms, next_touch_report_ms;
 static int32_t    discrete_accum[UI_FIELDS_PER_PAGE];
 static int32_t    digit_accum[UI_DIGITS];
+static int32_t    zoom_accum;
 static ui_action_t pending_action;
 
 /* ------------------------------------------------------------------ digit arithmetic */
@@ -96,6 +97,8 @@ static void leave_focus(void)
     hist_commit((uint16_t)st.focused);
     surf_send_focus(-1, 0);
     st.focused = -1;
+    st.zoom_held = 0;
+    zoom_accum = 0;
     memset(digit_accum, 0, sizeof(digit_accum));
 }
 
@@ -372,19 +375,19 @@ int ui_state_button_enabled(unsigned button)
     int32_t f = st.focused;
     const surf_field_t *fd = f >= 0 ? surf_field((uint16_t)f) : 0;
     switch (button) {
-    case UI_BTN_BACK:
-        if (f >= 0) return fd && fd->kind == EMP_KIND_NUMBER
-                          && st.ws < ui_msd(fd->number);
+    case UI_BTN_BACK:                        /* drilled: Exit; overview: previous page */
+        if (f >= 0) return 1;
         return st.page > 0;
     case UI_BTN_UNDO: return f >= 0 && hist_can_undo((uint16_t)f);
     case UI_BTN_REDO: return f >= 0 && hist_can_redo((uint16_t)f);
-    case UI_BTN_SYSTEM: {
+    case UI_BTN_AUX:                         /* drilled: Store */
+        return f >= 0 && surf_field_modified(fd) && surf_can_save_default();
+    case UI_BTN_SYSTEM:                      /* drilled: Reset; overview: settings */
         if (f < 0) return 1;
-        return fd && (fd->present & EMP_PRESENT_DEFAULT) && fd->kind != EMP_KIND_READONLY;
-    }
-    case UI_BTN_PAGE_NEXT:
+        return surf_field_modified(fd);
+    case UI_BTN_PAGE_NEXT:                   /* drilled: Zoom; overview: next page */
         if (f >= 0) return fd && fd->kind == EMP_KIND_NUMBER
-                          && st.ws > ui_min_ws(precision_of(fd));
+                          && ui_msd(fd->number) > ui_min_ws(precision_of(fd));
         return st.page < last_page_start();
     default: return 0;
     }
@@ -402,6 +405,7 @@ void ui_state_button(unsigned button, int pressed, uint32_t now_ms)
     else         st.btn_mask = (uint16_t)(st.btn_mask & ~bit);
 
     if (!pressed) {
+        if (button == UI_BTN_ZOOM) { st.zoom_held = 0; zoom_accum = 0; }
         /* Reboot is release-gated. Resetting on the press edge carries the still-held physical
          * Button 5 into the lower boot stage, where that same button is intentionally the USB
          * Disk Mode chord. Waiting for the debounced release makes an ordinary reboot remain
@@ -455,8 +459,12 @@ void ui_state_button(unsigned button, int pressed, uint32_t now_ms)
 
     switch (button) {
     case UI_BTN_BACK:
-        if (st.focused >= 0) { st.ws++; memset(digit_accum, 0, sizeof(digit_accum)); }
+        if (st.focused >= 0) leave_focus();
         else set_page((int32_t)st.page - (int32_t)UI_FIELDS_PER_PAGE);
+        break;
+
+    case UI_BTN_AUX:
+        if (st.focused >= 0) surf_save_default((uint16_t)st.focused);
         break;
 
     case UI_BTN_UNDO: {
@@ -494,7 +502,11 @@ void ui_state_button(unsigned button, int pressed, uint32_t now_ms)
     }
 
     case UI_BTN_PAGE_NEXT:
-        if (st.focused >= 0) { st.ws--; memset(digit_accum, 0, sizeof(digit_accum)); }
+        if (st.focused >= 0) {
+            st.zoom_held = 1;
+            zoom_accum = 0;
+            memset(digit_accum, 0, sizeof(digit_accum));
+        }
         else set_page((int32_t)st.page + (int32_t)UI_FIELDS_PER_PAGE);
         break;
     default: break;
@@ -607,6 +619,25 @@ int ui_state_rotate(unsigned pot, int32_t detents, uint32_t now_ms)
         return 1;
     }
     if (st.mode != UI_MODE_SURFACE) return 0;
+
+    if (st.focused >= 0 && st.zoom_held) {
+        /* Any dial, either row: while Zoom is held nothing edits. Clockwise moves the window
+         * towards the finer places, as the right-hand button used to. */
+        const surf_field_t *f = surf_field((uint16_t)st.focused);
+        if (!f || f->kind != EMP_KIND_NUMBER) return 0;
+        zoom_accum += detents;
+        int32_t steps = zoom_accum / UI_ZOOM_STEP;
+        if (!steps) return 0;
+        zoom_accum -= steps * UI_ZOOM_STEP;
+        int32_t ws = (int32_t)st.ws - steps;
+        if (ws < -18) ws = -18;
+        if (ws > 18) ws = 18;
+        int8_t next = ui_clamp_ws((int8_t)ws, f->number, precision_of(f));
+        if (next == st.ws) return 0;
+        st.ws = next;
+        memset(digit_accum, 0, sizeof(digit_accum));
+        return 1;
+    }
 
     if (st.focused >= 0) {
         unsigned dbase = ui_digit_row_first();

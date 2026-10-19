@@ -54,7 +54,8 @@ static int test_constants(void)
     CHECK(EMP_MTU_HID == 56u);
     CHECK(EMP_MTU_BULK == 1016u);
     CHECK(EMP_VERSION_MAJOR == 1u);
-    CHECK(EMP_VERSION_MINOR == 4u);
+    CHECK(EMP_VERSION_MINOR == 5u);
+    CHECK(EMP_OP_DEFAULTS == 0x2Au && EMP_OP_SAVE_DEFAULT == 0x5Au);
     CHECK(EMP_FLAG_FIRST == 0x01u && EMP_FLAG_LAST == 0x02u);
     CHECK(EMP_CH_CONTROL == 0u && EMP_CH_SURFACE == 1u && EMP_CH_INPUT == 2u);
     return ok;

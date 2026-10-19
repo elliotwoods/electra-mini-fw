@@ -56,7 +56,9 @@ The integration currently provides:
 - Precise numeric editing: press a knob to drill into its field, then use the opposite row of
   knobs as a four-place digit editor. Capacitive touch highlights the digit under the user's
   hand without making navigation depend on an imperfect continuous touch signal.
-- Per-field undo, redo, and reset-to-default; stable paging; and host-requested page reveal.
+- Per-field undo, redo, reset-to-default and store-as-default, with the same glyphs and the same
+  "only while modified" rule as the host inspector; modified values are marked on the panel;
+  stable paging; and host-requested page reveal.
 - Transactional descriptor replacement. A failed or partial update never replaces the live
   surface, and session IDs make device resets visible to the host.
 - Device and link diagnostics through EMP/1 heartbeats, counters, and structured diagnostic

@@ -21,7 +21,7 @@
 /* Minor may only ADD: opcodes, flag bits, trailing members inside field_len, or 0x80+ value
  * tags (docs/protocol.md 6). Both ends agree on min(host, device), so neither can send the
  * other something it has never heard of. */
-#define EMP_VERSION_MINOR    4u
+#define EMP_VERSION_MINOR    5u
 #define EMP_HEADER_BYTES     8u
 #define EMP_PREFIX_BYTES     8u          /* total_len u32 + crc32c u32, on FIRST && !LAST */
 
@@ -69,6 +69,7 @@
 #define EMP_OP_CLEAR         0x27u
 #define EMP_OP_HIGHLIGHT     0x28u
 #define EMP_OP_HIGHLIGHTS    0x29u
+#define EMP_OP_DEFAULTS      0x2Au   /* EMP/1.5: update declared defaults in place */
 
 /* Input, device -> host. */
 #define EMP_OP_EDIT          0x50u
@@ -89,6 +90,7 @@
 #define EMP_KIND_COLOR       4u
 #define EMP_KIND_ACTION      5u
 #define EMP_OP_ACTIVATE      0x59u
+#define EMP_OP_SAVE_DEFAULT  0x5Au   /* EMP/1.5: store the current value as the default */
 
 /* Field `present` bitmask.
  *

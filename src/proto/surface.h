@@ -118,6 +118,13 @@ void surf_send_delta(uint16_t index, int32_t detents);
 /* Focus, reported per lane. `index` < 0 means nothing is focused. */
 void surf_send_focus(int32_t index, uint16_t touch_mask);
 void surf_activate(uint16_t slot);
+/* The field has a declared default and its value differs from it: what the screen marks with
+ * its reset/store column, and what enables Reset and Store here. */
+int surf_field_modified(const surf_field_t *f);
+/* EMP/1.5 hosts accept SAVE_DEFAULT; older ones have nowhere to store it. */
+int surf_can_save_default(void);
+/* Store the field's current value as its default: locally at once, and on the host. */
+void surf_save_default(uint16_t slot);
 void surf_on_push(unsigned pot, int pressed);
 void surf_on_touch(uint16_t touch_mask);
 void surf_on_button(unsigned button, int pressed);

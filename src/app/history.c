@@ -54,6 +54,16 @@ static void push_entry(uint16_t field)
 
     if (fh->count && same(&fh->ring[fh->pos], &now)) return;   /* nothing actually changed */
 
+    /* An empty history starts at ring[0]. Appending after `pos` here used to leave ring[0] as
+     * the zeroed entry from hist_init -- tag 0 is EMP_VAL_BOOL -- and one undo past the start
+     * then turned a number into `false`. */
+    if (!fh->count) {
+        fh->pos   = 0;
+        fh->count = 1;
+        fh->ring[0] = now;
+        return;
+    }
+
     /* Drop the redo branch, then append. */
     fh->count = (uint8_t)(fh->pos + 1u);
 

@@ -738,6 +738,52 @@ void surf_init(void)
     touched_mask = 0;
 }
 
+/* EMP/1.5 DEFAULTS: revision u64, count u16, count x { id u16, has u8, [value] }.
+ *
+ * A saved default changes what Reset means, not what the panel shows, so it must not cost a
+ * descriptor replacement: that would leave the drilled field and drop its undo history the
+ * instant the operator pressed Store. Applied in place against the live arena. */
+static void handle_defaults(const uint8_t *msg, uint32_t len)
+{
+    rd_t r;
+    rd_init(&r, msg, len);
+    uint64_t revision = rd64(&r);
+    uint16_t count    = rd16(&r);
+    if (r.bad) return;
+    if (revision != 0 && revision != LIVE->revision) {
+        send_desc_request(EMP_REQ_REVISION_UNKNOWN);
+        return;
+    }
+    for (uint16_t n = 0; n < count && !r.bad; n++) {
+        uint16_t id  = rd16(&r);
+        uint8_t  has = rd8(&r);
+        uint8_t  tag = 0, boolean = 0, color_count = 0;
+        uint32_t choice = 0;
+        double   number = 0.0;
+        float    color[4] = { 0 };
+        int got = RDV_STORED;
+        if (has) {
+            tag = rd8(&r);
+            got = rd_value(&r, tag, &boolean, &number, &choice, &color_count, color, 0);
+            if (got == RDV_UNDECODABLE || r.bad) break;
+        }
+        uint16_t idx;
+        if (!index_of_id(id, &idx)) continue;
+        surf_field_t *f = &LIVE->fields[idx];
+        if (!has || got != RDV_STORED || tag == EMP_VAL_TEXT) {
+            f->present = (uint16_t)(f->present & ~EMP_PRESENT_DEFAULT);
+            continue;
+        }
+        f->present = (uint16_t)(f->present | EMP_PRESENT_DEFAULT);
+        f->default_tag = tag;
+        f->default_boolean = boolean;
+        f->default_choice = choice;
+        f->default_number = number;
+        f->default_color_count = color_count;
+        memcpy(f->default_color, color, sizeof(color));
+    }
+}
+
 void surf_handle(uint8_t opcode, const uint8_t *msg, uint32_t len)
 {
     switch (opcode) {
@@ -749,6 +795,7 @@ void surf_handle(uint8_t opcode, const uint8_t *msg, uint32_t len)
     case EMP_OP_REVEAL:     handle_reveal(msg, len); break;
     case EMP_OP_HIGHLIGHT:  handle_highlight(msg, len); break;
     case EMP_OP_HIGHLIGHTS: handle_highlights(msg, len); break;
+    case EMP_OP_DEFAULTS:   handle_defaults(msg, len); break;
     case EMP_OP_CLEAR:
         surf_init();
         ui_state_surface_cleared();
@@ -1098,6 +1145,58 @@ void surf_activate(uint16_t slot)
     uint8_t buf[14]; wr_t w; wr_init(&w, buf, sizeof(buf));
     wr64(&w, LIVE->revision); wr32(&w, ++activation_seq); wr16(&w, slot);
     emp_send(EMP_CH_INPUT, EMP_OP_ACTIVATE, buf, w.len);
+}
+
+int surf_field_modified(const surf_field_t *f)
+{
+    if (!f || !(f->present & EMP_PRESENT_DEFAULT)) return 0;
+    if (f->kind == EMP_KIND_READONLY || f->kind == EMP_KIND_ACTION) return 0;
+    switch (f->default_tag) {
+    case EMP_VAL_BOOL:   return f->value_tag != EMP_VAL_BOOL || f->boolean != f->default_boolean;
+    case EMP_VAL_CHOICE: return f->value_tag != EMP_VAL_CHOICE || f->choice != f->default_choice;
+    case EMP_VAL_COLOR:
+        if (f->value_tag != EMP_VAL_COLOR || f->color_count != f->default_color_count) return 1;
+        for (uint8_t i = 0; i < f->color_count && i < 4u; i++) {
+            float a = f->color[i], b = f->default_color[i];
+            float d = a > b ? a - b : b - a;
+            if (d > 1e-5f) return 1;
+        }
+        return 0;
+    case EMP_VAL_NUMBER: {
+        if (f->value_tag != EMP_VAL_NUMBER) return 1;
+        /* The host's own tolerance (hub `values_equivalent`): an f32 parameter's round trip
+         * through f64 differs in the last bits, and that is not an operator's change. */
+        double a = f->number, b = f->default_number;
+        double d = a > b ? a - b : b - a;
+        double m = (a < 0 ? -a : a) + (b < 0 ? -b : b);
+        return d > m * 1e-6 + 1e-9;
+    }
+    default: return 0;
+    }
+}
+
+int surf_can_save_default(void) { return emp_session_peer_minor() >= 5u; }
+
+void surf_save_default(uint16_t slot)
+{
+    if (!surf_field(slot) || !surf_can_save_default()) return;
+    surf_field_t *f = &LIVE->fields[slot];
+    if (f->kind == EMP_KIND_READONLY || f->kind == EMP_KIND_ACTION) return;
+
+    /* Optimistic, as the screen's column is: the value now IS the default, so Reset and Store
+     * disappear at once. The host answers with DEFAULTS, which says the same thing or corrects. */
+    f->present = (uint16_t)(f->present | EMP_PRESENT_DEFAULT);
+    f->default_tag = f->value_tag == EMP_VAL_TEXT ? EMP_VAL_NUMBER : f->value_tag;
+    f->default_boolean = f->boolean;
+    f->default_choice = f->choice;
+    f->default_number = f->number;
+    f->default_color_count = f->color_count;
+    memcpy(f->default_color, f->color, sizeof(f->color));
+
+    /* After this field's EDITs on the same channel, so the host stores the value shown here. */
+    uint8_t buf[10]; wr_t w; wr_init(&w, buf, sizeof(buf));
+    wr64(&w, LIVE->revision); wr16(&w, slot);
+    emp_send(EMP_CH_INPUT, EMP_OP_SAVE_DEFAULT, buf, w.len);
 }
 
 int surf_operator_layout(void) { return (LIVE->layout_flags & 1u) != 0; }

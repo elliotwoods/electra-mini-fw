@@ -1,4 +1,4 @@
-# EMP/1 — Electra Mini Protocol v1.4
+# EMP/1 — Electra Mini Protocol v1.5
 
 Normative wire spec for `electra-mini-fw` ↔ `av-frameworks`. MUST / MUST NOT / SHOULD / MAY
 per RFC 2119. Both codecs (C in `src/proto/`, Rust in the host crate) are written against
@@ -250,7 +250,7 @@ of an image. Raise, then flush from the service loop.
 
 `0x20 DESC_BEGIN` · `0x21 DESC_FIELD` · `0x22 DESC_END` · `0x23 DESC_ABORT` ·
 `0x24 VALUES` · `0x25 REVEAL` · `0x26 TRANSPORT` · `0x27 CLEAR`
-· `0x28 HIGHLIGHT` (minor 3+) · `0x29 HIGHLIGHTS` (minor 4+)
+· `0x28 HIGHLIGHT` (minor 3+) · `0x29 HIGHLIGHTS` (minor 4+) · `0x2A DEFAULTS` (minor 5+)
 
 **The descriptor is a transaction of per-field messages, not one giant message.** A 64-field
 descriptor becomes ~64 messages of 60–250 bytes, most single-fragment even at `mtu=56`. The
@@ -279,7 +279,8 @@ the mirror of the hub's own rule and closes the same hole in the other direction
 ### 3.3 Channel 2 — INPUT (device → host)
 
 `0x50 EDIT` · `0x51 RESET` · `0x52 PLAY_PAUSE` · `0x53 SCREEN` · `0x54 FOCUS` ·
-`0x55 DESC_REQUEST` · `0x56 EDIT_DELTA` · `0x57 DESC_ACK` · `0x58 BUTTON`
+`0x55 DESC_REQUEST` · `0x56 EDIT_DELTA` · `0x57 DESC_ACK` · `0x58 BUTTON` ·
+`0x59 ACTIVATE` (minor 2+) · `0x5A SAVE_DEFAULT` (minor 5+)
 
 `EDIT` carries `revision` u64, `edit_seq` u32, `id` u16, `cause` u8, Value.
 
@@ -314,9 +315,11 @@ left-to-right in ascending descriptor ID order. This includes short final pages 
 pages; unused top knobs have no field assignment. Pages with 5–8 controls use the normal
 top-first slot positions. Descriptor IDs, page boundaries, SCREEN ranges and edit/focus IDs
 remain unchanged. The opt-in operator layout retains its defined action/settings positions. Drilled Number
-fields use the opposite knob row as a four-place digit window; the outer buttons move toward
-more/less-significant places within the value and precision bounds. Choice and Color disable the
-outer pair. Choice traverses without wrapping; Color uses R/G/B/optional-A component knobs while
+fields use the opposite knob row as a four-place digit window. Holding the rightmost button
+(Zoom) turns every dial into a window control, clockwise towards the finer places, within the
+value and precision bounds; the panel shows it in the strip between the rows. The drilled
+buttons are, left to right, Exit, Undo, Redo, Store, Reset, Zoom (Store and Reset only while the
+value differs from its default, §EMP/1.5). Choice and Color have no Zoom. Choice traverses without wrapping; Color uses R/G/B/optional-A component knobs while
 focus and edits continue to identify the one aggregate field.
 
 ### 3.4 Encoding
@@ -532,3 +535,27 @@ Hosts negotiate minor 4 before sending HIGHLIGHTS. Whole-control hover names eve
 field (e.g. both XY components); component hover names only that component. Firmware retains
 minor 3 HIGHLIGHT support for old hosts. Hosts fall back to the first field on a minor 3 device
 and omit activity updates on older devices. Touch FOCUS remains one exact field/component.
+
+## EMP/1.5: stored defaults
+
+The device's Reset now means what the screen's reset means: the operator's saved default if
+there is one, else the declared default. Store saves the current value as that default, as the
+screen's save-as-default button does.
+
+Host `0x2A DEFAULTS` on channel 1 is
+`revision u64 | count u16 | { id u16 | has u8 | value (tag + payload, as 3.4) if has == 1 }[count]`.
+It changes declared defaults **in place**: no descriptor transfer, so a drilled field, its digit
+window and its undo history all survive. `has == 0` removes a default (Reset and Store disappear).
+A stale revision is refused with `DESC_REQUEST(REVISION_UNKNOWN)` like `VALUES`; a text default is
+treated as none.
+
+Device `0x5A SAVE_DEFAULT` on channel 2 is exactly 10 bytes, `revision u64 | id u16`: store this
+field's current value as its default. The device sends it after any `EDIT` for that field on the
+same channel, so the host already holds the value it is asked to store; it does not carry a value
+of its own. The device applies the new default locally at once and the host answers with
+`DEFAULTS`, which either agrees or corrects.
+
+Reset and Store are offered only while the value differs from its default, mirroring the screen's
+column, and Store only once minor 5 is negotiated. "Differs" for a number uses the host's
+tolerance, `|a - b| <= (|a| + |b|) * 1e-6 + 1e-9`, so an `f32` parameter's round trip through
+`f64` is not reported as a change.
