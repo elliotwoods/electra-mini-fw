@@ -25,10 +25,10 @@ void ui_render_empty(void);           /* the resting state: no host, no fields *
 void ui_render_boot(unsigned step);   /* the power-on sequence replayed from frame 0 */
 void ui_render_demo(void);            /* the overview */
 void ui_render_demo_focused(void);    /* the focused readout, mid-edit */
-void ui_render_demo_focused_top(void);
+void ui_render_demo_focused_top(void);/* drilled into a TOP field: readout mirrors below */
 void ui_render_demo_modified(void);
 void ui_render_demo_modified_focused(void);
-void ui_render_demo_focused_zoom(void);/* drilled into a TOP field: readout mirrors below */
+void ui_render_demo_focused_zoom(void);
 void ui_render_demo_page2(void);      /* the page with Choice and ReadOnly fields */
 void ui_render_demo_choice_waveform(uint16_t selected);
 void ui_render_demo_choice_short(void);

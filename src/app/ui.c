@@ -1643,10 +1643,6 @@ void ui_render_demo_focused(void)
     ui_render();
 }
 
-/* Drilled into a TOP-row field, so the digit editor is the BOTTOM row and the readout appears
- * below the band. The mirror of ui_render_demo_focused, and the reason both exist: the two
- * halves are laid out by the same code with the geometry flipped, so a mistake in one and not
- * the other is exactly what wants catching side by side. */
 /* Declare `def` as field `slot`'s default through the real DEFAULTS handler. */
 static void demo_default(uint16_t slot, double def)
 {
@@ -1697,6 +1693,10 @@ void ui_render_demo_focused_zoom(void)
     ui_render();
 }
 
+/* Drilled into a TOP-row field, so the digit editor is the BOTTOM row and the readout appears
+ * below the band. The mirror of ui_render_demo_focused, and the reason both exist: the two
+ * halves are laid out by the same code with the geometry flipped, so a mistake in one and not
+ * the other is exactly what wants catching side by side. */
 void ui_render_demo_focused_top(void)
 {
     surf_demo_descriptor();
