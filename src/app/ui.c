@@ -293,6 +293,7 @@ typedef struct {
     uint8_t  tone;
     float    color[4];
     int16_t  bar_px;
+    int16_t  hold_px;        /* EMP/1.7 fill extent, HOLD_SENT once fired */
 } cell_cache_t;
 
 static cell_cache_t last_cell[UI_FIELDS_PER_PAGE];
@@ -524,6 +525,49 @@ static void draw_estop_face(unsigned knob, const surf_field_t *f)
                       (int16_t)(ly + text_height(&font_ui) + 2 * SP), "PRESS", C_VALUE, bg);
 }
 
+/* EMP/1.7 hold-to-fire. The fill is quantised to pixels so a held knob repaints only when the bar
+ * visibly grows; HOLD_SENT marks the fired state, which is drawn full and green. */
+#define HOLD_SENT 0x7FFF
+static int16_t hold_extent(int32_t slot, int16_t span)
+{
+    uint16_t pm = ui_state_hold_permille(slot);
+    if (pm >= 1000u) return HOLD_SENT;
+    return (int16_t)((int32_t)span * pm / 1000);
+}
+
+/* A meter track with a solid fill: the hold's colour means something (amber = not yet, green =
+ * sent), so it does not take the usual meter's gradient into teal. */
+static void hold_meter(gfx_rect_t r, int16_t extent, uint16_t colour)
+{
+    gfx_meter(r, 0, 1, colour);
+    if (extent > r.w - 4) extent = (int16_t)(r.w - 4);
+    if (extent <= 0) return;
+    gfx_set_fg(colour);
+    gfx_fill_rect((int16_t)(r.x + 2), (int16_t)(r.y + 2), extent, (int16_t)(r.h - 4));
+}
+
+/* The label above as usual; under it a caption, and across the foot of the cell a fill that
+ * grows while the knob is held. Plain ink at rest, amber while holding, green "DONE" once the
+ * ACTIVATE has gone, until the knob is released. Nothing here is a stop plate. */
+static void draw_hold_face(unsigned knob, const surf_field_t *f)
+{
+    int16_t x, y;
+    cell_geometry(knob, &x, &y);
+    const uint16_t bg = C_CELL;
+    gfx_set_fg(bg);
+    gfx_fill_rect((int16_t)(x + 2), (int16_t)(y + 70), (int16_t)(CELL_W - 4), (int16_t)(ROW_H - 72));
+
+    const int16_t bx = (int16_t)(x + 2 * SP), bw = (int16_t)(CELL_W - 4 * SP), bh = 16;
+    const int16_t by = (int16_t)(y + ROW_H - 2 * SP - bh);
+    int16_t ext = hold_extent(f->id, (int16_t)(bw - 4));
+    int sent = ext == HOLD_SENT;
+    const char *caption = sent ? "DONE" : "HOLD";
+    uint16_t ink = sent ? C_OK : ext > 0 ? C_WARN : C_VALUE;
+    int16_t vy = (int16_t)(y + 14 + ROW_H / 2 - text_height(&font_value) / 2);
+    text_draw(&font_value, bx, vy, caption, ink, bg);
+    hold_meter((gfx_rect_t){bx, by, bw, bh}, sent ? (int16_t)(bw - 4) : ext, sent ? C_OK : C_WARN);
+}
+
 /* A value away from its default carries the screen's reset glyph in the cell's free bottom-left
  * corner, and its readout takes the accent. On screen the same state shows the reset/store
  * column beside the control, so one look at either says which values somebody has changed. */
@@ -545,6 +589,7 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
     const uint16_t bg = C_CELL;
 
     if (surf_field_is_estop(f)) { draw_estop_face(knob, f); return; }
+    if (surf_field_is_hold(f))  { draw_hold_face(knob, f);  return; }
 
     gfx_set_fg(bg);
     gfx_fill_rect((int16_t)(x + 2), (int16_t)(y + 70),
@@ -712,9 +757,13 @@ static void render_cells(int full, unsigned first, unsigned last)
                        || last_cell[k].modified != (uint8_t)surf_field_modified(f)
                        || last_cell[k].tone != f->tone
                        || memcmp(last_cell[k].color, f->color, sizeof(f->color)) != 0
-                       || last_cell[k].bar_px  != bar_extent(f, bh);
+                       || last_cell[k].bar_px  != bar_extent(f, bh)
+                       || last_cell[k].hold_px != hold_extent(idx, CELL_W - 4 * SP - 4);
         }
         if (!static_dirty && !chrome_dirty && !value_dirty) continue;
+        /* A HOLD face repaints while its knob is down, and its value region runs under the pressed
+         * inset; put the chrome back over it. */
+        if (value_dirty && surf_field_is_hold(f)) chrome_dirty = 1;
 
         if (static_dirty)
             draw_cell(k, f, touched, pressed, drilled, active, remote);
@@ -743,6 +792,7 @@ static void render_cells(int full, unsigned first, unsigned last)
         if (f) memcpy(last_cell[k].color, f->color, sizeof(f->color));
         else memset(last_cell[k].color, 0, sizeof(last_cell[k].color));
         last_cell[k].bar_px  = f ? bar_extent(f, bh) : 0;
+        last_cell[k].hold_px = hold_extent(idx, CELL_W - 4 * SP - 4);
     }
 }
 
@@ -753,6 +803,7 @@ static void render_operator(int full)
 {
     static char previous[8][96];
     static uint8_t previous_tone[8];
+    static int16_t previous_hold[8];
     static uint16_t previous_press,previous_touch;
     static uint64_t previous_remote;
     const ui_state_t *st = ui_state();
@@ -774,11 +825,13 @@ static void render_operator(int full)
         int pressed = (st->press_mask & (1u << (k ^ 4u))) != 0;
         int touched = (st->touch_mask & (1u << (k ^ 4u))) != 0;
         uint8_t tone = f ? f->tone : 0u;
+        int16_t hold = surf_field_is_hold(f) ? hold_extent((int32_t)k, 156) : 0;
         if (!full && strcmp(previous[k], value) == 0 && previous_tone[k] == tone &&
+            previous_hold[k] == hold &&
             ((previous_press ^ st->press_mask) & (1u << (k ^ 4u))) == 0 &&
             ((previous_touch ^ st->touch_mask) & (1u << (k ^ 4u))) == 0 &&
             !((previous_remote ^ st->remote_highlights) & (UINT64_C(1) << k))) continue;
-        memcpy(previous[k], value, sizeof(value)); previous_tone[k] = tone;
+        memcpy(previous[k], value, sizeof(value)); previous_tone[k] = tone; previous_hold[k] = hold;
         if (k >= 4) {
             int16_t x = (int16_t)(16 + (k - 4) * 196);
             int stop = k == 7 || surf_field_is_estop(f);     /* EMP/1.6 estop takes the same plate */
@@ -789,6 +842,15 @@ static void render_operator(int full)
             /* Whole words on two lines beat truncating the action an operator will execute. */
             if (k == 7) { text_draw_centred(&font_ui, x + 92, 22, "STOP", ink, bg);
                 text_draw_centred(&font_small, x + 92, 60, "PRESS / ESCAPE", ink, bg); }
+            else if (surf_field_is_hold(f)) {             /* EMP/1.7: caption and a fill */
+                fit_text(&font_ui, label, 164);
+                text_draw_centred(&font_ui, x + 92, 22, label, ink, bg);
+                int sent = hold == HOLD_SENT;
+                text_draw_centred(&font_small, x + 92, 56, sent ? "DONE" : "HOLD",
+                                  sent ? C_OK : hold > 0 ? C_WARN : muted, bg);
+                hold_meter((gfx_rect_t){(int16_t)(x + 12), 80, 160, 12}, sent ? 156 : hold,
+                           sent ? C_OK : C_WARN);
+            }
             else { fit_text(&font_ui, label, 164);
                 text_draw_centred(&font_ui, x + 92, 22, label, ink, bg);
                 text_draw_centred(&font_small, x + 92, 60, "PRESS", stop ? ink : muted, bg); }

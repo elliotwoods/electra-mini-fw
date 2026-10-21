@@ -133,6 +133,12 @@ int main(int argc, char **argv)
         fixture_toned_text(1,EMP_TONE_ALERT,"STOPPED - control surface");ui_render();}
     else if (strcmp(scene,"status-press")==0) {fixture_status(EMP_TONE_WARN,"NO ORCHESTRATOR");ui_render();
         ui_state_touch(1,100);ui_state_push(0,1,120);ui_render();}
+    /* EMP/1.7: HOLD TO CLEAR at rest, part way through a hold, and after it has fired. */
+    else if (strcmp(scene,"status-hold")==0) {fixture_status_hold();ui_render();}
+    else if (strcmp(scene,"status-holding")==0) {fixture_status_hold();ui_state_tick(100);ui_state_push(1,1,100);
+        ui_state_tick(100+EMP_HOLD_MS*3/5);ui_render();}
+    else if (strcmp(scene,"status-held")==0) {fixture_status_hold();ui_state_tick(100);ui_state_push(1,1,100);
+        ui_state_tick(100+EMP_HOLD_MS);ui_render();}
     else if (strcmp(scene, "specimen") == 0) scene_specimen();
     else if (strcmp(scene,"operator-settings")==0) {surf_demo_operator();ui_state_init();ui_state_reveal(8);ui_render();}
     else if (strcmp(scene,"operator-settings-press")==0) {surf_demo_operator();ui_state_init();ui_state_reveal(8);ui_state_touch(1,100);ui_state_push(0,1,120);ui_render();}

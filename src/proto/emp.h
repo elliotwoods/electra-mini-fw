@@ -21,7 +21,7 @@
 /* Minor may only ADD: opcodes, flag bits, trailing members inside field_len, or 0x80+ value
  * tags (docs/protocol.md 6). Both ends agree on min(host, device), so neither can send the
  * other something it has never heard of. */
-#define EMP_VERSION_MINOR    6u
+#define EMP_VERSION_MINOR    7u
 #define EMP_HEADER_BYTES     8u
 #define EMP_PREFIX_BYTES     8u          /* total_len u32 + crc32c u32, on FIRST && !LAST */
 
@@ -115,7 +115,11 @@
  * knob press exactly like any Action; it is only drawn as a full-cell red stop button. */
 #define EMP_STYLE_NORMAL      0u
 #define EMP_STYLE_ESTOP       1u
-#define EMP_STYLE_MAX         EMP_STYLE_ESTOP
+/* EMP/1.7: hold-to-fire Action. The press edge only starts a hold; ACTIVATE is sent once the
+ * knob has been held EMP_HOLD_MS without turning. Refused, as an unknown style, below minor 7. */
+#define EMP_STYLE_HOLD        2u
+#define EMP_STYLE_MAX         EMP_STYLE_HOLD
+#define EMP_HOLD_MS           1500u
 
 /* EMP/1.6 status tone, rendered on ReadOnly fields and on fields showing a Text value. */
 #define EMP_TONE_NEUTRAL      0u

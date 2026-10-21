@@ -126,6 +126,15 @@ typedef struct {
     uint64_t remote_highlights; /* absolute host-hover slots, zero when inactive */
     uint32_t remote_until_ms;
 
+    /* EMP/1.7 hold-to-fire. The press edge on a HOLD Action only starts a hold on that knob;
+     * ui_state_tick fires it once EMP_HOLD_MS later. `hold_done` keeps the "sent" face up until
+     * the knob is released. -1/-1/0 when nothing is held. */
+    int32_t  hold_slot;
+    int8_t   hold_pot;
+    uint8_t  hold_done;
+    uint32_t hold_start_ms;
+    uint64_t hold_revision;
+
     uint16_t touch_mask;     /* live, 8 bits, panel order -- highlighting only */
     uint16_t press_mask;     /* live pot-switch state, for the pressed affordance */
     uint16_t btn_mask;       /* live front-panel button state, likewise */
@@ -170,6 +179,10 @@ int ui_state_highlights(uint64_t slots, uint16_t lease_ms);
 
 /* Called every service pass; runs the history settle timer. */
 void ui_state_tick(uint32_t now_ms);
+
+/* EMP/1.7: how far a hold on `slot` has run, 0..1000 per mille (1000 once fired). 0 for any
+ * slot not being held. Uses the time of the last tick, so the renderer needs no clock. */
+uint16_t ui_state_hold_permille(int32_t slot);
 
 /* Logical descriptor IDs stay stable; these are the authoritative layout mappings.
  * Generic pages with 1..4 occupied controls use bottom knobs 4..7, in ID order. */

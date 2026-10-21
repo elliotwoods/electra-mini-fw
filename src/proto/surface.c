@@ -367,12 +367,15 @@ static uint8_t checked_tone(uint16_t id, uint8_t tone)
     return EMP_TONE_NEUTRAL;
 }
 
-/* Style is presentation only. An unknown style, or estop on anything but an Action, keeps the
- * control working and draws it normally: refusing the descriptor would take away every other
- * knob, and drawing a non-Action as a stop button would promise a stop it cannot send. */
+/* Style is presentation only, except that EMP/1.7 HOLD also decides WHEN an Action fires. An
+ * unknown style, or estop/hold on anything but an Action, keeps the control working and draws it
+ * normally: refusing the descriptor would take away every other knob, and drawing a non-Action as
+ * a stop button would promise a stop it cannot send. HOLD is unknown to a peer below minor 7,
+ * exactly as it is to a 1.6 device. */
 static void apply_style(surf_field_t *f, uint8_t style, uint8_t tone)
 {
-    if (style > EMP_STYLE_MAX || (style == EMP_STYLE_ESTOP && f->kind != EMP_KIND_ACTION)) {
+    uint8_t max = emp_session_peer_minor() >= 7u ? EMP_STYLE_HOLD : EMP_STYLE_ESTOP;
+    if (style > max || (style != EMP_STYLE_NORMAL && f->kind != EMP_KIND_ACTION)) {
         emp_diag(EMP_SEV_WARN, EMP_DIAG_STYLE_UNSUPPORTED, ((uint32_t)f->id << 8) | style,
                  "field style refused; drawn as normal");
         f->flags = (uint8_t)(f->flags | EMP_FIELD_TRUNCATED);
@@ -1261,6 +1264,11 @@ int surf_operator_layout(void) { return (LIVE->layout_flags & 1u) != 0; }
 int surf_field_is_estop(const surf_field_t *f)
 {
     return f && f->kind == EMP_KIND_ACTION && f->style == EMP_STYLE_ESTOP;
+}
+
+int surf_field_is_hold(const surf_field_t *f)
+{
+    return f && f->kind == EMP_KIND_ACTION && f->style == EMP_STYLE_HOLD;
 }
 
 void surf_demo_operator(void)

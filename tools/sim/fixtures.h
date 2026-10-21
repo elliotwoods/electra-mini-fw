@@ -43,25 +43,39 @@ static void fixture_toggles(void)
 /* EMP/1.6 status page, as the av-fleet daemon sends it: a stop on the top-left knob (six fields,
  * so the generic grid keeps reading order), a toned status readout beside it. Records carry the
  * trailing style + tone members after the label. */
-static void fixture_status(uint8_t status_tone,const char*status)
+typedef struct { uint8_t kind,style,tone; const char*label,*text; } fixture_styled_field;
+static void fixture_styled(const fixture_styled_field*f,unsigned n)
 {
     static uint64_t revision=0x1600000000ULL;revision++;
-    static const struct { uint8_t kind,style,tone; const char*label,*text; } f[6]={
-        {EMP_KIND_ACTION,EMP_STYLE_ESTOP,0,"E-STOP",0},{EMP_KIND_READONLY,0,0,"Orchestrator",0},
-        {EMP_KIND_READONLY,0,EMP_TONE_OK,"Nodes","2/2 connected"},{EMP_KIND_READONLY,0,EMP_TONE_WARN,"Beacon","late"},
-        {EMP_KIND_READONLY,0,EMP_TONE_ALERT,"Last stop","control surface"},{EMP_KIND_ACTION,0,0,"Identify",0}};
-    fixture_buf b={{0},0};fixture_int(&b,revision,8);fixture_int(&b,6,2);fixture_int(&b,0,2);fixture_int(&b,0,4);
+    fixture_buf b={{0},0};fixture_int(&b,revision,8);fixture_int(&b,n,2);fixture_int(&b,0,2);fixture_int(&b,0,4);
     surf_handle(EMP_OP_DESC_BEGIN,b.bytes,b.n);uint32_t crc=0xffffffff;
-    for(unsigned i=0;i<6;i++) {
+    for(unsigned i=0;i<n;i++) {
         b.n=0;fixture_int(&b,i,2);unsigned body=b.n;
         fixture_int(&b,0,2);fixture_int(&b,i,2);fixture_int(&b,f[i].kind,1);fixture_int(&b,0,1);fixture_int(&b,EMP_PRESENT_STYLE,2);
         fixture_double(&b,0);fixture_double(&b,0);fixture_double(&b,0);fixture_int(&b,0,1);fixture_int(&b,0,1);fixture_int(&b,0,2);
-        const char*text=i==1?status:f[i].text;
-        if(text){fixture_int(&b,EMP_VAL_TEXT,1);fixture_string(&b,text);} else {fixture_int(&b,EMP_VAL_NUMBER,1);fixture_double(&b,0);}
-        fixture_string(&b,f[i].label);fixture_int(&b,f[i].style,1);fixture_int(&b,i==1?status_tone:f[i].tone,1);
+        if(f[i].text){fixture_int(&b,EMP_VAL_TEXT,1);fixture_string(&b,f[i].text);} else {fixture_int(&b,EMP_VAL_NUMBER,1);fixture_double(&b,0);}
+        fixture_string(&b,f[i].label);fixture_int(&b,f[i].style,1);fixture_int(&b,f[i].tone,1);
         crc=emp_crc32c_update(crc,b.bytes+body,b.n-body);surf_handle(EMP_OP_DESC_FIELD,b.bytes,b.n);
     }
-    b.n=0;fixture_int(&b,revision,8);fixture_int(&b,6,2);fixture_int(&b,~crc,4);surf_handle(EMP_OP_DESC_END,b.bytes,b.n);ui_state_init();ui_reset();
+    b.n=0;fixture_int(&b,revision,8);fixture_int(&b,n,2);fixture_int(&b,~crc,4);surf_handle(EMP_OP_DESC_END,b.bytes,b.n);ui_state_init();ui_reset();
+}
+static void fixture_status(uint8_t status_tone,const char*status)
+{
+    fixture_styled_field f[6]={
+        {EMP_KIND_ACTION,EMP_STYLE_ESTOP,0,"E-STOP",0},{EMP_KIND_READONLY,0,0,"Orchestrator",0},
+        {EMP_KIND_READONLY,0,EMP_TONE_OK,"Nodes","2/2 connected"},{EMP_KIND_READONLY,0,EMP_TONE_WARN,"Beacon","late"},
+        {EMP_KIND_READONLY,0,EMP_TONE_ALERT,"Last stop","control surface"},{EMP_KIND_ACTION,0,0,"Identify",0}};
+    f[1].tone=status_tone;f[1].text=status;
+    fixture_styled(f,6);
+}
+/* EMP/1.7: the same page while STOPPED, as the host sends it: ID 1 becomes a HOLD Action. */
+static void fixture_status_hold(void)
+{
+    static const fixture_styled_field f[6]={
+        {EMP_KIND_ACTION,EMP_STYLE_ESTOP,0,"E-STOP",0},{EMP_KIND_ACTION,EMP_STYLE_HOLD,0,"HOLD TO CLEAR",0},
+        {EMP_KIND_READONLY,0,EMP_TONE_ALERT,"Orchestrator","STOPPED"},{EMP_KIND_READONLY,0,EMP_TONE_WARN,"Beacon","late"},
+        {EMP_KIND_READONLY,0,EMP_TONE_ALERT,"Last stop","control surface"},{EMP_KIND_ACTION,0,0,"Identify",0}};
+    fixture_styled(f,6);
 }
 /* EMP/1.6 TONED_VALUES for one text field at the live revision. */
 static void fixture_toned_text(uint16_t id,uint8_t tone,const char*text)

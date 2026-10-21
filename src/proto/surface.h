@@ -70,6 +70,8 @@ void surf_init(void);
 int surf_operator_layout(void);
 /* EMP/1.6: an Action declared with the estop style. */
 int surf_field_is_estop(const surf_field_t *f);
+/* EMP/1.7: an Action declared with the hold style (fires after EMP_HOLD_MS held, not on press). */
+int surf_field_is_hold(const surf_field_t *f);
 
 /* Handle one surface-channel message. Returns nothing: per the design rule, protocol problems
  * become DIAG and DESC_REQUEST on the wire, never an error returned to a caller. */

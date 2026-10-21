@@ -90,6 +90,23 @@ static void rebuild_window(void)
     st.ws = ui_clamp_ws(ui_msd(f->number), f->number, precision_of(f));
 }
 
+/* EMP/1.7: drop any hold in progress, silently. Nothing was sent and nothing will be. */
+static void cancel_hold(void)
+{
+    st.hold_slot = -1;
+    st.hold_pot = -1;
+    st.hold_done = 0;
+}
+
+static void start_hold(unsigned pot, int32_t slot, uint32_t now_ms)
+{
+    st.hold_slot = slot;
+    st.hold_pot = (int8_t)pot;
+    st.hold_done = 0;
+    st.hold_start_ms = now_ms;
+    st.hold_revision = surf_applied_revision();
+}
+
 /* Leaving a field ends the adjustment in progress, so history commits now rather than waiting
  * out its settle timer. The user has demonstrably moved on. */
 static void leave_focus(void)
@@ -125,6 +142,8 @@ void ui_state_init(void)
     st.focused    = -1;
     st.held_digit = -1;
     st.active_pot = -1;
+    st.hold_slot  = -1;
+    st.hold_pot   = -1;
     prev_touch    = 0;
     memset(discrete_accum, 0, sizeof(discrete_accum));
     memset(digit_accum, 0, sizeof(digit_accum));
@@ -201,6 +220,7 @@ static void set_page(int32_t start)
 
 void ui_state_surface_changed(void)
 {
+    cancel_hold();                    /* a replaced descriptor may no longer have that Action */
     st.remote_highlights = 0;
     leave_focus();
     st.page = 0;
@@ -291,13 +311,16 @@ void ui_state_touch(uint16_t touch_mask, uint32_t now_ms)
 
 void ui_state_push(unsigned pot, int pressed, uint32_t now_ms)
 {
-    (void)now_ms;
     if (pot >= UI_FIELDS_PER_PAGE) return;
 
     uint16_t bit = (uint16_t)(1u << pot);
     int was_pressed = (st.press_mask & bit) != 0;
     if (pressed) st.press_mask |= bit;
     else         st.press_mask = (uint16_t)(st.press_mask & ~bit);
+
+    /* EMP/1.7: releasing a held knob ends its hold. Before the threshold that is a silent cancel;
+     * after it, it only takes down the "sent" face. Either way the next fire needs a new press. */
+    if (!pressed && st.hold_pot == (int8_t)pot) cancel_hold();
 
     if (!pressed || was_pressed) return;               /* act on the press edge; release is only an affordance */
 
@@ -323,7 +346,8 @@ void ui_state_push(unsigned pot, int pressed, uint32_t now_ms)
         if (st.page == 0 && pot == 7u) { set_page(8); return; }
         int32_t slot = ui_state_field_for(pot);
         const surf_field_t *field = slot >= 0 ? surf_field((uint16_t)slot) : 0;
-        if (field && field->kind == EMP_KIND_ACTION) surf_activate((uint16_t)slot);
+        if (surf_field_is_hold(field)) start_hold(pot, slot, now_ms);
+        else if (field && field->kind == EMP_KIND_ACTION) surf_activate((uint16_t)slot);
         /* Operator settings turn in place; never borrow the action row for digits. */
         return;
     }
@@ -353,6 +377,8 @@ void ui_state_push(unsigned pot, int pressed, uint32_t now_ms)
 
     int32_t slot = ui_state_field_for(pot);
     const surf_field_t *field = slot >= 0 ? surf_field((uint16_t)slot) : 0;
+    /* EMP/1.7: a HOLD Action's press only starts the hold; ui_state_tick fires it. */
+    if (surf_field_is_hold(field)) { start_hold(pot, slot, now_ms); return; }
     if (field && field->kind == EMP_KIND_ACTION) { surf_activate((uint16_t)slot); return; }
     enter_focus(slot);
 }
@@ -535,6 +561,31 @@ void ui_state_tick(uint32_t now_ms)
     hist_tick(now_ms);
     if (st.active_pot >= 0 && (int32_t)(now_ms - st.active_until_ms) >= 0)
         st.active_pot = -1;
+
+    /* EMP/1.7: a hold fires only if, at the threshold, the knob still addresses the same HOLD
+     * Action of the same descriptor on the surface. Anything that moved it away -- a page turn,
+     * a drill, the settings view, a replaced descriptor -- has already cancelled it. */
+    if (st.hold_slot >= 0 && !st.hold_done) {
+        const surf_field_t *f = surf_field((uint16_t)st.hold_slot);
+        if (st.mode != UI_MODE_SURFACE || st.focused >= 0
+            || surf_applied_revision() != st.hold_revision || !surf_field_is_hold(f)
+            || ui_state_field_for((unsigned)st.hold_pot) != st.hold_slot) {
+            cancel_hold();
+        } else if ((uint32_t)(now_ms - st.hold_start_ms) >= EMP_HOLD_MS) {
+            st.hold_done = 1;
+            surf_activate((uint16_t)st.hold_slot);
+        }
+    }
+}
+
+uint16_t ui_state_hold_permille(int32_t slot)
+{
+    if (slot < 0 || st.hold_slot != slot) return 0;
+    if (st.hold_done) return 1000u;
+    uint32_t held = (uint32_t)(service_now_ms - st.hold_start_ms);
+    if ((int32_t)held < 0) return 0;
+    if (held >= EMP_HOLD_MS) return 999u;              /* full only once actually sent */
+    return (uint16_t)(held * 1000u / EMP_HOLD_MS);
 }
 
 static void note_rotation(unsigned pot, uint32_t now_ms)
@@ -609,6 +660,10 @@ static int rotate_digit(unsigned pot, int32_t detents, uint32_t now_ms)
 int ui_state_rotate(unsigned pot, int32_t detents, uint32_t now_ms)
 {
     if (!detents || pot >= UI_FIELDS_PER_PAGE) return 0;
+
+    /* EMP/1.7: turning the held knob is not holding it still. Cancelled before it can fire;
+     * after it has fired there is nothing left to cancel. */
+    if (st.hold_pot == (int8_t)pot && !st.hold_done) cancel_hold();
 
     if (st.mode == UI_MODE_SYSTEM) {
         int32_t next = (int32_t)st.system_selection + (detents > 0 ? 1 : -1);

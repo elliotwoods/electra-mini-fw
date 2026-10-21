@@ -52,6 +52,8 @@ KIND_READONLY, KIND_ACTION = 3, 5
 VAL_BOOL, VAL_NUMBER, VAL_CHOICE, VAL_TEXT = 0x00, 0x01, 0x02, 0x03
 FIELD_READONLY = 0x02
 STYLE_NORMAL, STYLE_ESTOP = 0, 1
+STYLE_HOLD = 2                  # EMP/1.7, Action only, minor 7+ only
+HOLD_MS = 1500                  # EMP/1.7: continuous hold before the device sends ACTIVATE
 TONE_NEUTRAL, TONE_OK, TONE_WARN, TONE_ALERT = 0, 1, 2, 3
 
 
@@ -265,6 +267,9 @@ def selftest():
                            + bytes([STYLE_NORMAL, TONE_OK]))
     assert toned_values(7, [(1, 0, TONE_ALERT, "STOPPED")]) == (
         struct.pack("<QHHIBB", 7, 1, 1, 0, TONE_ALERT, VAL_TEXT) + _string("STOPPED"))
+    # 1.7: HOLD TO CLEAR is an ordinary Action record with style 2.
+    hold = field_record(1, KIND_ACTION, "HOLD TO CLEAR", 0.0, style=STYLE_HOLD)
+    assert hold.endswith(_string("HOLD TO CLEAR") + bytes([STYLE_HOLD, TONE_NEUTRAL]))
     print("emp.py encoder selftest passed")
 
 

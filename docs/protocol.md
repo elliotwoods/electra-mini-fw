@@ -1,4 +1,4 @@
-# EMP/1 — Electra Mini Protocol v1.6
+# EMP/1 — Electra Mini Protocol v1.7
 
 Normative wire spec for `electra-mini-fw` ↔ `av-frameworks`. MUST / MUST NOT / SHOULD / MAY
 per RFC 2119. Both codecs (C in `src/proto/`, Rust in the host crate) are written against
@@ -113,7 +113,7 @@ implementation manages it anyway, the CRC fails and the seq gap is reported, so 
 | Name | Value |
 |---|---|
 | `EMP_MAGIC` | `0xE1` |
-| `EMP_VERSION` | major 1, minor 6 |
+| `EMP_VERSION` | major 1, minor 7 |
 | `EMP_HEADER_BYTES` | 8 |
 | `EMP_PREFIX_BYTES` | 8 |
 | `EMP_MTU_HID` / `EMP_MTU_BULK` | 56 / 1016 |
@@ -240,7 +240,7 @@ string: the field index for a truncated label, the tag for an unknown value tag,
 | `19` | `E_GRAPHICS_TIMEOUT` — bounded accelerator completion wait expired |
 | `20` | `E_GRAPHICS_FAULT` — accelerator initialization, command, memory, or bus failure |
 | `21` | `E_INPUT_QUEUE_OVERFLOW` — deferred input queue exhausted during rendering |
-| `22` | `E_STYLE_UNSUPPORTED` — EMP/1.6 style or tone refused and drawn as normal/neutral; context `(id << 8) \| value` |
+| `22` | `E_STYLE_UNSUPPORTED` — EMP/1.6/1.7 style or tone refused and drawn as normal/neutral; context `(id << 8) \| value` |
 
 A device MUST NOT send `DIAG` from inside a decoder. Framing an outbound message part-way
 through an inbound one means building it from state the inbound parse is still walking, and on
@@ -575,7 +575,7 @@ traffic is byte-identical to what it was. Neither property changes what a contro
 |---|---|---|
 | 0 | `NORMAL` | `NEUTRAL` — the usual ink |
 | 1 | `ESTOP` — Action only | `OK` — green (`--ok` #34d399) |
-| 2 | | `WARN` — amber (`--warn-soft-text` #fbbf24) |
+| 2 | `HOLD` — Action only, minor 7+ (EMP/1.7 below) | `WARN` — amber (`--warn-soft-text` #fbbf24) |
 | 3 | | `ALERT` — red (`--danger` #f87171) |
 
 ### Descriptor: trailing members of the field record
@@ -616,7 +616,7 @@ Device rules:
   `DESC_REQUEST(SEQUENCE_BROKEN)`; the live descriptor is kept (as for any truncated record).
 - `style` > 1, or `style = ESTOP` on any kind but Action: the field loads, drawn `NORMAL`, with
   `TRUNCATED` set and `DIAG{E_STYLE_UNSUPPORTED}`. A non-Action is never drawn as a stop, since it
-  cannot send one.
+  cannot send one. (Once minor 7 is negotiated the limit is `style` > 2; see EMP/1.7.)
 - `tone` > 3: the field loads with tone `NEUTRAL`, `TRUNCATED` and the same DIAG. An unknown tone
   is never mapped to the nearest known colour.
 - A tone is accepted on any kind but drawn only on ReadOnly fields and on fields currently showing
@@ -670,3 +670,62 @@ in the page's eight IDs `[first, first + 8)`:
 So a stop placed at ID 0 is top-left only when page 0 carries at least five fields (IDs need not
 be contiguous, but ID 0 must be occupied); with 2–4 fields it is bottom-left.
 
+
+## EMP/1.7: hold-to-fire Action
+
+One new `style` value. Everything else on the wire is EMP/1.6: the same `0x0100` trailing
+`style` u8 + `tone` u8, the same 14-byte `ACTIVATE`, no new opcode, no new DIAG code.
+
+| `style` | Name | Valid on |
+|---|---|---|
+| 2 | `HOLD` | Action (kind 5) only |
+
+It exists so an operator can clear an E-stop from the panel without a stray knock doing it: the
+host turns the status page's field ID 1 into a `HOLD` Action labelled "HOLD TO CLEAR" while the
+fleet is stopped. What the activation does is the host's business (for the E-stop it returns the
+fleet to Disarmed, never to Armed); the device only decides *when* it is sent.
+
+### Negotiation
+
+- A host sends `style = 2` only when HELLO negotiation selected minor 7 or newer. To a minor 6
+  peer it sends a plain Action (or omits the field), never style 2.
+- A device whose negotiated minor is 6 treats style 2 as EMP/1.6 says: unknown, drawn `NORMAL`,
+  `TRUNCATED`, `DIAG{E_STYLE_UNSUPPORTED}`, and the Action then fires on its press edge like any
+  plain Action. A host must therefore not rely on a minor 6 device to hold.
+- A minor 7 device applies the EMP/1.6 rule with the limit raised to 2: `style` > 2, or `style`
+  1 or 2 on any kind but Action, loads the field drawn `NORMAL` with `TRUNCATED` and
+  `DIAG{E_STYLE_UNSUPPORTED}` (context `(id << 8) | style`). A non-Action is never drawn as a hold.
+
+### Input
+
+- The knob's press edge only **starts** a hold. Nothing is sent.
+- After **1500 ms** of continuous hold the device sends the ordinary 14-byte `ACTIVATE`
+  (EMP/1.2: `revision u64, activation_sequence u32, field_id u16`) exactly **once**, with the next
+  activation sequence as for any press. The threshold is measured on the device's service clock
+  (inputs are sampled every 20 ms service pass), so the send lands within one pass of 1500 ms.
+- Releasing the knob before the threshold cancels silently: nothing is sent and the fill resets.
+- Turning the held knob (any detent) before the threshold cancels it. Turning another knob does
+  not.
+- A hold never repeats. Holding on after it has fired sends nothing more; another activation
+  needs a release and a new full hold.
+- The hold is cancelled, silently, if before the threshold the knob stops addressing that same
+  `HOLD` field of that same descriptor: a descriptor replacement (any new revision, even one that
+  re-declares the same field), a page change, drilling into another field, or the device's own
+  settings or calibration views. A host that re-sends the descriptor while the operator is holding
+  makes them start again, so status changes belong in `TONED_VALUES`.
+- There is **no drilled-field exception**: `HOLD` behaves as a plain Action does while another
+  field is drilled (under the digit row its press only leaves the drill; nothing starts). Device-
+  local system and calibration views own the knobs as usual. The EMP/1.6 `ESTOP` Action and plain
+  Actions are unchanged, including the stop's drilled-field exception.
+- Operator layout (DESC_BEGIN flag bit 0): a `HOLD` Action on the action row holds the same way.
+
+### Rendering
+
+- Generic grid: an ordinary cell (`--surface-raised`, not the stop plate), the field label at the
+  top as usual, a large caption under it, and a horizontal fill across the foot of the cell.
+  At rest the caption is `HOLD` in the usual ink and the fill is empty. While held, the caption and
+  fill are amber (`--warn-soft-text` #fbbf24) and the fill grows left to right in proportion to
+  the time held. Once `ACTIVATE` has been sent the caption reads `DONE` and the fill is full, both
+  green (`--ok` #34d399), until the knob is released; release returns the cell to rest.
+- Operator layout: the action-row card shows the label, `HOLD` / `DONE` beneath it in the same
+  colours, and the same fill along the bottom of the card.

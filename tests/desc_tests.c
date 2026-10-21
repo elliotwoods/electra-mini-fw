@@ -1061,7 +1061,7 @@ static void test_style_and_tone_decode(void)
 static void test_style_validation(void)
 {
     static const sfield_t bad[] = {
-        { 0, EMP_KIND_ACTION,   "Odd style",   0, 0.0, 1, 2u,              0,  0, 0 },
+        { 0, EMP_KIND_ACTION,   "Odd style",   0, 0.0, 1, 3u,              0,  0, 0 },
         { 1, EMP_KIND_NUMBER,   "Not an action",0, 0.5, 1, EMP_STYLE_ESTOP, 0,  0, 0 },
         { 2, EMP_KIND_READONLY, "Odd tone",    "x", 0.0, 1, 0,              9u, 0, 0 },
     };
@@ -1073,7 +1073,7 @@ static void test_style_validation(void)
     ok = ok && surf_field(1)->style == EMP_STYLE_NORMAL && !surf_field_is_estop(surf_field(1))
             && (surf_field(1)->flags & EMP_FIELD_TRUNCATED);
     ok = ok && surf_field(2)->tone == EMP_TONE_NEUTRAL && (surf_field(2)->flags & EMP_FIELD_TRUNCATED);
-    ok = ok && diag_seen(EMP_DIAG_STYLE_UNSUPPORTED, &ctx, &count) && ctx == ((0u << 8) | 2u)
+    ok = ok && diag_seen(EMP_DIAG_STYLE_UNSUPPORTED, &ctx, &count) && ctx == ((0u << 8) | 3u)
             && count == 3;
     check("unknown style/tone and estop on a non-Action degrade with a diagnostic", ok);
 
@@ -1279,6 +1279,223 @@ static void test_presentation_colours(void)
     check("estop plate is C_STOP; tones pick ok/warn/alert ink on status fields only", ok);
 }
 
+/* ------------------------------------------------------------------ EMP/1.7 hold-to-fire
+ *
+ * The status page as the host sends it while the fleet is STOPPED: the stop stays at ID 0 and
+ * ID 1 becomes "HOLD TO CLEAR", an Action with style 2. Six fields, so knob k shows ID k. */
+
+static const sfield_t stopped_page[] = {
+    { 0, EMP_KIND_ACTION,   "E-STOP",        0,         0.0, 1, EMP_STYLE_ESTOP,  0, 0, 0 },
+    { 1, EMP_KIND_ACTION,   "HOLD TO CLEAR", 0,         0.0, 1, EMP_STYLE_HOLD,   0, 0, 0 },
+    { 2, EMP_KIND_READONLY, "Orchestrator",  "STOPPED", 0.0, 1, EMP_STYLE_NORMAL, EMP_TONE_ALERT, 0, 0 },
+    { 3, EMP_KIND_NUMBER,   "Brightness",    0,         0.5, 0, 0, 0, 0, 0 },
+    { 4, EMP_KIND_ACTION,   "Identify",      0,         0.0, 1, EMP_STYLE_NORMAL, 0, 0, 0 },
+    { 5, EMP_KIND_READONLY, "Last stop",     "surface", 0.0, 1, EMP_STYLE_NORMAL, 0, 0, 0 },
+};
+#define STOPPED_FIELDS ((uint16_t)(sizeof(stopped_page) / sizeof(stopped_page[0])))
+
+static unsigned activations(void)
+{
+    unsigned n = 0;
+    for (unsigned i = 0; i < sim_wire_count(); i++)
+        if (sim_wire_at(i)->opcode == EMP_OP_ACTIVATE) n++;
+    return n;
+}
+
+static uint32_t activation_seq(const sim_wire_msg_t *m)
+{
+    return (uint32_t)m->payload[8] | ((uint32_t)m->payload[9] << 8)
+         | ((uint32_t)m->payload[10] << 16) | ((uint32_t)m->payload[11] << 24);
+}
+
+static void test_hold_decodes(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(300, stopped_page, STOPPED_FIELDS);
+    emp_diag_tick();
+    const surf_field_t *hold = surf_field(1);
+    int ok = surf_applied_revision() == 300 && hold && hold->style == EMP_STYLE_HOLD
+          && surf_field_is_hold(hold) && !surf_field_is_estop(hold)
+          && !(hold->flags & EMP_FIELD_TRUNCATED) && label_is(1, "HOLD TO CLEAR")
+          && surf_field_is_estop(surf_field(0)) && !surf_field_is_hold(surf_field(0))
+          && !surf_field_is_hold(surf_field(4)) && !diag_seen(EMP_DIAG_STYLE_UNSUPPORTED, 0, 0)
+          && ui_cell_background(hold) == C_CELL && ui_state_field_for(1) == 1;
+    check("1.7 hold style decodes on an Action at minor 7", ok);
+
+    /* HOLD on anything but an Action: drawn normal, flagged, reported, like ESTOP. */
+    static const sfield_t bad[] = {
+        { 0, EMP_KIND_NUMBER,   "Not an action", 0,   0.5, 1, EMP_STYLE_HOLD, 0, 0, 0 },
+        { 1, EMP_KIND_READONLY, "Read only",     "x", 0.0, 1, EMP_STYLE_HOLD, 0, 0, 0 },
+        { 2, EMP_KIND_ACTION,   "Unknown",       0,   0.0, 1, 3u,             0, 0, 0 },
+    };
+    load_styled(301, bad, 3);
+    emp_diag_tick();
+    uint32_t ctx = 0, count = 0;
+    ok = surf_applied_revision() == 301;
+    for (uint16_t i = 0; i < 3; i++)
+        ok = ok && surf_field(i)->style == EMP_STYLE_NORMAL && !surf_field_is_hold(surf_field(i))
+                && (surf_field(i)->flags & EMP_FIELD_TRUNCATED);
+    ok = ok && diag_seen(EMP_DIAG_STYLE_UNSUPPORTED, &ctx, &count) && count == 3
+            && ctx == ((0u << 8) | EMP_STYLE_HOLD);
+    check("hold on a non-Action, or style 3, is normal with E_STYLE_UNSUPPORTED", ok);
+
+    /* A minor 6 peer never sends style 2; if one did, this device answers as a 1.6 device: an
+     * unknown style, so a plain Action that fires on the press edge. */
+    sim_wire_set_peer_minor(6);
+    load_styled(302, stopped_page, STOPPED_FIELDS);
+    emp_diag_tick();
+    ok = surf_field(1)->style == EMP_STYLE_NORMAL && !surf_field_is_hold(surf_field(1))
+      && (surf_field(1)->flags & EMP_FIELD_TRUNCATED)
+      && diag_seen(EMP_DIAG_STYLE_UNSUPPORTED, &ctx, 0) && ctx == ((1u << 8) | EMP_STYLE_HOLD)
+      && surf_field_is_estop(surf_field(0));
+    sim_wire_reset();
+    ui_state_push(1, 1, 10);
+    ok = ok && activations() == 1;
+    ui_state_push(1, 0, 11);
+    check("minor 6 peer: style 2 is unknown, drawn and fired as a plain Action", ok);
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+}
+
+static void test_hold_fires_once(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(310, stopped_page, STOPPED_FIELDS);
+    sim_wire_reset();
+    const uint32_t t0 = 1000;
+    ui_state_tick(t0);
+    ui_state_push(1, 1, t0);
+    int ok = activations() == 0 && ui_state()->hold_slot == 1 && !ui_state()->hold_done;
+    ui_state_tick(t0 + 750);
+    ok = ok && activations() == 0 && ui_state_hold_permille(1) == 500u
+            && ui_state_hold_permille(0) == 0u;
+    ui_state_tick(t0 + EMP_HOLD_MS - 1u);
+    ok = ok && activations() == 0 && ui_state_hold_permille(1) < 1000u;
+    ui_state_tick(t0 + EMP_HOLD_MS);
+    const sim_wire_msg_t *m = sim_wire_last(EMP_OP_ACTIVATE);
+    ok = ok && activations() == 1 && m && m->channel == EMP_CH_INPUT && m->len == 14u
+            && m->payload[0] == 54 && m->payload[1] == 1 && m->payload[7] == 0   /* revision 310 */
+            && m->payload[12] == 1 && m->payload[13] == 0                         /* field 1 */
+            && ui_state()->hold_done && ui_state_hold_permille(1) == 1000u;
+    uint32_t first_seq = m ? activation_seq(m) : 0;
+    check("hold fires one 14-byte ACTIVATE at 1500 ms, not before", ok);
+
+    /* Still held: nothing more, however long. Released: still nothing, and the face clears. */
+    ui_state_tick(t0 + 3000); ui_state_tick(t0 + 60000);
+    ok = activations() == 1 && ui_state()->hold_done;
+    ui_state_push(1, 0, t0 + 60010);
+    ui_state_tick(t0 + 60020);
+    ok = ok && activations() == 1 && ui_state()->hold_slot < 0 && ui_state_hold_permille(1) == 0u;
+    check("a fired hold never repeats while held, and release sends nothing", ok);
+
+    /* A second activation needs a new press and a whole new hold. */
+    const uint32_t t1 = t0 + 70000;
+    ui_state_push(1, 1, t1);
+    ui_state_tick(t1 + 1000);
+    ok = activations() == 1;
+    ui_state_tick(t1 + EMP_HOLD_MS);
+    m = sim_wire_last(EMP_OP_ACTIVATE);
+    ok = ok && activations() == 2 && m && activation_seq(m) == first_seq + 1u;
+    ui_state_push(1, 0, t1 + EMP_HOLD_MS + 5);
+    check("another activation takes release and a new full hold", ok);
+}
+
+static void test_hold_cancels(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(320, stopped_page, STOPPED_FIELDS);
+    sim_wire_reset();
+
+    /* Early release: silent, and the fill resets. */
+    ui_state_push(1, 1, 100); ui_state_tick(100);
+    ui_state_tick(100 + EMP_HOLD_MS - 50u);
+    ui_state_push(1, 0, 100 + EMP_HOLD_MS - 40u);
+    int ok = ui_state()->hold_slot < 0 && ui_state_hold_permille(1) == 0u;
+    ui_state_tick(100 + EMP_HOLD_MS); ui_state_tick(5000);
+    ok = ok && activations() == 0;
+    check("releasing before 1500 ms never fires", ok);
+
+    /* Turning the held knob cancels; holding on afterwards does not resume it. */
+    ui_state_push(1, 1, 6000); ui_state_tick(6000);
+    ui_state_tick(6500);
+    ui_state_rotate(1, 1, 6600);
+    ok = ui_state()->hold_slot < 0;
+    ui_state_tick(6000 + EMP_HOLD_MS); ui_state_tick(20000);
+    ok = ok && activations() == 0 && !sim_wire_last(EMP_OP_EDIT);
+    ui_state_push(1, 0, 20010);
+    /* Turning a different knob does not. */
+    ui_state_push(1, 1, 21000); ui_state_tick(21000);
+    ui_state_rotate(3, 2, 21100);
+    ui_state_tick(21000 + EMP_HOLD_MS);
+    ok = ok && activations() == 1;
+    ui_state_push(1, 0, 23000);
+    check("turning the held knob cancels the hold; another knob does not", ok);
+
+    /* A descriptor replaced mid-hold cancels it, even one that still has the same Action. */
+    load_styled(321, stopped_page, STOPPED_FIELDS);
+    sim_wire_reset();
+    ui_state_push(1, 1, 30000); ui_state_tick(30000);
+    ui_state_tick(30500);
+    xfer_t x;
+    xfer_begin(&x, 322, STOPPED_FIELDS);
+    for (uint16_t i = 0; i < STOPPED_FIELDS; i++) xfer_styled(&x, i, &stopped_page[i]);
+    xfer_end(&x, 0, 0);
+    ok = surf_applied_revision() == 322 && ui_state()->hold_slot < 0;
+    ui_state_tick(30000 + EMP_HOLD_MS); ui_state_tick(40000);
+    ok = ok && activations() == 0;
+    ui_state_push(1, 0, 40010);
+    check("a descriptor replaced mid-hold cancels it", ok);
+
+    /* Leaving for the device's own settings mid-hold cancels it too. */
+    sim_wire_reset();
+    ui_state_push(1, 1, 50000); ui_state_tick(50000);
+    ui_state_button(UI_BTN_SYSTEM, 1, 50100); ui_state_button(UI_BTN_SYSTEM, 0, 50110);
+    ok = ui_state()->mode == UI_MODE_SYSTEM;
+    ui_state_tick(50200);
+    ui_state_tick(50000 + EMP_HOLD_MS);
+    ok = ok && activations() == 0 && ui_state()->hold_slot < 0;
+    ui_state_push(1, 0, 52000);
+    ui_state_button(UI_BTN_BACK, 1, 52100); ui_state_button(UI_BTN_BACK, 0, 52110);
+    check("opening device settings mid-hold cancels it", ok);
+}
+
+static void test_hold_leaves_others_alone(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(330, stopped_page, STOPPED_FIELDS);
+    sim_wire_reset();
+
+    /* The stop still fires on its press edge, beside a HOLD. */
+    ui_state_push(0, 1, 10);
+    const sim_wire_msg_t *m = sim_wire_last(EMP_OP_ACTIVATE);
+    int ok = activations() == 1 && m && m->payload[12] == 0;
+    ui_state_push(0, 0, 11);
+    /* A plain Action too. */
+    ui_state_push(4, 1, 12);
+    m = sim_wire_last(EMP_OP_ACTIVATE);
+    ok = ok && activations() == 2 && m && m->payload[12] == 4;
+    ui_state_push(4, 0, 13);
+    ui_state_tick(5000);
+    ok = ok && activations() == 2 && ui_state()->hold_slot < 0;
+    check("estop and plain Action still fire on the press edge beside a HOLD", ok);
+
+    /* The stop's drilled exception is unchanged, and HOLD has none: drill a bottom-row field
+     * so the top row is the digit editor; the stop knob fires, the HOLD knob only exits. */
+    ui_state_push(5, 1, 100); ui_state_push(5, 0, 101);
+    ok = ui_state()->focused == 5 && ui_state()->digit_top;
+    sim_wire_reset();
+    ui_state_push(1, 1, 102);
+    ok = ok && activations() == 0 && ui_state()->focused < 0 && ui_state()->hold_slot < 0;
+    ui_state_tick(102 + EMP_HOLD_MS); ui_state_tick(9000);
+    ok = ok && activations() == 0;
+    ui_state_push(1, 0, 9001);
+    ui_state_push(5, 1, 9100); ui_state_push(5, 0, 9101);
+    ui_state_push(0, 1, 9102);
+    m = sim_wire_last(EMP_OP_ACTIVATE);
+    ok = ok && activations() == 1 && m && m->payload[12] == 0 && ui_state()->focused < 0;
+    ui_state_push(0, 0, 9103);
+    check("HOLD has no drilled-field exception; the stop keeps its own", ok);
+}
+
 /* ------------------------------------------------------------------ runner */
 
 int desc_run_selftests(desc_report_fn report)
@@ -1328,6 +1545,11 @@ int desc_run_selftests(desc_report_fn report)
     test_estop_press();
     test_top_left_slot();
     test_presentation_colours();
+
+    test_hold_decodes();
+    test_hold_fires_once();
+    test_hold_cancels();
+    test_hold_leaves_others_alone();
     sim_wire_set_peer_minor(EMP_VERSION_MINOR);
 
     report_fn = 0;

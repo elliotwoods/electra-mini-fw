@@ -214,8 +214,36 @@ static void status_tests(void)
     CHECK(count_colour(0,0,LCD_WIDTH,190,C_DANGER)>20);
     puts("  estop plate is the stop card; status tones repaint and match clean repaints");
 }
+/* EMP/1.7: HOLD TO CLEAR is an ordinary cell, not a stop plate. Its fill grows amber while held,
+ * turns green once sent, clears on release, and every step matches a clean repaint. */
+static void hold_tests(void)
+{
+    const int16_t cw=(LCD_WIDTH-24-18)/4, ch=184, y0=6, x1=(int16_t)(12+cw+6);
+    const int16_t fy=(int16_t)(y0+ch-12-16), fh=16;
+    clean();fixture_status_hold();ui_state_tick(100);ui_render();
+    CHECK(surf_field_is_hold(surf_field(1))&&ui_state_field_for(1)==1);
+    CHECK(count_colour(x1,y0,cw,ch,C_STOP)==0);
+    CHECK(count_colour(x1,fy,cw,fh,C_WARN)==0&&count_colour(x1,fy,cw,fh,C_OK)==0);
+    ui_state_push(1,1,100);ui_state_tick(100+EMP_HOLD_MS/2);ui_render();
+    unsigned half=count_colour(x1,fy,cw,fh,C_WARN);
+    CHECK(half>200&&count_colour(x1,fy,cw,fh,C_OK)==0);
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    ui_state_tick(100+EMP_HOLD_MS*9/10);ui_render();
+    CHECK(count_colour(x1,fy,cw,fh,C_WARN)>half);
+    ui_state_tick(100+EMP_HOLD_MS);ui_render();
+    CHECK(count_colour(x1,fy,cw,fh,C_WARN)==0&&count_colour(x1,fy,cw,fh,C_OK)>half);
+    CHECK(count_colour(x1,(int16_t)(y0+70),cw,60,C_OK)>20);           /* DONE */
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    ui_state_push(1,0,2000);ui_state_tick(2000);ui_render();
+    CHECK(count_colour(x1,fy,cw,fh,C_WARN)==0&&count_colour(x1,fy,cw,fh,C_OK)==0);
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    puts("  hold fill grows amber, turns green once sent, clears on release, matches clean repaints");
+}
 int main(void)
 {
-    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();status_tests();
+    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();status_tests();hold_tests();
     printf("%u graphics checks passed\n",checks);return 0;
 }
