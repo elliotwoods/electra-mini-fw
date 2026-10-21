@@ -177,6 +177,13 @@ int32_t ui_state_field_for(unsigned knob);
 int32_t ui_state_field_for_page(uint16_t first, unsigned knob);
 int32_t ui_state_knob_for(uint16_t slot);
 
+/* EMP/1.6 presentation, decided here rather than in ui.c so the choice is testable without a
+ * framebuffer. RGB565 theme colours. */
+uint16_t ui_tone_color(uint8_t tone);                    /* 0 for neutral: use the normal ink */
+uint16_t ui_cell_background(const surf_field_t *f);      /* C_STOP for an estop Action */
+uint16_t ui_value_color(const surf_field_t *f, int modified);
+uint16_t ui_meter_color(const surf_field_t *f);
+
 /* First knob index of the row currently acting as the digit editor, and of the row still
  * showing cells. Both are UI_DIGITS wide. Meaningless unless something is drilled. */
 unsigned ui_digit_row_first(void);

@@ -1,4 +1,4 @@
-# EMP/1 — Electra Mini Protocol v1.5
+# EMP/1 — Electra Mini Protocol v1.6
 
 Normative wire spec for `electra-mini-fw` ↔ `av-frameworks`. MUST / MUST NOT / SHOULD / MAY
 per RFC 2119. Both codecs (C in `src/proto/`, Rust in the host crate) are written against
@@ -113,7 +113,7 @@ implementation manages it anyway, the CRC fails and the seq gap is reported, so 
 | Name | Value |
 |---|---|
 | `EMP_MAGIC` | `0xE1` |
-| `EMP_VERSION` | major 1, minor 4 |
+| `EMP_VERSION` | major 1, minor 6 |
 | `EMP_HEADER_BYTES` | 8 |
 | `EMP_PREFIX_BYTES` | 8 |
 | `EMP_MTU_HID` / `EMP_MTU_BULK` | 56 / 1016 |
@@ -240,6 +240,7 @@ string: the field index for a truncated label, the tag for an unknown value tag,
 | `19` | `E_GRAPHICS_TIMEOUT` — bounded accelerator completion wait expired |
 | `20` | `E_GRAPHICS_FAULT` — accelerator initialization, command, memory, or bus failure |
 | `21` | `E_INPUT_QUEUE_OVERFLOW` — deferred input queue exhausted during rendering |
+| `22` | `E_STYLE_UNSUPPORTED` — EMP/1.6 style or tone refused and drawn as normal/neutral; context `(id << 8) \| value` |
 
 A device MUST NOT send `DIAG` from inside a decoder. Framing an outbound message part-way
 through an inbound one means building it from state the inbound parse is still walking, and on
@@ -251,6 +252,7 @@ of an image. Raise, then flush from the service loop.
 `0x20 DESC_BEGIN` · `0x21 DESC_FIELD` · `0x22 DESC_END` · `0x23 DESC_ABORT` ·
 `0x24 VALUES` · `0x25 REVEAL` · `0x26 TRANSPORT` · `0x27 CLEAR`
 · `0x28 HIGHLIGHT` (minor 3+) · `0x29 HIGHLIGHTS` (minor 4+) · `0x2A DEFAULTS` (minor 5+)
+· `0x2B TONED_VALUES` (minor 6+)
 
 **The descriptor is a transaction of per-field messages, not one giant message.** A 64-field
 descriptor becomes ~64 messages of 60–250 bytes, most single-fragment even at `mtu=56`. The
@@ -352,7 +354,8 @@ testing possible.
 
 **Field record**: `field_len` u16, `id` u16, `kind` u8, `flags` u8, `present` u16, `min` f64,
 `max` f64, `step` f64, `precision` u8, `lane` u8, `choice_count` u16, then `value`, `label`,
-`unit`, choices, optional `default`, optional `path`.
+`unit`, choices, optional `default`, optional `path`, then (minor 6+, `present & 0x0100`) the
+EMP/1.6 `style` u8 and `tone` u8 — see "EMP/1.6" below for the complete record layout.
 
 `min`/`max`/`step` are always on the wire with a presence bitmask, spending 24 bytes
 unconditionally to buy a fixed 36-byte prefix: one bounds check, one copy, no branchy offset
@@ -494,8 +497,9 @@ all existing descriptor, input and grid behaviour.
 The operator layout is an explicit slot contract, not automatic schema styling.
 This opt-in layout retains its original descriptor slot contract: slots 0–3 correspond
 to bottom knobs; 4–7 correspond to top knobs. Physical input indices remain top-first;
-the layout alone maps its semantic slots to those inputs. Generic descriptors always
-place slot 0 at the top left. Page 0 uses
+the layout alone maps its semantic slots to those inputs. Generic (non-operator) pages place the
+page's first slot at the top left only when 5–8 of its slots are occupied; with 1–4 the top row
+is empty and the lowest ID takes the bottom-left knob (§3.3, and EMP/1.6 below). Page 0 uses
 0 axis, 1 jog step, 2 speed, 3 observed position text (optionally followed by a newline and operation status), 4 jog minus, 5 jog plus,
 6 home, 7 stop. Press bottom-right for settings. Page 1 uses 8 route,
 9 acceleration, 10 minimum speed, 11 target, 12 move, 13 connection Boolean,
@@ -559,3 +563,110 @@ Reset and Store are offered only while the value differs from its default, mirro
 column, and Store only once minor 5 is negotiated. "Differs" for a number uses the host's
 tolerance, `|a - b| <= (|a| + |b|) * 1e-6 + 1e-9`, so an `f32` parameter's round trip through
 `f64` is not reported as a change.
+
+## EMP/1.6: field style and status tone
+
+Two presentation properties, negotiated like every minor: a host sends them only when HELLO
+negotiation selected minor 6 or newer. To an older peer the host encodes exactly as 1.5 (no
+`0x0100` presence bit, no trailing bytes, `VALUES` instead of `TONED_VALUES`), so older-minor
+traffic is byte-identical to what it was. Neither property changes what a control *does*.
+
+| Value | `style` | `tone` |
+|---|---|---|
+| 0 | `NORMAL` | `NEUTRAL` — the usual ink |
+| 1 | `ESTOP` — Action only | `OK` — green (`--ok` #34d399) |
+| 2 | | `WARN` — amber (`--warn-soft-text` #fbbf24) |
+| 3 | | `ALERT` — red (`--danger` #f87171) |
+
+### Descriptor: trailing members of the field record
+
+`EMP_PRESENT_STYLE = 0x0100` in `present` says the record ends with `style` u8, `tone` u8. The
+complete `DESC_FIELD` payload, offsets from the start of the message:
+
+| off | size | member |
+|---|---|---|
+| 0 | u16 | transaction `index` (not covered by the descriptor CRC) |
+| 2 | u16 | `field_len` — bytes after this member, i.e. to the end of the record (the device does not rely on it) |
+| 4 | u16 | `id` |
+| 6 | u8 | `kind` (5 = Action, 3 = ReadOnly, ...) |
+| 7 | u8 | `flags` (bit 1 `READONLY`) |
+| 8 | u16 | `present` (bit 8 `0x0100` = STYLE) |
+| 10 | f64 ×3 | `min`, `max`, `step` |
+| 34 | u8 | `precision` |
+| 35 | u8 | `lane` |
+| 36 | u16 | `choice_count` |
+| 38 | Value | current value (tag + body, §3.4) |
+| … | String | `label` |
+| … | String | `unit`, if `present & 0x0040` |
+| … | String ×`choice_count` | choice labels |
+| … | Value | `default`, if `present & 0x0010` |
+| … | String | `path`, if `present & 0x0020` (hosts do not send it; the device steps over it) |
+| … | u8 | **`style`**, if `present & 0x0100` |
+| … | u8 | **`tone`**, if `present & 0x0100` |
+
+`field_len` and the `DESC_END` CRC both cover the two new bytes. Example, the E-STOP Action at ID 0
+with no unit, choices or default: `…| 05 | 00 | 00 01 | <24 zero bytes> | 00 00 00 00 | 01 <f64 0.0>
+| 06 00 "E-STOP" | 01 00`.
+
+Device rules:
+
+- Negotiated minor < 6: the bit is cleared and the trailing bytes are left unread, as a 1.5 device
+  does. The descriptor is otherwise accepted.
+- Bit set but the two bytes missing: the record is truncated and the transaction is refused with
+  `DESC_REQUEST(SEQUENCE_BROKEN)`; the live descriptor is kept (as for any truncated record).
+- `style` > 1, or `style = ESTOP` on any kind but Action: the field loads, drawn `NORMAL`, with
+  `TRUNCATED` set and `DIAG{E_STYLE_UNSUPPORTED}`. A non-Action is never drawn as a stop, since it
+  cannot send one.
+- `tone` > 3: the field loads with tone `NEUTRAL`, `TRUNCATED` and the same DIAG. An unknown tone
+  is never mapped to the nearest known colour.
+- A tone is accepted on any kind but drawn only on ReadOnly fields and on fields currently showing
+  a Text value; on an editable number it would read as a range warning.
+
+### Host `0x2B TONED_VALUES` (channel 1, minor 6+)
+
+`revision u64 | count u16 | count × { id u16 | ack_edit u32 | tone u8 | Value }`
+
+`VALUES` (§3.2) with a `tone` u8 between `ack_edit` and the Value of every entry, so a status and its
+colour change in one message ("STOPPED" is never drawn for a frame in the green that meant
+"ARMED"). To change only a colour, resend the current value with the new tone. Rules:
+
+- Revision gate and `DESC_REQUEST(REVISION_UNKNOWN)` exactly as `VALUES`; nothing is applied.
+- Unknown `id`: the entry is skipped and the batch continues. Extension (`0x80+`) or non-finite
+  value: neither value nor tone changes for that entry; the batch continues. Reserved tag with no
+  length, or a truncated message: the batch stops there; earlier entries stay applied.
+- `tone` > 3: the value is applied, the tone becomes `NEUTRAL`, `DIAG{E_STYLE_UNSUPPORTED}`.
+- Echo suppression (§3.5) withholds only the value; the tone is applied regardless, since the
+  device never edits a tone.
+- Plain `VALUES` never changes a tone; a descriptor replacement resets it to the declared one.
+- A device whose negotiated minor is < 6 ignores the opcode, as a 1.5 device does.
+
+### Rendering and input
+
+- **ESTOP** Action, generic grid: the whole cell is the operator layout's stop plate (`C_STOP`,
+  `#652529`, a card like the operator STOP), the field label centred in white with `PRESS` beneath.
+  In the operator layout an estop Action on the action row takes the same red plate.
+- It fires on the knob's press edge with an ordinary 14-byte `ACTIVATE` (EMP/1.2), exactly like
+  any Action: turning, holding and releasing never fire it. One addition for the stop only: its
+  knob fires it even while another field is drilled — including when the drill has made its row
+  the digit editor and hidden it — and the drill is left so the stop is on screen. A plain Action
+  keeps the old rule (under the digit row its press only exits). Device-local system and
+  calibration views own the knobs; the stop does not fire there.
+- **Tone**: the value ink (and the read-only fader) of a ReadOnly or Text-valued cell, the large
+  drilled readout of such a field, and the operator layout's text readouts (slots 3 and 14) take the
+  tone colour. `NEUTRAL` keeps today's ink.
+- About 13 characters of status fit a generic cell in the UI face before the device shrinks and
+  then truncates with `~`; keep a status word short and put detail in a second field.
+
+### Which knob is top-left (generic pages)
+
+Physical knob 0 is top-left. On a generic (non-operator) page the device counts the occupied slots
+in the page's eight IDs `[first, first + 8)`:
+
+- **5–8 occupied:** reading order, knob `k` shows slot `first + k`. The page's first ID (ID 0 on
+  page 0) is top-left; if that ID is a hole, the top-left knob is empty.
+- **1–4 occupied:** the top row is empty; occupied IDs fill bottom knobs 4–7 left to right in
+  ascending ID order. Nothing is top-left.
+
+So a stop placed at ID 0 is top-left only when page 0 carries at least five fields (IDs need not
+be contiguous, but ID 0 must be occupied); with 2–4 fields it is bottom-left.
+

@@ -59,6 +59,9 @@ The integration currently provides:
 - Per-field undo, redo, reset-to-default and store-as-default, with the same glyphs and the same
   "only while modified" rule as the host inspector; modified values are marked on the panel;
   stable paging; and host-requested page reveal.
+- Per-field presentation (EMP/1.6): an Action can be drawn as a full-cell red stop button, and
+  read-only or text status fields carry an ok/warn/alert tone that the host can change together
+  with the value.
 - Transactional descriptor replacement. A failed or partial update never replaces the live
   surface, and session IDs make device resets visible to the host.
 - Device and link diagnostics through EMP/1 heartbeats, counters, and structured diagnostic
@@ -245,7 +248,9 @@ the project's MIT license and must be retained when redistributing those assets.
 The vendor-bulk application now also opens through IOKit (no kernel extension).
 Install Python `pyserial` and `Pillow`; Xcode command-line tools provide `cc`.
 `python3 tools/host.py test` runs the portable C suites;
-`python3 tools/host.py sim operator` renders the actual operator UI code to PNG.
+`python3 tools/host.py sim operator` renders the actual operator UI code to PNG
+(`sim status` and `sim status-stopped` show the EMP/1.6 stop button and status tones);
+`python3 tools/deploy/emp.py --selftest` checks the reference host encoders without a device.
 The existing `tools/deploy/flash_usb.py build/app.srec` and `screenshot.py`
 commands select IOKit on macOS and WinUSB on Windows. The updater releases the
 av-frameworks daemon handle through maintenance mode, verifies the image CRC,

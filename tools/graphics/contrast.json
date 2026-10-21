@@ -21,7 +21,9 @@
     "LIVE": 11959,
     "DANGER": 64398,
     "STOP": 24869,
-    "INDICATOR": 40213
+    "INDICATOR": 40213,
+    "OK": 13971,
+    "WARN": 64996
   },
   "checks": [
     {
@@ -191,6 +193,78 @@
       "bg": "CELL_DOWN",
       "minimum": 3,
       "ratio": 5.426
+    },
+    {
+      "fg": "OK",
+      "bg": "BG",
+      "minimum": 4.5,
+      "ratio": 9.609
+    },
+    {
+      "fg": "OK",
+      "bg": "CELL",
+      "minimum": 4.5,
+      "ratio": 8.834
+    },
+    {
+      "fg": "OK",
+      "bg": "CELL_HOT",
+      "minimum": 4.5,
+      "ratio": 8.035
+    },
+    {
+      "fg": "OK",
+      "bg": "CELL_DOWN",
+      "minimum": 4.5,
+      "ratio": 7.215
+    },
+    {
+      "fg": "WARN",
+      "bg": "BG",
+      "minimum": 4.5,
+      "ratio": 11.18
+    },
+    {
+      "fg": "WARN",
+      "bg": "CELL",
+      "minimum": 4.5,
+      "ratio": 10.279
+    },
+    {
+      "fg": "WARN",
+      "bg": "CELL_HOT",
+      "minimum": 4.5,
+      "ratio": 9.349
+    },
+    {
+      "fg": "WARN",
+      "bg": "CELL_DOWN",
+      "minimum": 4.5,
+      "ratio": 8.396
+    },
+    {
+      "fg": "DANGER",
+      "bg": "BG",
+      "minimum": 4.5,
+      "ratio": 6.957
+    },
+    {
+      "fg": "DANGER",
+      "bg": "CELL",
+      "minimum": 4.5,
+      "ratio": 6.396
+    },
+    {
+      "fg": "DANGER",
+      "bg": "CELL_HOT",
+      "minimum": 4.5,
+      "ratio": 5.817
+    },
+    {
+      "fg": "DANGER",
+      "bg": "CELL_DOWN",
+      "minimum": 4.5,
+      "ratio": 5.224
     },
     {
       "fg": "BG",

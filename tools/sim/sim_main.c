@@ -127,6 +127,12 @@ int main(int argc, char **argv)
         ui_render();
     }
     else if (strcmp(scene,"holes")==0) {fixture_sparse(4,1);ui_render();}
+    /* EMP/1.6: estop plate top-left, status tones. status-stopped re-tones via TONED_VALUES. */
+    else if (strcmp(scene,"status")==0) {fixture_status(EMP_TONE_OK,"ARMED - 2/2 nodes");ui_render();}
+    else if (strcmp(scene,"status-stopped")==0) {fixture_status(EMP_TONE_OK,"ARMED - 2/2 nodes");ui_render();
+        fixture_toned_text(1,EMP_TONE_ALERT,"STOPPED - control surface");ui_render();}
+    else if (strcmp(scene,"status-press")==0) {fixture_status(EMP_TONE_WARN,"NO ORCHESTRATOR");ui_render();
+        ui_state_touch(1,100);ui_state_push(0,1,120);ui_render();}
     else if (strcmp(scene, "specimen") == 0) scene_specimen();
     else if (strcmp(scene,"operator-settings")==0) {surf_demo_operator();ui_state_init();ui_state_reveal(8);ui_render();}
     else if (strcmp(scene,"operator-settings-press")==0) {surf_demo_operator();ui_state_init();ui_state_reveal(8);ui_state_touch(1,100);ui_state_push(0,1,120);ui_render();}

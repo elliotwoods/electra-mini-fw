@@ -2,6 +2,7 @@
 
 #include <string.h>
 #include "ui_state.h"
+#include "theme.h"
 #include "history.h"
 
 static ui_state_t st;
@@ -327,6 +328,16 @@ void ui_state_push(unsigned pot, int pressed, uint32_t now_ms)
         return;
     }
     if (st.focused >= 0) {
+        /* EMP/1.6: a stop button is never a digit or an exit. Its knob fires it even while another
+         * field is drilled -- including when the drill has turned its row into the digit editor
+         * and hidden it -- and the drill is left so the panel shows the stop that was sent. A
+         * stop that needs two presses because of where the hand was last is not a stop. */
+        int32_t hit = ui_state_field_for(pot);
+        if (hit >= 0 && surf_field_is_estop(surf_field((uint16_t)hit))) {
+            leave_focus();
+            surf_activate((uint16_t)hit);
+            return;
+        }
         /* While drilled, the digit row's knobs are digit controls, so pressing one means "done
          * here". The other row still addresses its own fields, so pressing one of those moves
          * to that field instead of leaving, which is what you want when comparing two. */
@@ -761,4 +772,44 @@ void ui_state_brightness_save_result(int success)
     } else {
         st.brightness_save_error = 1;
     }
+}
+
+/* ------------------------------------------------------------------ EMP/1.6 presentation */
+
+uint16_t ui_tone_color(uint8_t tone)
+{
+    switch (tone) {
+    case EMP_TONE_OK:    return C_OK;
+    case EMP_TONE_WARN:  return C_WARN;
+    case EMP_TONE_ALERT: return C_DANGER;
+    default:             return 0;
+    }
+}
+
+/* A tone is a status colour, so it is drawn where a status is: on read-only fields and on
+ * anything currently showing text. On a knob's own number it would read as a range warning. */
+static uint16_t field_tone(const surf_field_t *f)
+{
+    if (!f || (f->kind != EMP_KIND_READONLY && f->value_tag != EMP_VAL_TEXT)) return 0;
+    return ui_tone_color(f->tone);
+}
+
+uint16_t ui_cell_background(const surf_field_t *f)
+{
+    return surf_field_is_estop(f) ? C_STOP : C_CELL;
+}
+
+uint16_t ui_value_color(const surf_field_t *f, int modified)
+{
+    uint16_t tone = field_tone(f);
+    if (tone) return tone;
+    if (f && f->kind == EMP_KIND_READONLY) return C_VALUE;
+    return modified ? C_ACCENT : C_VALUE;
+}
+
+uint16_t ui_meter_color(const surf_field_t *f)
+{
+    uint16_t tone = field_tone(f);
+    if (tone) return tone;
+    return (f && f->kind == EMP_KIND_READONLY) ? C_TITLE : C_ACCENT;
 }

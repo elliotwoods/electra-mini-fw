@@ -23,4 +23,6 @@
 #define C_DANGER       0xFB8Eu /* --danger #f87171 */
 #define C_STOP         0x6125u /* --danger-strong #ef4444 */
 #define C_INDICATOR    0x9D15u /* --text-muted #9aa0a8 */
+#define C_OK           0x3693u /* --ok #34d399 */
+#define C_WARN         0xFDE4u /* --warn-soft-text #fbbf24 */
 #endif

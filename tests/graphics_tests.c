@@ -170,8 +170,52 @@ static void layout_tests(void)
     CHECK(text_width(&font_compact,"111111")==text_width(&font_compact,"888888"));
     puts("  sparse pages, lower-row placement, long suffixes, negative and read-only fixtures passed");
 }
+static unsigned count_colour(int16_t x,int16_t y,int16_t w,int16_t h,uint16_t c)
+{
+    unsigned n=0;
+    for(int16_t j=y;j<y+h;j++)for(int16_t i=x;i<x+w;i++) if(sim_framebuffer()[j*LCD_WIDTH+i]==c) n++;
+    return n;
+}
+/* EMP/1.6: the estop plate is the operator stop card, full cell; tones are the status ink. */
+static void status_tests(void)
+{
+    const int16_t cw=(LCD_WIDTH-24-18)/4, ch=184, x0=12, y0=6, x1=(int16_t)(12+cw+6);
+    clean();fixture_status(EMP_TONE_OK,"ARMED");ui_render();
+    gfx_paint_t stop={C_STOP,gfx_blend(C_BG,C_STOP,212),{x0,y0,cw,ch},0};
+    gfx_paint_t cell={C_CELL,gfx_blend(C_BG,C_CELL,212),{x1,y0,cw,ch},0};
+    CHECK(ui_state_field_for(0)==0&&surf_field_is_estop(surf_field(0)));
+    CHECK(sim_framebuffer()[(y0+ch-20)*LCD_WIDTH+x0+20]==gfx_sample(stop,(int16_t)(x0+20),(int16_t)(y0+ch-20)));
+    CHECK(sim_framebuffer()[(y0+ch-20)*LCD_WIDTH+x0+cw-20]==gfx_sample(stop,(int16_t)(x0+cw-20),(int16_t)(y0+ch-20)));
+    CHECK(sim_framebuffer()[(y0+20)*LCD_WIDTH+x0+cw/2]==gfx_sample(stop,(int16_t)(x0+cw/2),(int16_t)(y0+20)));
+    CHECK(sim_framebuffer()[(y0+ch-20)*LCD_WIDTH+x1+20]==gfx_sample(cell,(int16_t)(x1+20),(int16_t)(y0+ch-20)));
+    CHECK(count_colour(x0,y0,cw,ch,C_VALUE)>50);                    /* the white label and PRESS */
+    /* Status ink: green, then red after TONED_VALUES, and nothing left of the green. */
+    CHECK(count_colour(x1,(int16_t)(y0+70),cw,ch-72,C_OK)>20);
+    CHECK(count_colour(x1,(int16_t)(y0+70),cw,ch-72,C_DANGER)==0);
+    fixture_toned_text(1,EMP_TONE_ALERT,"STOPPED");ui_render();
+    CHECK(count_colour(x1,(int16_t)(y0+70),cw,ch-72,C_DANGER)>20);
+    CHECK(count_colour(x1,(int16_t)(y0+70),cw,ch-72,C_OK)==0);
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    /* A tone-only change repaints too. */
+    fixture_toned_text(1,EMP_TONE_WARN,"STOPPED");ui_render();
+    CHECK(count_colour(x1,(int16_t)(y0+70),cw,ch-72,C_WARN)>20);
+    CHECK(count_colour(x1,(int16_t)(y0+70),cw,ch-72,C_DANGER)==0);
+    /* Pressing and releasing the stop puts back red, not grey, and matches a clean repaint. */
+    ui_state_touch(1,100);ui_state_push(0,1,120);ui_render();
+    CHECK(sim_framebuffer()[(y0+ch-20)*LCD_WIDTH+x0+20]==gfx_sample(stop,(int16_t)(x0+20),(int16_t)(y0+ch-20)));
+    ui_state_push(0,0,140);ui_state_touch(0,160);ui_render();
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    CHECK(sim_framebuffer()[(y0+4)*LCD_WIDTH+x0+40]!=C_CELL);
+    /* Drilled into a status readout, its large text carries the tone. */
+    ui_state_push(4,1,200);ui_state_push(4,0,220);ui_render();
+    CHECK(ui_state()->focused==4);
+    CHECK(count_colour(0,0,LCD_WIDTH,190,C_DANGER)>20);
+    puts("  estop plate is the stop card; status tones repaint and match clean repaints");
+}
 int main(void)
 {
-    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();
+    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();status_tests();
     printf("%u graphics checks passed\n",checks);return 0;
 }

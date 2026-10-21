@@ -29,6 +29,7 @@ OP = {
     0x05: "HEARTBEAT", 0x06: "DIAG", 0x07: "FLOW", 0x08: "BYE",
     0x0E: "ECHO", 0x0F: "ECHO_REPLY",
     0x20: "DESC_BEGIN", 0x21: "DESC_FIELD", 0x22: "DESC_END", 0x24: "VALUES",
+    0x2B: "TONED_VALUES", 0x59: "ACTIVATE",
     0x50: "EDIT", 0x53: "SCREEN", 0x54: "FOCUS", 0x55: "DESC_REQUEST", 0x56: "EDIT_DELTA",
     0x57: "DESC_ACK", 0x58: "BUTTON",
 }
@@ -36,6 +37,7 @@ OP_HELLO, OP_READY, OP_PING, OP_PONG = 0x01, 0x02, 0x03, 0x04
 OP_HEARTBEAT, OP_ECHO, OP_ECHO_REPLY = 0x05, 0x0E, 0x0F
 OP_DESC_BEGIN, OP_DESC_FIELD, OP_DESC_END = 0x20, 0x21, 0x22
 OP_VALUES = 0x24
+OP_TONED_VALUES = 0x2B          # EMP/1.6, minor 6+ only
 OP_EDIT, OP_SCREEN, OP_FOCUS, OP_DESC_REQUEST = 0x50, 0x53, 0x54, 0x55
 OP_EDIT_DELTA, OP_DESC_ACK, OP_BUTTON = 0x56, 0x57, 0x58
 CH_SURFACE, CH_INPUT = 1, 2
@@ -44,8 +46,13 @@ CH_SURFACE, CH_INPUT = 1, 2
 # them on both sides. A wire constant that lives in only one implementation is a latent bug.
 PRESENT_MIN, PRESENT_MAX, PRESENT_STEP = 0x0001, 0x0002, 0x0004
 PRESENT_PRECISION, PRESENT_UNIT = 0x0008, 0x0040
+PRESENT_STYLE = 0x0100          # EMP/1.6: trailing style u8 + tone u8
 KIND_TOGGLE, KIND_NUMBER, KIND_CHOICE = 0, 1, 2
-VAL_BOOL, VAL_NUMBER, VAL_CHOICE = 0x00, 0x01, 0x02
+KIND_READONLY, KIND_ACTION = 3, 5
+VAL_BOOL, VAL_NUMBER, VAL_CHOICE, VAL_TEXT = 0x00, 0x01, 0x02, 0x03
+FIELD_READONLY = 0x02
+STYLE_NORMAL, STYLE_ESTOP = 0, 1
+TONE_NEUTRAL, TONE_OK, TONE_WARN, TONE_ALERT = 0, 1, 2, 3
 
 
 def crc32c(data: bytes) -> int:
@@ -177,38 +184,88 @@ def parse_screen(p: bytes) -> dict:
     return {"revision": r.u64(p), "first_index": r.u16(p), "visible_count": r.u16(p)}
 
 
+def _string(text):
+    b = text.encode("utf-8")
+    return struct.pack("<H", len(b)) + b
+
+
+def _value(kind, value):
+    if isinstance(value, str):
+        return struct.pack("<B", VAL_TEXT) + _string(value)
+    if kind == KIND_TOGGLE:
+        return struct.pack("<BB", VAL_BOOL, 1 if value else 0)
+    if kind == KIND_CHOICE:
+        return struct.pack("<BI", VAL_CHOICE, int(value))
+    return struct.pack("<Bd", VAL_NUMBER, float(value))
+
+
 def field_record(fid, kind, label, value, lo=None, hi=None, step=None,
-                 precision=None, unit=None, lane=0):
+                 precision=None, unit=None, lane=0, style=None, tone=None):
     """One DESC_FIELD body: everything after the u16 index.
 
     min/max/step always ride on the wire with a presence mask saying which are meaningful — 24
     bytes spent to buy a fixed-size prefix, so a bare-metal parser does one bounds check rather
-    than branchy offset arithmetic."""
+    than branchy offset arithmetic.
+
+    `style`/`tone` (EMP/1.6) append the trailing style u8 + tone u8 and set PRESENT_STYLE. Pass
+    them only to a device that negotiated minor 6 or later; leaving both None produces exactly
+    the bytes this function produced before 1.6 (see selftest())."""
     present = 0
     if lo is not None: present |= PRESENT_MIN
     if hi is not None: present |= PRESENT_MAX
     if step is not None: present |= PRESENT_STEP
     if precision is not None: present |= PRESENT_PRECISION
     if unit is not None: present |= PRESENT_UNIT
+    styled = style is not None or tone is not None
+    if styled: present |= PRESENT_STYLE
 
-    body = struct.pack("<HBBH", fid, kind, 0, present)
+    flags = FIELD_READONLY if kind == KIND_READONLY else 0
+    body = struct.pack("<HBBH", fid, kind, flags, present)
     body += struct.pack("<ddd", lo or 0.0, hi or 0.0, step or 0.0)
     body += struct.pack("<BBH", precision or 0, lane, 0)
-
-    if kind == KIND_TOGGLE:
-        body += struct.pack("<BB", VAL_BOOL, 1 if value else 0)
-    elif kind == KIND_CHOICE:
-        body += struct.pack("<BI", VAL_CHOICE, int(value))
-    else:
-        body += struct.pack("<Bd", VAL_NUMBER, float(value))
-
-    lb = label.encode("utf-8")
-    body += struct.pack("<H", len(lb)) + lb
+    body += _value(kind, value)
+    body += _string(label)
     if unit is not None:
-        ub = unit.encode("utf-8")
-        body += struct.pack("<H", len(ub)) + ub
+        body += _string(unit)
+    if styled:
+        body += struct.pack("<BB", style or STYLE_NORMAL, tone or TONE_NEUTRAL)
 
     return struct.pack("<H", len(body) + 2) + body
+
+
+def toned_values(revision, entries):
+    """EMP/1.6 TONED_VALUES payload (minor 6+): entries are (id, ack_edit, tone, value).
+
+    VALUES with a tone u8 between ack_edit and the Value, so a status and its colour change in
+    one message. A str value is Text, anything else a Number."""
+    out = struct.pack("<QH", revision, len(entries))
+    for fid, ack, tone, value in entries:
+        out += struct.pack("<HIB", fid, ack, tone) + _value(KIND_READONLY, value)
+    return out
+
+
+def selftest():
+    """Encoder checks against bytes laid out by hand from docs/protocol.md; no device needed."""
+    assert crc32c(b"123456789") == 0xE3069283
+    # Pre-1.6 encodings, pinned before 1.6 was added: must stay byte-identical.
+    assert field_record(1, KIND_NUMBER, "Cutoff", 0.5, lo=0.0, hi=1.0, step=0.01,
+                        unit="Hz").hex() == (
+        "39000100010047000000000000000000000000000000f03f7b14ae47e17a843f0000000001"
+        "000000000000e03f06004375746f66660200487a")
+    assert field_record(3, KIND_TOGGLE, "Bypass", 0).hex() == (
+        "2e000300000000000000000000000000000000000000000000000000000000000000000000"
+        "000600427970617373")
+    # 1.6: the stop and a toned status readout.
+    stop = field_record(0, KIND_ACTION, "E-STOP", 0.0, style=STYLE_ESTOP)
+    assert stop[4] == KIND_ACTION and struct.unpack_from("<H", stop, 6)[0] == PRESENT_STYLE
+    assert stop.endswith(_string("E-STOP") + bytes([STYLE_ESTOP, TONE_NEUTRAL]))
+    status = field_record(1, KIND_READONLY, "Orchestrator", "ARMED", tone=TONE_OK)
+    assert status[5] == FIELD_READONLY
+    assert status[36:] == (bytes([VAL_TEXT]) + _string("ARMED") + _string("Orchestrator")
+                           + bytes([STYLE_NORMAL, TONE_OK]))
+    assert toned_values(7, [(1, 0, TONE_ALERT, "STOPPED")]) == (
+        struct.pack("<QHHIBB", 7, 1, 1, 0, TONE_ALERT, VAL_TEXT) + _string("STOPPED"))
+    print("emp.py encoder selftest passed")
 
 
 def parse_edit(p: bytes) -> dict:
@@ -294,7 +351,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port")
     ap.add_argument("--listen", type=float, default=0)
+    ap.add_argument("--selftest", action="store_true",
+                    help="check the encoders against pinned bytes; opens no device")
     args = ap.parse_args()
+
+    if args.selftest:
+        selftest()
+        return
 
     assert crc32c(b"123456789") == 0xE3069283, "CRC-32C does not match the pinned vector"
 

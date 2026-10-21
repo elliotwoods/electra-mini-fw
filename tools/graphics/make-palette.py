@@ -9,7 +9,8 @@ names = {'BG':'surface','CELL':'surface-raised','CELL_HOT':'surface-disabled',
  'CELL_DOWN':'border','OUTLINE':'border-strong','TITLE':'text-secondary','ICON':'text',
  'NAV':'accent','VALUE':'text','UNIT':'text-secondary','ACCENT':'accent','TRACK':'surface-sunken',
  'DIM':'text-secondary','DISABLED':'text-faint','TOGGLE_ON':'accent-live','ALERT':'warn-soft-text',
- 'LINK':'text-muted','LIVE':'accent-live','DANGER':'danger','STOP':'danger-strong','INDICATOR':'text-muted'}
+ 'LINK':'text-muted','LIVE':'accent-live','DANGER':'danger','STOP':'danger-strong','INDICATOR':'text-muted',
+ 'OK':'ok','WARN':'warn-soft-text'}
 def rgb565(s):
     v=int(s[1:],16); return ((v>>19)<<11)|(((v>>10)&63)<<5)|((v>>3)&31)
 def rgb(c): return [(c>>11)/31, ((c>>5)&63)/63, (c&31)/31]
@@ -22,7 +23,9 @@ colours={k:rgb565(tokens[v]) for k,v in names.items()}
 # Dark danger plate derived from --danger at 36% over --surface; white text remains readable.
 colours['STOP'] = rgb565('#652529')
 checks=[]
-for fg,minimum in [('VALUE',7),('TITLE',4.5),('UNIT',4.5),('ACCENT',3),('LIVE',4.5),('ALERT',4.5),('INDICATOR',3)]:
+# EMP/1.6 status tones (ok, warn, alert=DANGER) are value ink, so they meet the text minimum.
+for fg,minimum in [('VALUE',7),('TITLE',4.5),('UNIT',4.5),('ACCENT',3),('LIVE',4.5),('ALERT',4.5),('INDICATOR',3),
+                   ('OK',4.5),('WARN',4.5),('DANGER',4.5)]:
     for bg in ['BG','CELL','CELL_HOT','CELL_DOWN']:
         ratio=contrast(colours[fg],colours[bg]); assert ratio>=minimum,(fg,bg,ratio)
         checks.append(dict(fg=fg,bg=bg,minimum=minimum,ratio=round(ratio,3)))

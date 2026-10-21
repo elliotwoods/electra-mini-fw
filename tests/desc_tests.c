@@ -23,6 +23,7 @@
 #include "ui_state.h"
 #include "sim_wire.h"
 #include "diag.h"
+#include "theme.h"
 
 typedef void (*desc_report_fn)(const char *name, int passed);
 
@@ -967,6 +968,317 @@ static void test_defaults_store_and_reset(void)
     check("defaults update in place; store and reset follow the modified state", ok);
 }
 
+/* ------------------------------------------------------------------ EMP/1.6 style and tone
+ *
+ * Laid out by hand from docs/protocol.md "EMP/1.6", like everything above: the trailing
+ * `style` u8 + `tone` u8 sit after the default (none here) and after `path` when present, and
+ * `field_len` counts every byte after itself, as the host encoder computes it. */
+
+typedef struct {
+    uint16_t    id;
+    uint8_t     kind;
+    const char *label;
+    const char *text;         /* Text value when set, else Number `number` */
+    double      number;
+    int         styled;       /* set EMP_PRESENT_STYLE and append style + tone */
+    uint8_t     style, tone;
+    const char *path;         /* EMP_PRESENT_PATH, stepped over by the device */
+    int         cut;          /* declare the style but leave its bytes off: a truncated record */
+} sfield_t;
+
+static void styled_record(buf_t *b, uint16_t index, const sfield_t *s)
+{
+    b_init(b);
+    b16(b, index);
+    uint32_t len_at = b->n;
+    b16(b, 0);                                    /* field_len, patched below */
+    b16(b, s->id);
+    b8(b, s->kind);
+    b8(b, s->kind == EMP_KIND_READONLY ? EMP_FIELD_READONLY : 0u);
+    uint16_t present = 0;
+    if (s->styled) present |= EMP_PRESENT_STYLE;
+    if (s->path)   present |= EMP_PRESENT_PATH;
+    b16(b, present);
+    bf64(b, 0.0); bf64(b, 0.0); bf64(b, 0.0);    /* min, max, step */
+    b8(b, 0); b8(b, 0); b16(b, 0);                /* precision, lane, choice_count */
+    if (s->text) { b8(b, EMP_VAL_TEXT); bstr(b, s->text); }
+    else         { b8(b, EMP_VAL_NUMBER); bf64(b, s->number); }
+    bstr(b, s->label);
+    if (s->path) bstr(b, s->path);
+    if (s->styled && !s->cut) { b8(b, s->style); b8(b, s->tone); }
+    uint16_t field_len = (uint16_t)(b->n - len_at - 2u);
+    b->b[len_at] = (uint8_t)field_len; b->b[len_at + 1] = (uint8_t)(field_len >> 8);
+}
+
+static void xfer_styled(xfer_t *x, uint16_t index, const sfield_t *s)
+{
+    buf_t b;
+    styled_record(&b, index, s);
+    x->crc = emp_crc32c_update(x->crc, b.b + 2, b.n - 2);
+    x->count++;
+    surf_handle(EMP_OP_DESC_FIELD, b.b, b.n);
+}
+
+static void load_styled(uint64_t revision, const sfield_t *fields, uint16_t n)
+{
+    xfer_t x;
+    surf_init(); ui_state_init(); emp_diag_reset(); sim_wire_reset();
+    xfer_begin(&x, revision, n);
+    for (uint16_t i = 0; i < n; i++) xfer_styled(&x, i, &fields[i]);
+    xfer_end(&x, 0, 0);
+}
+
+/* The status page the av-fleet daemon is expected to send: a stop top-left, a status readout. */
+static const sfield_t status_page[] = {
+    { 0, EMP_KIND_ACTION,   "E-STOP",       0,       0.0, 1, EMP_STYLE_ESTOP,  EMP_TONE_NEUTRAL, 0, 0 },
+    { 1, EMP_KIND_READONLY, "Orchestrator", "ARMED", 0.0, 1, EMP_STYLE_NORMAL, EMP_TONE_OK,      0, 0 },
+    { 2, EMP_KIND_READONLY, "Nodes",        0,       2.0, 1, EMP_STYLE_NORMAL, EMP_TONE_WARN,    0, 0 },
+    { 3, EMP_KIND_NUMBER,   "Brightness",   0,       0.5, 0, 0, 0,                               0, 0 },
+    { 4, EMP_KIND_ACTION,   "Identify",     0,       0.0, 1, EMP_STYLE_NORMAL, EMP_TONE_NEUTRAL, 0, 0 },
+    { 5, EMP_KIND_READONLY, "Last stop",    "none",  0.0, 1, EMP_STYLE_NORMAL, EMP_TONE_ALERT,
+         "/fleet/last_stop", 0 },
+};
+#define STATUS_FIELDS ((uint16_t)(sizeof(status_page) / sizeof(status_page[0])))
+
+static void test_style_and_tone_decode(void)
+{
+    load_styled(160, status_page, STATUS_FIELDS);
+    const surf_field_t *stop = surf_field(0), *armed = surf_field(1), *nodes = surf_field(2);
+    const surf_field_t *plain = surf_field(3), *action = surf_field(4), *last = surf_field(5);
+    int ok = surf_applied_revision() == 160 && surf_field_count() == STATUS_FIELDS;
+    ok = ok && stop && stop->style == EMP_STYLE_ESTOP && surf_field_is_estop(stop)
+            && !(stop->flags & EMP_FIELD_TRUNCATED) && label_is(0, "E-STOP");
+    ok = ok && armed && armed->tone == EMP_TONE_OK && strcmp(armed->text, "ARMED") == 0;
+    ok = ok && nodes && nodes->tone == EMP_TONE_WARN && nodes->number == 2.0;
+    ok = ok && plain && plain->style == 0 && plain->tone == 0 && !surf_field_is_estop(plain);
+    ok = ok && action && !surf_field_is_estop(action);
+    /* `path` is stepped over and the style after it still lands; the label is not the path. */
+    ok = ok && last && last->tone == EMP_TONE_ALERT && label_is(5, "Last stop")
+            && !(last->flags & EMP_FIELD_TRUNCATED);
+    check("1.6 style and tone decode, after path when present", ok);
+}
+
+static void test_style_validation(void)
+{
+    static const sfield_t bad[] = {
+        { 0, EMP_KIND_ACTION,   "Odd style",   0, 0.0, 1, 2u,              0,  0, 0 },
+        { 1, EMP_KIND_NUMBER,   "Not an action",0, 0.5, 1, EMP_STYLE_ESTOP, 0,  0, 0 },
+        { 2, EMP_KIND_READONLY, "Odd tone",    "x", 0.0, 1, 0,              9u, 0, 0 },
+    };
+    load_styled(161, bad, 3);
+    emp_diag_tick();
+    uint32_t ctx = 0, count = 0;
+    int ok = surf_applied_revision() == 161;
+    ok = ok && surf_field(0)->style == EMP_STYLE_NORMAL && (surf_field(0)->flags & EMP_FIELD_TRUNCATED);
+    ok = ok && surf_field(1)->style == EMP_STYLE_NORMAL && !surf_field_is_estop(surf_field(1))
+            && (surf_field(1)->flags & EMP_FIELD_TRUNCATED);
+    ok = ok && surf_field(2)->tone == EMP_TONE_NEUTRAL && (surf_field(2)->flags & EMP_FIELD_TRUNCATED);
+    ok = ok && diag_seen(EMP_DIAG_STYLE_UNSUPPORTED, &ctx, &count) && ctx == ((0u << 8) | 2u)
+            && count == 3;
+    check("unknown style/tone and estop on a non-Action degrade with a diagnostic", ok);
+
+    /* A declared style with its bytes missing is a truncated record: refused, live kept. */
+    load_styled(162, status_page, STATUS_FIELDS);
+    sfield_t cut = status_page[0];
+    cut.cut = 1;
+    xfer_t x;
+    sim_wire_reset();
+    xfer_begin(&x, 163, 1);
+    xfer_styled(&x, 0, &cut);
+    xfer_end(&x, 0, 0);
+    check("a style member cut short refuses the descriptor and keeps the live one",
+          surf_applied_revision() == 162 && last_request_reason() == EMP_REQ_SEQUENCE_BROKEN
+          && surf_field_is_estop(surf_field(0)));
+}
+
+static void toned_text(buf_t *b, uint16_t id, uint32_t ack, uint8_t tone, const char *text)
+{
+    b16(b, id); b32(b, ack); b8(b, tone); b8(b, EMP_VAL_TEXT); bstr(b, text);
+}
+
+static void test_toned_values(void)
+{
+    load_styled(170, status_page, STATUS_FIELDS);
+    buf_t b;
+
+    /* Text and tone change together, in one entry. */
+    b_init(&b); b64(&b, 170); b16(&b, 2);
+    toned_text(&b, 1, 0, EMP_TONE_ALERT, "STOPPED");
+    b16(&b, 2); b32(&b, 0); b8(&b, EMP_TONE_OK); b8(&b, EMP_VAL_NUMBER); bf64(&b, 3.0);
+    surf_handle(EMP_OP_TONED_VALUES, b.b, b.n);
+    int ok = strcmp(surf_field(1)->text, "STOPPED") == 0 && surf_field(1)->tone == EMP_TONE_ALERT
+          && surf_field(2)->number == 3.0 && surf_field(2)->tone == EMP_TONE_OK;
+    check("TONED_VALUES sets value and tone together", ok);
+
+    /* Plain VALUES never touches a tone. */
+    b_init(&b); b64(&b, 170); b16(&b, 1);
+    b16(&b, 1); b32(&b, 0); b8(&b, EMP_VAL_TEXT); bstr(&b, "ARMED");
+    surf_handle(EMP_OP_VALUES, b.b, b.n);
+    check("VALUES leaves the tone where it was",
+          strcmp(surf_field(1)->text, "ARMED") == 0 && surf_field(1)->tone == EMP_TONE_ALERT);
+
+    /* Revision gate, as VALUES. */
+    sim_wire_reset();
+    b_init(&b); b64(&b, 999); b16(&b, 1);
+    toned_text(&b, 1, 0, EMP_TONE_OK, "LIVE");
+    surf_handle(EMP_OP_TONED_VALUES, b.b, b.n);
+    check("TONED_VALUES at an unknown revision is refused with DESC_REQUEST",
+          strcmp(surf_field(1)->text, "ARMED") == 0 && surf_field(1)->tone == EMP_TONE_ALERT
+          && last_request_reason() == EMP_REQ_REVISION_UNKNOWN);
+
+    /* An unknown tone: value applied, tone neutral, reported. An extension value: neither
+     * changes, and the batch goes on. An unknown id: skipped. */
+    emp_diag_reset(); sim_wire_reset();
+    static const uint8_t ext[] = { 0x02, 0x00, 0xAA, 0xBB };
+    b_init(&b); b64(&b, 170); b16(&b, 4);
+    toned_text(&b, 1, 0, 7u, "ODD");
+    b16(&b, 2); b32(&b, 0); b8(&b, EMP_TONE_ALERT); b8(&b, 0x81u);
+    for (unsigned i = 0; i < sizeof(ext); i++) b8(&b, ext[i]);
+    toned_text(&b, 40, 0, EMP_TONE_OK, "nobody");
+    toned_text(&b, 5, 0, EMP_TONE_WARN, "control surface");
+    surf_handle(EMP_OP_TONED_VALUES, b.b, b.n);
+    emp_diag_tick();
+    uint32_t ctx = 0;
+    ok = strcmp(surf_field(1)->text, "ODD") == 0 && surf_field(1)->tone == EMP_TONE_NEUTRAL
+      && surf_field(2)->number == 3.0 && surf_field(2)->tone == EMP_TONE_OK
+      && strcmp(surf_field(5)->text, "control surface") == 0 && surf_field(5)->tone == EMP_TONE_WARN
+      && diag_seen(EMP_DIAG_STYLE_UNSUPPORTED, &ctx, 0) && ctx == ((1u << 8) | 7u);
+    check("TONED_VALUES: unknown tone neutral, skipped value keeps tone, batch continues", ok);
+}
+
+/* Byte identity with 1.5: a peer that negotiated less than 6 never set the bit and never sends
+ * the opcode, but if it did this device must behave exactly as a 1.5 device would. */
+static void test_older_minor_is_unchanged(void)
+{
+    sim_wire_set_peer_minor(5);
+    load_styled(180, status_page, STATUS_FIELDS);
+    const sim_wire_msg_t *ack = sim_wire_last(EMP_OP_DESC_ACK);
+    int ok = ack && surf_applied_revision() == 180;
+    for (uint16_t i = 0; i < STATUS_FIELDS; i++) {
+        const surf_field_t *f = surf_field(i);
+        ok = ok && f && f->style == 0 && f->tone == 0 && !(f->present & EMP_PRESENT_STYLE)
+                && !(f->flags & EMP_FIELD_TRUNCATED);
+    }
+    ok = ok && !surf_field_is_estop(surf_field(0)) && label_is(1, "Orchestrator")
+            && strcmp(surf_field(1)->text, "ARMED") == 0;
+
+    buf_t b; b_init(&b); b64(&b, 180); b16(&b, 1);
+    toned_text(&b, 1, 0, EMP_TONE_ALERT, "STOPPED");
+    sim_wire_reset();
+    surf_handle(EMP_OP_TONED_VALUES, b.b, b.n);
+    ok = ok && strcmp(surf_field(1)->text, "ARMED") == 0 && sim_wire_count() == 0;
+    check("minor 5 peer: style bit and TONED_VALUES ignored as by a 1.5 device", ok);
+
+    /* The same records without the 1.6 members decode to the same fields. */
+    surf_field_t with_style[STATUS_FIELDS];
+    for (uint16_t i = 0; i < STATUS_FIELDS; i++) with_style[i] = *surf_field(i);
+    sfield_t plain[STATUS_FIELDS];
+    for (uint16_t i = 0; i < STATUS_FIELDS; i++) { plain[i] = status_page[i]; plain[i].styled = 0; }
+    load_styled(180, plain, STATUS_FIELDS);
+    ok = 1;
+    for (uint16_t i = 0; i < STATUS_FIELDS; i++) {
+        const surf_field_t *f = surf_field(i);
+        ok = ok && f->kind == with_style[i].kind && f->flags == with_style[i].flags
+                && f->present == with_style[i].present && f->number == with_style[i].number
+                && f->label_len == with_style[i].label_len && strcmp(f->text, with_style[i].text) == 0;
+    }
+    check("minor 5 peer: a record with the 1.6 tail decodes as the one without", ok);
+
+    /* ACTIVATE is the same 14 bytes whatever the style. */
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(181, status_page, STATUS_FIELDS);
+    sim_wire_reset();
+    ui_state_push(4, 1, 10); ui_state_push(4, 0, 11);      /* "Identify", a plain Action */
+    const sim_wire_msg_t *a = sim_wire_last(EMP_OP_ACTIVATE);
+    uint8_t plain_bytes[14] = {0};
+    int have_plain = a && a->len == 14u;
+    if (have_plain) memcpy(plain_bytes, a->payload, 14);
+    ui_state_push(0, 1, 12); ui_state_push(0, 0, 13);      /* the stop */
+    const sim_wire_msg_t *s = sim_wire_last(EMP_OP_ACTIVATE);
+    uint32_t seq_plain = (uint32_t)plain_bytes[8] | ((uint32_t)plain_bytes[9] << 8)
+                       | ((uint32_t)plain_bytes[10] << 16) | ((uint32_t)plain_bytes[11] << 24);
+    uint32_t seq_stop = s ? ((uint32_t)s->payload[8] | ((uint32_t)s->payload[9] << 8)
+                       | ((uint32_t)s->payload[10] << 16) | ((uint32_t)s->payload[11] << 24)) : 0;
+    ok = have_plain && s && s->channel == EMP_CH_INPUT && s->len == 14u
+      && memcmp(s->payload, plain_bytes, 8) == 0                   /* revision */
+      && seq_stop == seq_plain + 1u
+      && s->payload[12] == 0 && s->payload[13] == 0 && plain_bytes[12] == 4;
+    check("an estop press is an ordinary 14-byte ACTIVATE", ok);
+}
+
+static void test_estop_press(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(190, status_page, STATUS_FIELDS);
+    int ok = ui_state_field_for(0) == 0;                     /* top-left on a 6-field page */
+    sim_wire_reset();
+    ui_state_rotate(0, 20, 1);
+    ok = ok && !sim_wire_last(EMP_OP_ACTIVATE) && !sim_wire_last(EMP_OP_EDIT);
+    ui_state_push(0, 1, 2);
+    ok = ok && sim_wire_last(EMP_OP_ACTIVATE) && ui_state()->focused < 0;
+    unsigned before = sim_wire_count();
+    ui_state_push(0, 1, 3); ui_state_push(0, 0, 4);          /* held, released: nothing more */
+    ok = ok && sim_wire_count() == before;
+    check("estop fires on press only; turning and holding do nothing", ok);
+
+    /* Drill a bottom-row field: the top row becomes the digit editor and hides the stop. Its
+     * knob still fires it, and leaves the drill so the stop is on screen. */
+    ui_state_push(5, 1, 22); ui_state_push(5, 0, 23);        /* id 5, "Last stop", bottom row */
+    ok = ui_state()->focused == 5 && ui_state()->digit_top;
+    sim_wire_reset();
+    ui_state_push(0, 1, 24);
+    const sim_wire_msg_t *m = sim_wire_last(EMP_OP_ACTIVATE);
+    ok = ok && m && m->payload[12] == 0 && ui_state()->focused < 0;
+    ui_state_push(0, 0, 25);
+    /* A plain Action keeps today's rule: under the digit row its press only exits the drill. */
+    ui_state_push(1, 1, 26); ui_state_push(1, 0, 27);        /* id 1, top row: bottom row edits */
+    ok = ok && ui_state()->focused == 1 && !ui_state()->digit_top;
+    sim_wire_reset();
+    ui_state_push(4, 1, 28); ui_state_push(4, 0, 29);        /* "Identify", plain Action */
+    ok = ok && !sim_wire_last(EMP_OP_ACTIVATE) && ui_state()->focused < 0;
+    check("estop fires from a hidden digit row and leaves the drill", ok);
+}
+
+static void test_top_left_slot(void)
+{
+    /* The answer the av-fleet daemon relies on: generic pages with 5..8 occupied slots put the
+     * page's first ID on the top-left knob; 1..4 put nothing on the top row at all. */
+    int ok = 1;
+    for (uint16_t count = 2; count <= 8; count++) {
+        sfield_t page[8];
+        for (uint16_t i = 0; i < count; i++) {
+            page[i] = (sfield_t){ i, EMP_KIND_READONLY, "Status", "ok", 0.0, 1, 0, EMP_TONE_OK, 0, 0 };
+        }
+        page[0] = status_page[0];
+        load_styled(200 + count, page, count);
+        ok = ok && ui_state_field_for(0) == (count >= 5 ? 0 : -1)
+                && ui_state_field_for(4) == (count >= 5 ? 4 : 0)
+                && ui_state_knob_for(0) == (count >= 5 ? 0 : 4);
+    }
+    check("estop at ID 0 is top-left with 5..8 fields, bottom-left with 2..4", ok);
+}
+
+static void test_presentation_colours(void)
+{
+    load_styled(210, status_page, STATUS_FIELDS);
+    int ok = ui_tone_color(EMP_TONE_NEUTRAL) == 0 && ui_tone_color(EMP_TONE_OK) == C_OK
+          && ui_tone_color(EMP_TONE_WARN) == C_WARN && ui_tone_color(EMP_TONE_ALERT) == C_DANGER
+          && ui_tone_color(9u) == 0;
+    ok = ok && ui_cell_background(surf_field(0)) == C_STOP
+            && ui_cell_background(surf_field(4)) == C_CELL
+            && ui_cell_background(surf_field(3)) == C_CELL;
+    ok = ok && ui_value_color(surf_field(1), 0) == C_OK && ui_meter_color(surf_field(1)) == C_OK
+            && ui_value_color(surf_field(2), 0) == C_WARN
+            && ui_value_color(surf_field(5), 0) == C_DANGER;
+    /* A tone on an editable number is not drawn: it would read as a range warning. */
+    ((surf_field_t *)surf_field(3))->tone = EMP_TONE_ALERT;
+    ok = ok && ui_value_color(surf_field(3), 0) == C_VALUE && ui_value_color(surf_field(3), 1) == C_ACCENT
+            && ui_meter_color(surf_field(3)) == C_ACCENT;
+    ((surf_field_t *)surf_field(1))->tone = EMP_TONE_NEUTRAL;
+    ok = ok && ui_value_color(surf_field(1), 1) == C_VALUE && ui_meter_color(surf_field(1)) == C_TITLE;
+    check("estop plate is C_STOP; tones pick ok/warn/alert ink on status fields only", ok);
+}
+
 /* ------------------------------------------------------------------ runner */
 
 int desc_run_selftests(desc_report_fn report)
@@ -1008,6 +1320,15 @@ int desc_run_selftests(desc_report_fn report)
     test_non_finite_is_refused_on_decode();
     test_non_finite_is_refused_on_encode();
     test_pool_exhaustion_is_reported();
+
+    test_style_and_tone_decode();
+    test_style_validation();
+    test_toned_values();
+    test_older_minor_is_unchanged();
+    test_estop_press();
+    test_top_left_slot();
+    test_presentation_colours();
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
 
     report_fn = 0;
     return failures;

@@ -289,6 +289,8 @@ typedef struct {
     uint8_t  remote;
     uint8_t  color_count;
     uint8_t  modified;
+    uint8_t  style;          /* EMP/1.6 */
+    uint8_t  tone;
     float    color[4];
     int16_t  bar_px;
 } cell_cache_t;
@@ -299,7 +301,8 @@ static int32_t      last_focus = -2;
 static uint16_t     last_page = 0xFFFF;
 static double       last_value;
 static uint32_t     last_choice;
-static uint8_t      last_boolean, last_value_tag;
+static uint8_t      last_boolean, last_value_tag, last_tone;
+static char         last_drill_text[96];
 static uint8_t      last_color_count;
 static float        last_color[4];
 static int8_t       last_ws, last_held, last_zoom;
@@ -473,23 +476,52 @@ static void activity_outline(int16_t x, int16_t y, int16_t w, int16_t h, int loc
     }
 }
 
-static void draw_cell_frame(unsigned knob, int touched, int pressed, int drilled, int active, int remote)
+/* `bg` is the cell's own card colour (C_STOP for an EMP/1.6 stop button), so restoring the
+ * inset after a press puts back red rather than painting grey stripes across the stop. */
+static void draw_cell_frame(unsigned knob, uint16_t bg, int touched, int pressed, int drilled,
+                            int active, int remote)
 {
     int16_t x, y;
     cell_geometry(knob, &x, &y);
     frame(x, y, CELL_W, ROW_H, 2, cell_frame_color(touched, pressed, drilled, active));
     activity_outline(x,y,CELL_W,ROW_H,touched || active,remote);
-    gfx_set_fg(C_CELL); gfx_fill_rect(x + 7, y + 3, CELL_W - 14, 3);
+    gfx_set_fg(bg); gfx_fill_rect(x + 7, y + 3, CELL_W - 14, 3);
     if (touched || active) { gfx_set_fg(C_LIVE); gfx_fill_rect(x + CELL_W/2 - 14, y + 3, 28, 3); }
     if (pressed) frame(x + 4, y + 4, CELL_W - 8, ROW_H - 8, 1, C_INDICATOR);
     else { /* Restore the inset when a switch releases. */
-        gfx_restore((gfx_rect_t){x+4,y+4,CELL_W-8,1},C_CELL);
-        gfx_restore((gfx_rect_t){x+4,y+ROW_H-5,CELL_W-8,1},C_CELL);
-        gfx_restore((gfx_rect_t){x+4,y+5,1,ROW_H-10},C_CELL);
-        gfx_restore((gfx_rect_t){x+CELL_W-5,y+5,1,ROW_H-10},C_CELL);
+        gfx_restore((gfx_rect_t){x+4,y+4,CELL_W-8,1},bg);
+        gfx_restore((gfx_rect_t){x+4,y+ROW_H-5,CELL_W-8,1},bg);
+        gfx_restore((gfx_rect_t){x+4,y+5,1,ROW_H-10},bg);
+        gfx_restore((gfx_rect_t){x+CELL_W-5,y+5,1,ROW_H-10},bg);
+        /* ...and its rounded corners, which the four straight strips miss. A drilled field is
+         * repainted whole, so this only showed after an Action press, which never drills. */
+        gfx_restore((gfx_rect_t){x+4,y+4,6,6},bg);
+        gfx_restore((gfx_rect_t){x+CELL_W-10,y+4,6,6},bg);
+        gfx_restore((gfx_rect_t){x+4,y+ROW_H-10,6,6},bg);
+        gfx_restore((gfx_rect_t){x+CELL_W-10,y+ROW_H-10,6,6},bg);
     }
     if (drilled) { gfx_set_fg(C_NAV); gfx_fill_rect(x+3,y+12,3,ROW_H-24); }
-    else gfx_restore((gfx_rect_t){x+3,y+12,3,ROW_H-24},C_CELL);
+    else gfx_restore((gfx_rect_t){x+3,y+12,3,ROW_H-24},bg);
+}
+
+/* EMP/1.6 estop: the whole cell is the operator layout's stop plate, labelled with the field's
+ * own label. It fires on knob press like any Action; nothing about it is turnable. */
+static void draw_estop_face(unsigned knob, const surf_field_t *f)
+{
+    int16_t x, y;
+    cell_geometry(knob, &x, &y);
+    const uint16_t bg = C_STOP;
+    gfx_restore((gfx_rect_t){(int16_t)(x + 8), (int16_t)(y + 8),
+                             (int16_t)(CELL_W - 16), (int16_t)(ROW_H - 16)}, bg);
+
+    char label[48];
+    str_of(label, sizeof(label), f->label_off, f->label_len);
+    if (!label[0]) memcpy(label, "STOP", 5u);
+    fit_text(&font_ui, label, (int16_t)(CELL_W - 4 * SP));
+    int16_t ly = (int16_t)(y + ROW_H / 2 - text_height(&font_ui));
+    text_draw_centred(&font_ui, (int16_t)(x + CELL_W / 2), ly, label, C_VALUE, bg);
+    text_draw_centred(&font_small, (int16_t)(x + CELL_W / 2),
+                      (int16_t)(ly + text_height(&font_ui) + 2 * SP), "PRESS", C_VALUE, bg);
 }
 
 /* A value away from its default carries the screen's reset glyph in the cell's free bottom-left
@@ -511,6 +543,8 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
     cell_geometry(knob, &x, &y);
     const int16_t h = ROW_H;
     const uint16_t bg = C_CELL;
+
+    if (surf_field_is_estop(f)) { draw_estop_face(knob, f); return; }
 
     gfx_set_fg(bg);
     gfx_fill_rect((int16_t)(x + 2), (int16_t)(y + 70),
@@ -559,9 +593,8 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
     if (text_width(vf, buf) > avail) vf = (f->value_tag == EMP_VAL_NUMBER) ? &font_compact : &font_small;
     fit_text(vf, buf, avail);
 
-    uint16_t vc = modified ? C_ACCENT : C_VALUE;
+    uint16_t vc = ui_value_color(f, modified);       /* EMP/1.6 tone, else the usual ink */
     if (f->kind == EMP_KIND_READONLY) {
-        vc = C_VALUE;
         text_draw_right(&font_small, x + CELL_W - 2*SP, y + h - 30, "READ ONLY", C_UNIT, bg);
     }
     text_draw(vf, (int16_t)(x + 2 * SP), vy, buf, vc, bg);
@@ -579,8 +612,7 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
     int16_t bh = (int16_t)(h - 70 - 2 * SP);
     int16_t ext = bar_extent(f, bh);
 
-    gfx_meter((gfx_rect_t){bx,by,bw,bh}, ext, 0,
-              f->kind == EMP_KIND_READONLY ? C_TITLE : C_ACCENT);
+    gfx_meter((gfx_rect_t){bx,by,bw,bh}, ext, 0, ui_meter_color(f));
     if (ext < 0) {
         gfx_set_fg(C_INDICATOR);gfx_fill_rect(bx+2, by+bh/2-2, bw-4, 4);
     }
@@ -624,16 +656,23 @@ static void draw_cell(unsigned knob, const surf_field_t *f,
 {
     int16_t x, y;
     cell_geometry(knob, &x, &y);
-    gfx_set_fg(C_CELL);
-    gfx_fill_rect(x, y, CELL_W, ROW_H);
+    const uint16_t bg = ui_cell_background(f);
+    if (bg == C_STOP) {
+        /* Always as a card: the red plate is a real gradient, and a fill over an already
+         * registered one would paint it square, corners included. */
+        gfx_card((gfx_rect_t){x, y, CELL_W, ROW_H}, bg);
+    } else {
+        gfx_set_fg(bg);
+        gfx_fill_rect(x, y, CELL_W, ROW_H);
+    }
 
-    if (f) {
+    if (f && !surf_field_is_estop(f)) {          /* a stop carries its label on its face */
         char label[48];
         str_of(label, sizeof(label), f->label_off, f->label_len);
         draw_cell_label((int16_t)(x + 2 * SP), (int16_t)(y + SP), label);
     }
     draw_cell_dynamic(knob, f);
-    draw_cell_frame(knob, touched, pressed, drilled, active, remote);
+    draw_cell_frame(knob, bg, touched, pressed, drilled, active, remote);
 }
 
 /* Draw the cells in [first, last). The overview draws all eight; a drilled view draws the row
@@ -654,7 +693,8 @@ static void render_cells(int full, unsigned first, unsigned last)
         uint8_t drilled = (uint8_t)(idx >= 0 && idx == st->focused);
         int static_dirty = full || !last_cell[k].valid
                         || last_cell[k].id != (f ? f->id : 0xFFFFu)
-                        || last_cell[k].tag != (f ? f->value_tag : 0u);
+                        || last_cell[k].tag != (f ? f->value_tag : 0u)
+                        || last_cell[k].style != (f ? f->style : 0u);
         int chrome_dirty = static_dirty
                         || last_cell[k].touched != (uint8_t)touched
                         || last_cell[k].pressed != (uint8_t)pressed
@@ -670,6 +710,7 @@ static void render_cells(int full, unsigned first, unsigned last)
                        || last_cell[k].number  != f->number
                        || last_cell[k].color_count != f->color_count
                        || last_cell[k].modified != (uint8_t)surf_field_modified(f)
+                       || last_cell[k].tone != f->tone
                        || memcmp(last_cell[k].color, f->color, sizeof(f->color)) != 0
                        || last_cell[k].bar_px  != bar_extent(f, bh);
         }
@@ -679,7 +720,8 @@ static void render_cells(int full, unsigned first, unsigned last)
             draw_cell(k, f, touched, pressed, drilled, active, remote);
         else {
             if (value_dirty) draw_cell_dynamic(k, f);
-            if (chrome_dirty) draw_cell_frame(k, touched, pressed, drilled, active, remote);
+            if (chrome_dirty) draw_cell_frame(k, ui_cell_background(f), touched, pressed, drilled,
+                                              active, remote);
         }
 
         last_cell[k].valid   = 1;
@@ -696,6 +738,8 @@ static void render_cells(int full, unsigned first, unsigned last)
         last_cell[k].boolean = f ? f->boolean : 0;
         last_cell[k].color_count = f ? f->color_count : 0;
         last_cell[k].modified = (uint8_t)(f ? surf_field_modified(f) : 0);
+        last_cell[k].style   = f ? f->style : 0;
+        last_cell[k].tone    = f ? f->tone : 0;
         if (f) memcpy(last_cell[k].color, f->color, sizeof(f->color));
         else memset(last_cell[k].color, 0, sizeof(last_cell[k].color));
         last_cell[k].bar_px  = f ? bar_extent(f, bh) : 0;
@@ -708,6 +752,7 @@ static void render_cells(int full, unsigned first, unsigned last)
 static void render_operator(int full)
 {
     static char previous[8][96];
+    static uint8_t previous_tone[8];
     static uint16_t previous_press,previous_touch;
     static uint64_t previous_remote;
     const ui_state_t *st = ui_state();
@@ -717,6 +762,7 @@ static void render_operator(int full)
         gfx_set_fg(ground);
         for (int16_t y = 0; y < 480; y += 80) gfx_fill_rect(0, y, 800, 80);
         memset(previous, 0xff, sizeof(previous)); previous_press = previous_touch = 0xffff;
+        memset(previous_tone, 0xff, sizeof(previous_tone));
         text_draw(&font_small, 24, 114, "MANUAL CONTROL", muted, ground);
         text_draw_right(&font_small, 776, 114, "1 / 2", muted, ground);
         text_draw(&font_small, 24, 318, "ACTUAL POSITION / rev", muted, ground);
@@ -727,15 +773,17 @@ static void render_operator(int full)
         char value[96] = {0}; if (f) value_text(f, value, sizeof(value));
         int pressed = (st->press_mask & (1u << (k ^ 4u))) != 0;
         int touched = (st->touch_mask & (1u << (k ^ 4u))) != 0;
-        if (!full && strcmp(previous[k], value) == 0 &&
+        uint8_t tone = f ? f->tone : 0u;
+        if (!full && strcmp(previous[k], value) == 0 && previous_tone[k] == tone &&
             ((previous_press ^ st->press_mask) & (1u << (k ^ 4u))) == 0 &&
             ((previous_touch ^ st->touch_mask) & (1u << (k ^ 4u))) == 0 &&
             !((previous_remote ^ st->remote_highlights) & (UINT64_C(1) << k))) continue;
-        memcpy(previous[k], value, sizeof(value));
+        memcpy(previous[k], value, sizeof(value)); previous_tone[k] = tone;
         if (k >= 4) {
             int16_t x = (int16_t)(16 + (k - 4) * 196);
-            uint16_t bg = k == 7 ? stop_bg : panel;
-            if (pressed) bg = k == 7 ? C_STOP : C_CELL_DOWN;
+            int stop = k == 7 || surf_field_is_estop(f);     /* EMP/1.6 estop takes the same plate */
+            uint16_t bg = stop ? stop_bg : panel;
+            if (pressed) bg = stop ? C_STOP : C_CELL_DOWN;
             gfx_card((gfx_rect_t){x,12,184,88},bg);
             char label[48] = {0}; if (f) str_of(label, sizeof(label), f->label_off, f->label_len);
             /* Whole words on two lines beat truncating the action an operator will execute. */
@@ -743,7 +791,7 @@ static void render_operator(int full)
                 text_draw_centred(&font_small, x + 92, 60, "PRESS / ESCAPE", ink, bg); }
             else { fit_text(&font_ui, label, 164);
                 text_draw_centred(&font_ui, x + 92, 22, label, ink, bg);
-                text_draw_centred(&font_small, x + 92, 60, "PRESS", muted, bg); }
+                text_draw_centred(&font_small, x + 92, 60, "PRESS", stop ? ink : muted, bg); }
         } else if (k == 3) {
             char *status = strchr(value, '\n');
             if (status) {
@@ -757,7 +805,7 @@ static void render_operator(int full)
             const font_t *face = numeric ? &font_display : &font_ui;
             if (text_width(face, value) > 740) face = &font_value;
             fit_text(face, value, 740);
-            text_draw(face, 24, numeric ? 158 : 208, value, ink, ground);
+            text_draw(face, 24, numeric ? 158 : 208, value, f ? ui_value_color(f, 0) : ink, ground);
             gfx_card((gfx_rect_t){604,366,180,102},panel);
             text_draw(&font_small,616,374,"MORE SETTINGS",muted,panel);
             text_draw(&font_ui,616,414,"PRESS  >",ink,panel);
@@ -785,6 +833,7 @@ static void render_operator(int full)
 static void render_operator_settings(int full)
 {
     static char previous[8][96];
+    static uint8_t previous_tone[8];
     static uint16_t previous_press,previous_touch;
     static uint64_t previous_remote;
     const ui_state_t *st = ui_state();
@@ -793,6 +842,7 @@ static void render_operator_settings(int full)
         gfx_set_fg(ground);
         for (int16_t y = 0; y < 480; y += 80) gfx_fill_rect(0, y, 800, 80);
         memset(previous, 0xff, sizeof(previous)); previous_press = previous_touch = 0xffff;
+        memset(previous_tone, 0xff, sizeof(previous_tone));
         text_draw(&font_small, 24, 114, "MOTION SETTINGS", muted, ground);
         text_draw_right(&font_small, 776, 114, "2 / 2", muted, ground);
         text_draw(&font_small, 24, 318, "BUTTON 1: BACK TO MANUAL CONTROL", muted, ground);
@@ -802,9 +852,10 @@ static void render_operator_settings(int full)
         char value[96] = {0}; if (f) value_text(f, value, sizeof(value));
         uint16_t bit=(uint16_t)(1u<<(k^4u));
         int pressed=(st->press_mask&bit)!=0,touched=(st->touch_mask&bit)!=0;
-        if (!full && strcmp(previous[k], value) == 0 && !((previous_press ^ st->press_mask) & bit) && !((previous_touch ^ st->touch_mask)&bit) &&
+        uint8_t tone = f ? f->tone : 0u;
+        if (!full && strcmp(previous[k], value) == 0 && previous_tone[k] == tone && !((previous_press ^ st->press_mask) & bit) && !((previous_touch ^ st->touch_mask)&bit) &&
             !((previous_remote ^ st->remote_highlights) & (UINT64_C(1) << (8+k)))) continue;
-        memcpy(previous[k], value, sizeof(value));
+        memcpy(previous[k], value, sizeof(value)); previous_tone[k] = tone;
         if (k < 4) {
             int16_t x = (int16_t)(16 + k * 196);
             const char *labels[] = { "COMMAND VIA", "ACCEL / ustep/s2", "MIN SPEED", "TARGET / rev" };
@@ -828,7 +879,8 @@ static void render_operator_settings(int full)
         } else {
             gfx_set_fg(ground); gfx_fill_rect(24, 170, 752, 124);
             text_draw(&font_small, 24, 170, "OPERATION", muted, ground);
-            fit_text(&font_ui, value, 744); text_draw(&font_ui, 24, 218, value, ink, ground);
+            fit_text(&font_ui, value, 744);
+            text_draw(&font_ui, 24, 218, value, f ? ui_value_color(f, 0) : ink, ground);
         }
         if(k==5) activity_outline(212,12,380,88,touched,(st->remote_highlights & (UINT64_C(1) << 13)) != 0);
         if(k==6) activity_outline(24,170,752,124,touched,(st->remote_highlights & (UINT64_C(1) << 14)) != 0);
@@ -1292,7 +1344,7 @@ static void render_drilled(int full, const surf_field_t *f)
         value_text(f, buf, sizeof(buf));
         fit_text(&font_value, buf, FC_W - 2 * MARGIN_X);
         text_draw_centred(&font_value, LCD_WIDTH / 2, (int16_t)(digit_y + 30),
-                          buf, C_VALUE, C_BG);
+                          buf, ui_value_color(f, 0), C_BG);
         return;
     }
 
@@ -1542,6 +1594,8 @@ static void render_impl(void)
                        || f->choice      != last_choice
                        || f->boolean     != last_boolean
                        || f->value_tag   != last_value_tag
+                       || f->tone        != last_tone
+                       || strcmp(f->text, last_drill_text) != 0
                        || f->color_count != last_color_count
                        || memcmp(f->color, last_color, sizeof(last_color)) != 0
                        || st->page       != last_page;
@@ -1565,6 +1619,8 @@ static void render_impl(void)
                 last_choice = f->choice;
                 last_boolean = f->boolean;
                 last_value_tag = f->value_tag;
+                last_tone = f->tone;
+                memcpy(last_drill_text, f->text, sizeof(last_drill_text));
                 last_color_count = f->color_count;
                 memcpy(last_color, f->color, sizeof(last_color));
                 last_page  = st->page;

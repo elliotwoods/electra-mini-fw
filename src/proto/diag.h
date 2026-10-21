@@ -56,6 +56,7 @@
 #define EMP_DIAG_GRAPHICS_TIMEOUT 19u
 #define EMP_DIAG_GRAPHICS_FAULT 20u
 #define EMP_DIAG_INPUT_QUEUE_OVERFLOW 21u
+#define EMP_DIAG_STYLE_UNSUPPORTED 22u /* EMP/1.6 style or tone refused; context = (id << 8) | value */
 
 /* Raise one. `detail` must be a string literal or otherwise outlive the flush -- only the
  * pointer is kept, because copying a message this code exists to make cheap would defeat it.

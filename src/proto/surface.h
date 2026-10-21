@@ -60,10 +60,16 @@ typedef struct {
     double   default_number;
     uint8_t  default_color_count;
     float    default_color[4];
+
+    /* EMP/1.6. Both zero (normal, neutral) unless the descriptor or TONED_VALUES says otherwise. */
+    uint8_t  style;
+    uint8_t  tone;
 } surf_field_t;
 
 void surf_init(void);
 int surf_operator_layout(void);
+/* EMP/1.6: an Action declared with the estop style. */
+int surf_field_is_estop(const surf_field_t *f);
 
 /* Handle one surface-channel message. Returns nothing: per the design rule, protocol problems
  * become DIAG and DESC_REQUEST on the wire, never an error returned to a caller. */

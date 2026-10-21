@@ -21,7 +21,7 @@
 /* Minor may only ADD: opcodes, flag bits, trailing members inside field_len, or 0x80+ value
  * tags (docs/protocol.md 6). Both ends agree on min(host, device), so neither can send the
  * other something it has never heard of. */
-#define EMP_VERSION_MINOR    5u
+#define EMP_VERSION_MINOR    6u
 #define EMP_HEADER_BYTES     8u
 #define EMP_PREFIX_BYTES     8u          /* total_len u32 + crc32c u32, on FIRST && !LAST */
 
@@ -70,6 +70,7 @@
 #define EMP_OP_HIGHLIGHT     0x28u
 #define EMP_OP_HIGHLIGHTS    0x29u
 #define EMP_OP_DEFAULTS      0x2Au   /* EMP/1.5: update declared defaults in place */
+#define EMP_OP_TONED_VALUES  0x2Bu   /* EMP/1.6: VALUES with a status tone per entry */
 
 /* Input, device -> host. */
 #define EMP_OP_EDIT          0x50u
@@ -106,6 +107,22 @@
 #define EMP_PRESENT_PATH      0x0020u
 #define EMP_PRESENT_UNIT      0x0040u
 #define EMP_PRESENT_CHOICES   0x0080u
+/* EMP/1.6: the record ends with `style` u8 + `tone` u8, after the default (and after `path`
+ * when EMP_PRESENT_PATH is set). Only honoured once minor 6 is negotiated. */
+#define EMP_PRESENT_STYLE     0x0100u
+
+/* EMP/1.6 field style: how a control is drawn, never what it does. An ESTOP Action fires on
+ * knob press exactly like any Action; it is only drawn as a full-cell red stop button. */
+#define EMP_STYLE_NORMAL      0u
+#define EMP_STYLE_ESTOP       1u
+#define EMP_STYLE_MAX         EMP_STYLE_ESTOP
+
+/* EMP/1.6 status tone, rendered on ReadOnly fields and on fields showing a Text value. */
+#define EMP_TONE_NEUTRAL      0u
+#define EMP_TONE_OK           1u   /* green */
+#define EMP_TONE_WARN         2u   /* amber */
+#define EMP_TONE_ALERT        3u   /* red */
+#define EMP_TONE_MAX          EMP_TONE_ALERT
 
 /* Field flags. */
 #define EMP_FIELD_TRUNCATED   0x01u   /* something was cut; never silently */

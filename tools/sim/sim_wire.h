@@ -26,4 +26,7 @@ const sim_wire_msg_t *sim_wire_last(uint8_t opcode);
 
 void sim_wire_dump(void);
 
+/* What emp_session_peer_minor() reports; EMP_VERSION_MINOR unless a test says otherwise. */
+void sim_wire_set_peer_minor(uint8_t minor);
+
 #endif /* SIM_WIRE_H */

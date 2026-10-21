@@ -24,7 +24,10 @@
 static sim_wire_msg_t captured[SIM_WIRE_CAPACITY];
 static unsigned       captured_count;
 
-uint8_t emp_session_peer_minor(void) { return EMP_VERSION_MINOR; }
+/* The negotiated minor, settable so tests can stand in for an older host. */
+static uint8_t sim_peer_minor = EMP_VERSION_MINOR;
+uint8_t emp_session_peer_minor(void) { return sim_peer_minor; }
+void sim_wire_set_peer_minor(uint8_t minor) { sim_peer_minor = minor; }
 uint32_t emp_device_firmware_version(void) { return 0x00000100u; }
 uint32_t emp_device_firmware_build(void) { return 0; }
 const char *emp_device_model(void) { return "Electra One Mini"; }
@@ -74,6 +77,7 @@ static const char *opcode_name(uint8_t op)
     case EMP_OP_RESET:        return "RESET";
     case EMP_OP_PLAY_PAUSE:   return "PLAY_PAUSE";
     case EMP_OP_SCREEN:       return "SCREEN";
+    case EMP_OP_ACTIVATE:     return "ACTIVATE";
     default:                  return "?";
     }
 }

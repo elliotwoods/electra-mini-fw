@@ -355,6 +355,34 @@ static void send_edit_delta(uint16_t index, int32_t delta)
     emp_send(EMP_CH_INPUT, EMP_OP_EDIT_DELTA, buf, w.len);
 }
 
+/* ------------------------------------------------------------------ EMP/1.6 style and tone */
+
+/* A tone this device does not know is shown as neutral, never as the nearest colour it does:
+ * a status painted green on a guess is worse than one painted plainly. Reported, not silent. */
+static uint8_t checked_tone(uint16_t id, uint8_t tone)
+{
+    if (tone <= EMP_TONE_MAX) return tone;
+    emp_diag(EMP_SEV_WARN, EMP_DIAG_STYLE_UNSUPPORTED, ((uint32_t)id << 8) | tone,
+             "unknown tone shown as neutral");
+    return EMP_TONE_NEUTRAL;
+}
+
+/* Style is presentation only. An unknown style, or estop on anything but an Action, keeps the
+ * control working and draws it normally: refusing the descriptor would take away every other
+ * knob, and drawing a non-Action as a stop button would promise a stop it cannot send. */
+static void apply_style(surf_field_t *f, uint8_t style, uint8_t tone)
+{
+    if (style > EMP_STYLE_MAX || (style == EMP_STYLE_ESTOP && f->kind != EMP_KIND_ACTION)) {
+        emp_diag(EMP_SEV_WARN, EMP_DIAG_STYLE_UNSUPPORTED, ((uint32_t)f->id << 8) | style,
+                 "field style refused; drawn as normal");
+        f->flags = (uint8_t)(f->flags | EMP_FIELD_TRUNCATED);
+        style = EMP_STYLE_NORMAL;
+    }
+    f->style = style;
+    f->tone  = checked_tone(f->id, tone);
+    if (tone != f->tone) f->flags = (uint8_t)(f->flags | EMP_FIELD_TRUNCATED);
+}
+
 /* ------------------------------------------------------------------ descriptor */
 
 static void desc_begin(const uint8_t *msg, uint32_t len)
@@ -551,6 +579,22 @@ static void desc_field(const uint8_t *msg, uint32_t len)
         }
     }
 
+    /* EMP/1.6 trailing members. A 1.5 device never reads past the default, so for an older peer
+     * the presence bit is cleared and the bytes left unread, exactly as that device would. */
+    if (f->present & EMP_PRESENT_STYLE) {
+        if (emp_session_peer_minor() < 6u) {
+            f->present = (uint16_t)(f->present & ~EMP_PRESENT_STYLE);
+        } else {
+            if (f->present & EMP_PRESENT_PATH) {          /* host-side only; stepped over */
+                uint16_t n = rd16(&r);
+                if (rd_avail(&r, n)) r.off += n;
+            }
+            uint8_t style = rd8(&r);
+            uint8_t tone  = rd8(&r);
+            if (!r.bad) apply_style(f, style, tone);
+        }
+    }
+
     if (r.bad) {
         emp_diag(EMP_SEV_ERROR, EMP_DIAG_DESC_SEQUENCE, index, "descriptor field truncated");
         send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
@@ -658,7 +702,10 @@ static void handle_highlights(const uint8_t *msg, uint32_t len)
     if (!r.bad) (void)ui_state_highlights(slots, lease);
 }
 
-static void handle_values(const uint8_t *msg, uint32_t len)
+/* VALUES, and EMP/1.6 TONED_VALUES, which is the same message with a `tone` u8 between
+ * `ack_edit` and the Value of every entry. One message, so a status and its colour change
+ * together: "STOPPED" is never drawn for a frame in the green that meant "ARMED". */
+static void handle_values(const uint8_t *msg, uint32_t len, int toned)
 {
     rd_t r;
     rd_init(&r, msg, len);
@@ -678,6 +725,7 @@ static void handle_values(const uint8_t *msg, uint32_t len)
     for (uint16_t n = 0; n < count && !r.bad; n++) {
         uint16_t id        = rd16(&r);
         uint32_t ack_edit  = rd32(&r);
+        uint8_t  tone      = toned ? rd8(&r) : 0u;
         uint8_t  tag       = rd8(&r);
 
         double   number = 0.0;
@@ -703,6 +751,10 @@ static void handle_values(const uint8_t *msg, uint32_t len)
         uint16_t idx;
         if (!index_of_id(id, &idx)) continue;
         surf_field_t *f = &LIVE->fields[idx];
+
+        /* The device never edits a tone, so echo suppression has nothing to protect in it: the
+         * host's tone applies even when the value beside it is withheld below. */
+        if (toned) f->tone = checked_tone(id, tone);
 
         /* Causal echo suppression. A value is applied if the field is not under a finger, or if
          * the host has accounted for everything we have sent about it. A value that arrives
@@ -791,7 +843,12 @@ void surf_handle(uint8_t opcode, const uint8_t *msg, uint32_t len)
     case EMP_OP_DESC_FIELD: desc_field(msg, len); break;
     case EMP_OP_DESC_END:   desc_end(msg, len);   break;
     case EMP_OP_DESC_ABORT: staging_open = 0;     break;
-    case EMP_OP_VALUES:     handle_values(msg, len); break;
+    case EMP_OP_VALUES:     handle_values(msg, len, 0); break;
+    case EMP_OP_TONED_VALUES:
+        /* A 1.5 device has never heard of this opcode and ignores it; so does this one for a
+         * peer that negotiated less than 6. */
+        if (emp_session_peer_minor() >= 6u) handle_values(msg, len, 1);
+        break;
     case EMP_OP_REVEAL:     handle_reveal(msg, len); break;
     case EMP_OP_HIGHLIGHT:  handle_highlight(msg, len); break;
     case EMP_OP_HIGHLIGHTS: handle_highlights(msg, len); break;
@@ -1200,6 +1257,11 @@ void surf_save_default(uint16_t slot)
 }
 
 int surf_operator_layout(void) { return (LIVE->layout_flags & 1u) != 0; }
+
+int surf_field_is_estop(const surf_field_t *f)
+{
+    return f && f->kind == EMP_KIND_ACTION && f->style == EMP_STYLE_ESTOP;
+}
 
 void surf_demo_operator(void)
 {
