@@ -699,8 +699,11 @@ static void draw_hold_button(gfx_rect_t r, const surf_field_t *f)
     uint16_t fill = sent ? C_OK : C_WARN;
     gfx_paint(r, gfx_solid(face, r), 6);
     if (ext > 0) {
-        gfx_rect_t done = {r.x, r.y, ext < 12 ? 12 : ext, r.h};
-        gfx_paint(done, gfx_solid(fill, done), 6);
+        /* The face's own rounded shape, clipped at the extent: rounded where the face is, and a
+         * straight leading edge, so the fill's corners leave no notch at the split. */
+        gfx_clip((gfx_rect_t){r.x, r.y, ext, r.h});
+        gfx_paint(r, gfx_solid(fill, r), 6);
+        gfx_unclip();
     }
     /* An enabled face is outlined in its field's tone, which ties it to the status above it. */
     uint16_t edge = disabled ? C_OUTLINE : ext > 0 ? fill : tone_or(f->tone, C_INDICATOR);
