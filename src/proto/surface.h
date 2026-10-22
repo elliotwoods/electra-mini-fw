@@ -81,6 +81,8 @@ int surf_field_is_list(const surf_field_t *f);
 int surf_field_disabled(const surf_field_t *f);
 /* EMP/1.8: declared JOINED to the cell on its left (the renderer decides whether it can be). */
 int surf_field_joined(const surf_field_t *f);
+/* EMP/1.8: which of IDs 0..3 are PINNED (bit n for ID n), shown at knob n on every page. */
+uint8_t surf_pinned_mask(void);
 
 /* Handle one surface-channel message. Returns nothing: per the design rule, protocol problems
  * become DIAG and DESC_REQUEST on the wire, never an error returned to a caller. */

@@ -87,12 +87,14 @@ typedef struct {
 static void fixture_fields(const fixture_field*f,unsigned n)
 {
     static uint64_t revision=0x1800000000ULL;revision++;
-    fixture_buf b={{0},0};fixture_int(&b,revision,8);fixture_int(&b,n,2);fixture_int(&b,0,2);fixture_int(&b,0,4);
+    unsigned count=0; for(unsigned i=0;i<n;i++) if(f[i].label) count++;
+    fixture_buf b={{0},0};fixture_int(&b,revision,8);fixture_int(&b,count,2);fixture_int(&b,0,2);fixture_int(&b,0,4);
     surf_handle(EMP_OP_DESC_BEGIN,b.bytes,b.n);uint32_t crc=0xffffffff;
+    unsigned index=0;
     for(unsigned i=0;i<n;i++) {
         const fixture_field*x=&f[i];
         if(!x->label) continue;
-        b.n=0;fixture_int(&b,i,2);unsigned body=b.n;
+        b.n=0;fixture_int(&b,index++,2);unsigned body=b.n;
         unsigned present=(x->style||x->tone)?EMP_PRESENT_STYLE:0u;
         if(x->unit) present|=EMP_PRESENT_UNIT;
         if(x->max>x->min) present|=EMP_PRESENT_MIN|EMP_PRESENT_MAX|EMP_PRESENT_STEP|EMP_PRESENT_PRECISION;
@@ -110,9 +112,7 @@ static void fixture_fields(const fixture_field*f,unsigned n)
         if(present&EMP_PRESENT_STYLE){fixture_int(&b,x->style,1);fixture_int(&b,x->tone,1);}
         crc=emp_crc32c_update(crc,b.bytes+body,b.n-body);surf_handle(EMP_OP_DESC_FIELD,b.bytes,b.n);
     }
-    unsigned count=0; for(unsigned i=0;i<n;i++) if(f[i].label) count++;
-    (void)count;
-    b.n=0;fixture_int(&b,revision,8);fixture_int(&b,n,2);fixture_int(&b,~crc,4);surf_handle(EMP_OP_DESC_END,b.bytes,b.n);ui_state_init();ui_reset();
+    b.n=0;fixture_int(&b,revision,8);fixture_int(&b,count,2);fixture_int(&b,~crc,4);surf_handle(EMP_OP_DESC_END,b.bytes,b.n);ui_state_init();ui_reset();
 }
 /* The daemon's system page on an EMP/1.8 device: the fleet panel (E-STOP + CLEAR E-STOP), ARM,
  * the System readout, then Volume, Brightness, Dictate and Dictation. `stopped` enables the
@@ -132,6 +132,25 @@ static void fixture_system_page(const char*fleet,uint8_t fleet_tone,int stopped,
         {EMP_KIND_ACTION,0,0,0,"Dictate",0,0,0,0,0,0,0},
         {EMP_KIND_READONLY,0,0,0,"Dictation","Ready",0,0,0,0,0,0}};
     fixture_fields(f,8);
+}
+/* An application's page with the fleet's two slots reserved, as the daemon composes it on an
+ * EMP/1.8 device while an orchestrator is known: E-STOP and CLEAR E-STOP PINNED at IDs 0 and 1,
+ * the application's controls six to a page at IDs 2..7, 10..15 (8 and 9 stay empty). */
+static void fixture_reserved_app_page(const char*fleet,uint8_t fleet_tone,int stopped)
+{
+    static const char*const labels[12]={"Cutoff","Resonance","Drive","Mix","Attack","Release",
+                                        "Rate","Depth","Offset X","Offset Y","Bypass","Gain"};
+    fixture_field f[16];
+    memset(f,0,sizeof(f));
+    f[0]=(fixture_field){EMP_KIND_ACTION,EMP_FIELD_PINNED,EMP_STYLE_ESTOP,0,"E-STOP",0,0,0,0,0,0,0};
+    f[1]=(fixture_field){EMP_KIND_ACTION,(uint8_t)(EMP_FIELD_PINNED|EMP_FIELD_JOINED|(stopped?0u:EMP_FIELD_DISABLED)),
+                         EMP_STYLE_HOLD,fleet_tone,"CLEAR E-STOP",fleet,0,0,0,0,fixture_fleet_states,3};
+    for(unsigned i=0;i<12;i++) {
+        unsigned id=i<6?2+i:10+(i-6);
+        f[id]=(fixture_field){i==10?EMP_KIND_TOGGLE:EMP_KIND_NUMBER,0,0,0,labels[i],0,i<4?"%":0,
+                              10.0+7.0*i,0,i==10?1:100,0,0};
+    }
+    fixture_fields(f,16);
 }
 /* The same page as an EMP/1.7 device is sent it today (the fallback below minor 8). */
 static void fixture_system_page_17(int stopped)

@@ -478,8 +478,11 @@ static void desc_field(const uint8_t *msg, uint32_t len)
     /* EMP/1.8 flags mean nothing to an older peer, which would never send them; and DISABLED
      * only ever makes an Action inert, so it is dropped from anything that is not one. */
     if (emp_session_peer_minor() < 8u)
-        f->flags = (uint8_t)(f->flags & ~(EMP_FIELD_JOINED | EMP_FIELD_DISABLED));
+        f->flags = (uint8_t)(f->flags & ~(EMP_FIELD_JOINED | EMP_FIELD_DISABLED | EMP_FIELD_PINNED));
     if (f->kind != EMP_KIND_ACTION) f->flags = (uint8_t)(f->flags & ~EMP_FIELD_DISABLED);
+    /* Only the first page's top row can be pinned; anywhere else the pin is refused, visibly. */
+    if ((f->flags & EMP_FIELD_PINNED) && slot >= 4u)
+        f->flags = (uint8_t)((f->flags & ~EMP_FIELD_PINNED) | EMP_FIELD_TRUNCATED);
     f->present      = rd16(&r);
     f->min          = rdf64(&r);
     f->max          = rdf64(&r);
@@ -1293,6 +1296,16 @@ int surf_field_disabled(const surf_field_t *f)
 int surf_field_joined(const surf_field_t *f)
 {
     return f && (f->flags & EMP_FIELD_JOINED) != 0;
+}
+
+uint8_t surf_pinned_mask(void)
+{
+    uint8_t mask = 0;
+    for (uint16_t id = 0; id < 4u; id++) {
+        const surf_field_t *f = surf_field(id);
+        if (f && (f->flags & EMP_FIELD_PINNED)) mask = (uint8_t)(mask | (1u << id));
+    }
+    return mask;
 }
 
 void surf_demo_operator(void)

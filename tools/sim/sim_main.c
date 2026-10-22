@@ -148,6 +148,20 @@ static void scene_system_page(const char *which)
         fixture_system_page("E-STOPPED\ntool, 3 s ago: idn-test: point buffer underrun on CUBE_0008 while armed, stopping the fleet",
                             EMP_TONE_WARN, 1, "STOPPED\nclear E-stop first", EMP_TONE_WARN, 0,
                             READOUT_STOPPED_TOOL);
+    else if (strncmp(which, "app", 3) == 0) {
+        /* An application's page with the fleet's slots reserved (pinned). "app-2" is its second
+         * page, "app-stopped" the first while stopped, "app-clearing" a clear held half way. */
+        int stopped = strstr(which, "stopped") || strstr(which, "clearing");
+        fixture_reserved_app_page(stopped ? "E-STOPPED\ncontrol surface, 12 s ago: control surface E-STOP"
+                                          : "DISARMED\nlasers dark",
+                                  stopped ? EMP_TONE_WARN : EMP_TONE_OK, stopped);
+        ui_state_tick(t);
+        if (strcmp(which, "app-2") == 0) ui_state_button(UI_BTN_PAGE_NEXT, 1, t), ui_state_button(UI_BTN_PAGE_NEXT, 0, t + 10);
+        if (strcmp(which, "app-clearing") == 0) { ui_state_button(UI_BTN_PAGE_NEXT, 1, t); ui_state_button(UI_BTN_PAGE_NEXT, 0, t + 10);
+                                                  ui_state_push(1, 1, t + 20); ui_state_tick(t + 770); }
+        ui_render();
+        return;
+    }
     else if (strcmp(which, "no-orch") == 0)
         fixture_system_page("NO ORCH\nno orchestrator beacon", EMP_TONE_NEUTRAL, 0,
                             "UNAVAILABLE\nno orchestrator", EMP_TONE_NEUTRAL, 0,

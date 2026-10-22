@@ -141,6 +141,11 @@
  * but inert -- it neither fires nor starts a hold, and is drawn dimmed; ignored on other kinds. */
 #define EMP_FIELD_JOINED      0x04u
 #define EMP_FIELD_DISABLED    0x08u
+/* EMP/1.8 PINNED: a field in the first page's top row (ID 0..3) shown at its knob on EVERY page,
+ * so a page change never moves or repaints it (the fleet's E-STOP and its clear, reserved by the
+ * daemon above every application's page). A descriptor with a pinned field keeps reading order on
+ * every page, and a field another page puts under a pinned knob is never shown. */
+#define EMP_FIELD_PINNED      0x10u
 
 /* Why an edit happened, on EDIT. Diagnostics for the host, not semantics. */
 #define EMP_CAUSE_ROTATE      0u

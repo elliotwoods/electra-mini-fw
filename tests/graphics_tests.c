@@ -313,8 +313,24 @@ static void panel_tests(void)
     CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
     puts("  fleet panel and list: stop plate kept, hold fill on the face, clean-repaint parity");
 }
+/* EMP/1.8 PINNED: on an application's page the fleet's slots never repaint on a page change
+ * (so the stop is never blanked, even within the frame), and each page matches a clean repaint. */
+static void pinned_tests(void)
+{
+    const int16_t cw=(LCD_WIDTH-24-18)/4, panel_w=(int16_t)(2*cw+6);
+    clean();fixture_reserved_app_page("DISARMED\nlasers dark",EMP_TONE_OK,0);ui_state_tick(100);ui_render();
+    memcpy(reference,sim_framebuffer(),sizeof(reference));
+    ui_state_button(UI_BTN_PAGE_NEXT,1,100);ui_state_button(UI_BTN_PAGE_NEXT,0,110);ui_render();
+    CHECK(ui_state()->page==8);
+    for(int y=6;y<6+184;y++)for(int x=12;x<12+panel_w;x++)
+        CHECK(sim_framebuffer()[y*LCD_WIDTH+x]==reference[y*LCD_WIDTH+x]);
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))!=0);    /* the rest did change */
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    puts("  pinned fleet slots stay put across a page change; each page matches a clean repaint");
+}
 int main(void)
 {
-    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();status_tests();hold_tests();readout_tests();panel_tests();
+    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();status_tests();hold_tests();readout_tests();panel_tests();pinned_tests();
     printf("%u graphics checks passed\n",checks);return 0;
 }

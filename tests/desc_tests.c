@@ -1654,6 +1654,63 @@ static void test_long_text_is_kept(void)
     check("text values keep up to 255 bytes, then cut", ok);
 }
 
+/* EMP/1.8 PINNED: the fleet's two slots reserved above an application's page. IDs 0 and 1 are
+ * pinned; the application has 2..7 and 10..11, and a field at 8 (under a pinned knob on the second
+ * page) that must never be shown. */
+static void test_pinned_slots(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    static const sfield_t page[] = {
+        { 0,  EMP_KIND_ACTION,   "E-STOP",       0, 0.0, 1, EMP_STYLE_ESTOP, 0, 0, 0, EMP_FIELD_PINNED },
+        { 1,  EMP_KIND_ACTION,   "CLEAR E-STOP", "DISARMED\nlasers dark", 0.0, 1, EMP_STYLE_HOLD,
+              EMP_TONE_OK, 0, 0, EMP_FIELD_PINNED | EMP_FIELD_JOINED },
+        { 2,  EMP_KIND_NUMBER,   "Cutoff",       0, 0.5, 0, 0, 0, 0, 0, 0 },
+        { 3,  EMP_KIND_NUMBER,   "Resonance",    0, 0.5, 0, 0, 0, 0, 0, 0 },
+        { 8,  EMP_KIND_NUMBER,   "Hidden",       0, 0.5, 0, 0, 0, 0, 0, 0 },
+        { 10, EMP_KIND_NUMBER,   "Rate",         0, 0.5, 0, 0, 0, 0, 0, 0 },
+        { 11, EMP_KIND_NUMBER,   "Pinned no",    0, 0.5, 0, 0, 0, 0, 0, EMP_FIELD_PINNED },
+    };
+    load_styled(440, page, 7);
+    int ok = surf_pinned_mask() == 0x03u
+          && !(surf_field(11)->flags & EMP_FIELD_PINNED) && (surf_field(11)->flags & EMP_FIELD_TRUNCATED);
+    /* Page 0: reading order although only four slots are occupied (no bottom-row packing). */
+    ok = ok && ui_state_field_for(0) == 0 && ui_state_field_for(1) == 1 && ui_state_field_for(2) == 2
+            && ui_state_field_for(3) == 3 && ui_state_field_for(4) < 0;
+    check("pinned slots keep reading order and refuse a pin outside the top row", ok);
+
+    /* Page 1: the pinned fields stay on knobs 0 and 1; ID 8 under them is never shown. */
+    ui_state_tick(100);
+    ui_state_button(UI_BTN_PAGE_NEXT, 1, 100); ui_state_button(UI_BTN_PAGE_NEXT, 0, 110);
+    ok = ui_state()->page == 8 && ui_state_field_for(0) == 0 && ui_state_field_for(1) == 1
+      && ui_state_field_for(2) == 10 && ui_state_field_for(3) == 11 && ui_state_knob_for(8) < 0;
+    for (unsigned k = 0; k < 8; k++) ok = ok && ui_state_field_for(k) != 8;
+    check("a page change keeps the pinned knobs and hides what is under them", ok);
+
+    /* The stop fires from page 1 on its press; a hold on the clear started on page 0 survives a
+     * page change, because its knob still addresses the same field. */
+    load_styled(441, page, 7);
+    ui_state_tick(200);
+    sim_wire_reset();
+    ui_state_button(UI_BTN_PAGE_NEXT, 1, 200); ui_state_button(UI_BTN_PAGE_NEXT, 0, 210);
+    ui_state_push(0, 1, 220); ui_state_push(0, 0, 230);
+    const sim_wire_msg_t *m = sim_wire_last(EMP_OP_ACTIVATE);
+    ok = m && m->payload[12] == 0 && m->payload[13] == 0;
+    ui_state_button(UI_BTN_BACK, 1, 300); ui_state_button(UI_BTN_BACK, 0, 310);
+    ui_state_push(1, 1, 320);
+    ui_state_button(UI_BTN_PAGE_NEXT, 1, 400); ui_state_button(UI_BTN_PAGE_NEXT, 0, 410);
+    ui_state_tick(320 + EMP_HOLD_MS + 20);
+    m = sim_wire_last(EMP_OP_ACTIVATE);
+    ok = ok && ui_state()->page == 8 && m && m->payload[12] == 1 && activations() == 2;
+    ui_state_push(1, 0, 2000);
+    check("the pinned stop fires on any page; a pinned hold survives the page change", ok);
+
+    /* Below minor 8 the pin is cleared, as by a 1.7 device. */
+    sim_wire_set_peer_minor(7);
+    load_styled(442, page, 7);
+    check("minor 7 peer: PINNED cleared", surf_pinned_mask() == 0);
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+}
+
 int desc_run_selftests(desc_report_fn report)
 {
     failures  = 0;
@@ -1711,6 +1768,7 @@ int desc_run_selftests(desc_report_fn report)
     test_disabled_action_is_inert();
     test_list_scrolls_locally();
     test_long_text_is_kept();
+    test_pinned_slots();
     sim_wire_set_peer_minor(EMP_VERSION_MINOR);
 
     report_fn = 0;

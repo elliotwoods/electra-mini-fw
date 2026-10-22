@@ -733,7 +733,7 @@ fleet to Disarmed, never to Armed); the device only decides *when* it is sent.
 
 ## EMP/1.8: panels, disabled Actions, Action status and list readouts
 
-Four additions, all inside what EMP/1.6 already put on the wire: two bits of the field record's
+Five additions, all inside what EMP/1.6 already put on the wire: three bits of the field record's
 `flags` u8, one more `style` value, and a meaning for a Text value on an Action. No new opcode,
 message or DIAG code; `ACTIVATE` is the EMP/1.2 14 bytes. They exist for the daemon's system
 page, where the fleet's E-STOP and its clear must read as one control with the fleet's state, the
@@ -744,15 +744,16 @@ summary of the fleet must fit one cell (`docs/graphics-evidence/system-page/`).
 |---|---|---|---|
 | `flags` bit 2 | `0x04` | `JOINED` | any field; drawn on the generic grid only |
 | `flags` bit 3 | `0x08` | `DISABLED` | Action (kind 5) only |
+| `flags` bit 4 | `0x10` | `PINNED` | IDs 0..3 (the first page's top row) |
 | `style` | 3 | `LIST` | ReadOnly (kind 3) with a Text value |
 
 ### Negotiation
 
-- A host sets `JOINED` or `DISABLED`, sends `style = 3`, or gives an Action a Text value only when
+- A host sets `JOINED`, `DISABLED` or `PINNED`, sends `style = 3`, or gives an Action a Text value only when
   HELLO negotiation selected minor 8 or newer. To an older peer it sends the EMP/1.7 page it would
   have sent before (the av-frameworks system page keeps its EMP/1.7 layout there), and an Action it
   would have sent `DISABLED` is sent as a ReadOnly field, so no older device can fire it.
-- A device whose negotiated minor is below 8 clears both flag bits on receipt (as a 1.7 device,
+- A device whose negotiated minor is below 8 clears the three flag bits on receipt (as a 1.7 device,
   which never reads them) and treats `style = 3` as EMP/1.7 says: unknown, drawn `NORMAL`,
   `TRUNCATED`, `DIAG{E_STYLE_UNSUPPORTED}`.
 - A minor 8 device applies the EMP/1.6 rule with the limit raised to 3: `style` > 3; `ESTOP` or
@@ -818,6 +819,24 @@ is drawn as an ordinary cell. The operator layout ignores the bit.
 - Touch, press, local activity and host highlight are drawn as a ring around the knob's face rather
   than around the cell. Nothing about either field's behaviour changes: the stop fires on its press
   edge, including its EMP/1.6 drilled-field exception; a `HOLD` holds as EMP/1.7 says.
+
+### `PINNED`: slots on every page
+
+A `PINNED` field is shown at its own knob on **every** page, so paging never moves it, never
+repaints it and never blanks it for a frame. Only IDs 0..3 (the first page's top row, knob = ID)
+may be pinned; `PINNED` on any other ID is cleared and the field marked `TRUNCATED`.
+
+- A descriptor with any pinned field keeps reading order on every page (knob `k` shows slot
+  `first + k`): the 1–4-field bottom-row rule (EMP/1.6) would otherwise move the pinned knobs.
+- On a page other than the first, a field whose slot falls under a pinned knob is never shown; a
+  host leaves those slots empty. The av-frameworks daemon reserves IDs 0 and 1 this way above every
+  application's screen while an orchestrator is known (E-STOP and the joined CLEAR E-STOP), and
+  places the application six to a page at IDs `8p + 2 .. 8p + 7`.
+- Inputs on a pinned field are ordinary, at its own ID and the descriptor's revision. A hold on a
+  pinned `HOLD` Action survives a page change, since its knob still addresses the same field
+  (EMP/1.7 cancels a hold only when the knob stops addressing it).
+- `SCREEN` still names the page's own range; pinned IDs are visible on every page, so a host sends
+  their values whatever page `SCREEN` named.
 
 ### `LIST`
 

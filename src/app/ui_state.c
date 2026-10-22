@@ -205,6 +205,14 @@ int32_t ui_state_field_for_page(uint16_t first, unsigned knob)
     /* The operator layout keeps its published action/settings positions. Generic pages with
      * one to four fields use the nearer row in descriptor order. IDs and page boundaries do
      * not change; even sparse fields are packed only within their existing page. */
+    /* EMP/1.8 pinned fields hold their knob on every page, and such a descriptor keeps reading
+     * order everywhere: the reserved knobs must not move, and nothing may slide under them. */
+    uint8_t pinned = surf_operator_layout() ? 0u : surf_pinned_mask();
+    if (pinned) {
+        if (knob < 4u && (pinned & (1u << knob))) return (int32_t)knob;
+        uint16_t slot = (uint16_t)(first + knob);
+        return surf_field(slot) ? (int32_t)slot : -1;
+    }
     if (!surf_operator_layout()) {
         unsigned count = 0;
         for (unsigned offset = 0; offset < UI_FIELDS_PER_PAGE; offset++)

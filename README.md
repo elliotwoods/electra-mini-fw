@@ -70,7 +70,8 @@ The integration currently provides:
   shown disabled, a hold-to-fire Action with a status becomes a button face that fills while held,
   and a read-only list scrolls under its knob. The av-frameworks daemon's system page puts the
   fleet's E-STOP and CLEAR E-STOP in one panel with DISARMED / ARMED / E-STOPPED above them, a held
-  ARM beside it and a scrolling System readout
+  ARM beside it and a scrolling System readout, and pins the E-STOP panel to the first two knobs
+  of every application's page while an orchestrator is known
   ([renders](docs/graphics-evidence/system-page/)). Read-only text no longer carries a fader.
 - Transactional descriptor replacement. A failed or partial update never replaces the live
   surface, and session IDs make device resets visible to the host.
@@ -263,7 +264,8 @@ Install Python `pyserial` and `Pillow`; Xcode command-line tools provide `cc`.
 `sim status-hold`, `status-holding` and `status-held` show the EMP/1.7 hold at rest, part way and sent;
 `sim sys-disarmed`, `sys-unmet`, `sys-armed`, `sys-stopped-mini`, `sys-stopped-tool`, `sys-clearing`,
 `sys-cleared`, `sys-arming`, `sys-unavailable`, `sys-no-orch`, `sys-readout-N` and `sys-legacy`
-show the daemon's EMP/1.8 system page and its EMP/1.7 fallback);
+show the daemon's EMP/1.8 system page and its EMP/1.7 fallback, and `sys-app`, `sys-app-2`,
+`sys-app-stopped` and `sys-app-clearing` an application's pages with the fleet's two slots pinned);
 `python3 tools/deploy/emp.py --selftest` checks the reference host encoders without a device.
 The existing `tools/deploy/flash_usb.py build/app.srec` and `screenshot.py`
 commands select IOKit on macOS and WinUSB on Windows. The updater releases the
