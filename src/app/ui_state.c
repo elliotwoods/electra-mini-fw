@@ -120,9 +120,47 @@ static void leave_focus(void)
     memset(digit_accum, 0, sizeof(digit_accum));
 }
 
+static int32_t list_accum[UI_FIELDS_PER_PAGE];
+
+unsigned ui_list_count(const surf_field_t *f)
+{
+    if (!f || f->value_tag != EMP_VAL_TEXT || !f->text[0]) return 0;
+    unsigned n = 1;
+    for (const char *c = f->text; *c; c++)
+        if (*c == '\n' && c[1]) n++;
+    return n;
+}
+
+unsigned ui_state_list_top(int32_t slot)
+{
+    if (slot < 0 || slot >= (int32_t)SURF_MAX_FIELDS) return 0;
+    unsigned n = ui_list_count(surf_field((uint16_t)slot));
+    unsigned top = st.list_top[slot];
+    return n == 0 ? 0 : top >= n ? n - 1u : top;
+}
+
+/* Turning a LIST readout scrolls it, a few detents an entry, clamped at both ends. Nothing is
+ * sent: the host never learns where a person is reading. */
+static int scroll_list(unsigned pot, int32_t slot, int32_t detents)
+{
+    list_accum[pot] += detents;
+    int32_t steps = list_accum[pot] / UI_LIST_STEP;
+    if (!steps) return 0;
+    list_accum[pot] -= steps * UI_LIST_STEP;
+    int32_t n = (int32_t)ui_list_count(surf_field((uint16_t)slot));
+    int32_t top = (int32_t)ui_state_list_top(slot) + steps;
+    if (top > n - 1) top = n - 1;
+    if (top < 0) top = 0;
+    if ((uint8_t)top == st.list_top[slot]) return 0;
+    st.list_top[slot] = (uint8_t)top;
+    return 1;
+}
+
 static void enter_focus(int32_t idx)
 {
     if (idx < 0) return;
+    /* EMP/1.8: a LIST readout has nothing to drill into; its press goes back to the top. */
+    if (surf_field_is_list(surf_field((uint16_t)idx))) { st.list_top[idx] = 0; return; }
     st.focused = idx;
 
     /* The digit editor is the OTHER row. See ui_state.h: this is what makes drilling symmetric,
@@ -146,6 +184,7 @@ void ui_state_init(void)
     st.hold_pot   = -1;
     prev_touch    = 0;
     memset(discrete_accum, 0, sizeof(discrete_accum));
+    memset(list_accum, 0, sizeof(list_accum));
     memset(digit_accum, 0, sizeof(digit_accum));
     hist_init();
     st.mode = UI_MODE_SURFACE;
@@ -215,6 +254,7 @@ static void set_page(int32_t start)
     st.remote_highlights = 0;
     st.page = (uint16_t)start;
     memset(discrete_accum, 0, sizeof(discrete_accum));
+    memset(list_accum, 0, sizeof(list_accum));
     surf_set_page(st.page);
 }
 
@@ -224,6 +264,8 @@ void ui_state_surface_changed(void)
     st.remote_highlights = 0;
     leave_focus();
     st.page = 0;
+    memset(st.list_top, 0, sizeof(st.list_top));
+    memset(list_accum, 0, sizeof(list_accum));
     hist_init();
     memset(discrete_accum, 0, sizeof(discrete_accum));
     memset(digit_accum, 0, sizeof(digit_accum));
@@ -346,6 +388,7 @@ void ui_state_push(unsigned pot, int pressed, uint32_t now_ms)
         if (st.page == 0 && pot == 7u) { set_page(8); return; }
         int32_t slot = ui_state_field_for(pot);
         const surf_field_t *field = slot >= 0 ? surf_field((uint16_t)slot) : 0;
+        if (surf_field_disabled(field)) return;      /* EMP/1.8: shown, inert */
         if (surf_field_is_hold(field)) start_hold(pot, slot, now_ms);
         else if (field && field->kind == EMP_KIND_ACTION) surf_activate((uint16_t)slot);
         /* Operator settings turn in place; never borrow the action row for digits. */
@@ -377,6 +420,8 @@ void ui_state_push(unsigned pot, int pressed, uint32_t now_ms)
 
     int32_t slot = ui_state_field_for(pot);
     const surf_field_t *field = slot >= 0 ? surf_field((uint16_t)slot) : 0;
+    /* EMP/1.8: a DISABLED Action is shown and does nothing; not even a hold starts. */
+    if (surf_field_disabled(field)) return;
     /* EMP/1.7: a HOLD Action's press only starts the hold; ui_state_tick fires it. */
     if (surf_field_is_hold(field)) { start_hold(pot, slot, now_ms); return; }
     if (field && field->kind == EMP_KIND_ACTION) { surf_activate((uint16_t)slot); return; }
@@ -569,6 +614,7 @@ void ui_state_tick(uint32_t now_ms)
         const surf_field_t *f = surf_field((uint16_t)st.hold_slot);
         if (st.mode != UI_MODE_SURFACE || st.focused >= 0
             || surf_applied_revision() != st.hold_revision || !surf_field_is_hold(f)
+            || surf_field_disabled(f)
             || ui_state_field_for((unsigned)st.hold_pot) != st.hold_slot) {
             cancel_hold();
         } else if ((uint32_t)(now_ms - st.hold_start_ms) >= EMP_HOLD_MS) {
@@ -718,6 +764,7 @@ int ui_state_rotate(unsigned pot, int32_t detents, uint32_t now_ms)
     if (idx < 0) return 0;
 
     const surf_field_t *f = surf_field((uint16_t)idx);
+    if (surf_field_is_list(f) && !surf_operator_layout()) return scroll_list(pot, idx, detents);
     if (!f || (f->kind == EMP_KIND_READONLY || f->kind == EMP_KIND_ACTION)) return 0;
 
     if (f->kind == EMP_KIND_COLOR && f->color_count >= 3u) {

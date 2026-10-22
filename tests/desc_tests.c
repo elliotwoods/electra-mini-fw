@@ -984,6 +984,7 @@ typedef struct {
     uint8_t     style, tone;
     const char *path;         /* EMP_PRESENT_PATH, stepped over by the device */
     int         cut;          /* declare the style but leave its bytes off: a truncated record */
+    uint8_t     flags;        /* EMP/1.8 JOINED / DISABLED, beside READONLY */
 } sfield_t;
 
 static void styled_record(buf_t *b, uint16_t index, const sfield_t *s)
@@ -994,7 +995,7 @@ static void styled_record(buf_t *b, uint16_t index, const sfield_t *s)
     b16(b, 0);                                    /* field_len, patched below */
     b16(b, s->id);
     b8(b, s->kind);
-    b8(b, s->kind == EMP_KIND_READONLY ? EMP_FIELD_READONLY : 0u);
+    b8(b, (uint8_t)((s->kind == EMP_KIND_READONLY ? EMP_FIELD_READONLY : 0u) | s->flags));
     uint16_t present = 0;
     if (s->styled) present |= EMP_PRESENT_STYLE;
     if (s->path)   present |= EMP_PRESENT_PATH;
@@ -1498,6 +1499,161 @@ static void test_hold_leaves_others_alone(void)
 
 /* ------------------------------------------------------------------ runner */
 
+/* ------------------------------------------------------------------ EMP/1.8 panels and lists
+ *
+ * The daemon's system page on a 1.8 device: the stop, CLEAR E-STOP joined to it (a HOLD Action
+ * whose Text value is the fleet status), ARM disabled, the System list, then two more fields so
+ * the page keeps reading order (knob k shows ID k). */
+
+static const sfield_t panel_page[] = {
+    { 0, EMP_KIND_ACTION,   "E-STOP",       0, 0.0, 1, EMP_STYLE_ESTOP, 0, 0, 0, 0 },
+    { 1, EMP_KIND_ACTION,   "CLEAR E-STOP", "E-STOPPED\ncontrol surface", 0.0, 1, EMP_STYLE_HOLD,
+         EMP_TONE_WARN, 0, 0, EMP_FIELD_JOINED },
+    { 2, EMP_KIND_ACTION,   "ARM",          "NOT READY\nno node", 0.0, 1, EMP_STYLE_HOLD,
+         EMP_TONE_WARN, 0, 0, EMP_FIELD_DISABLED },
+    { 3, EMP_KIND_READONLY, "System",       "Fleet\tE-STOPPED\nNodes\t2/2\nWatches\t1 on duty",
+         0.0, 1, EMP_STYLE_LIST, 0, 0, 0, 0 },
+    { 4, EMP_KIND_NUMBER,   "Volume",       0, 0.5, 0, 0, 0, 0, 0, 0 },
+    { 5, EMP_KIND_ACTION,   "Identify",     0, 0.0, 0, 0, 0, 0, 0, EMP_FIELD_DISABLED },
+};
+#define PANEL_FIELDS ((uint16_t)(sizeof(panel_page) / sizeof(panel_page[0])))
+
+static void test_panel_decodes(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(400, panel_page, PANEL_FIELDS);
+    emp_diag_tick();
+    int ok = surf_applied_revision() == 400 && EMP_VERSION_MINOR == 8u;
+    ok = ok && surf_field_joined(surf_field(1)) && !surf_field_disabled(surf_field(1))
+            && surf_field_is_hold(surf_field(1)) && strcmp(surf_field(1)->text, "E-STOPPED\ncontrol surface") == 0;
+    ok = ok && surf_field_disabled(surf_field(2)) && surf_field_is_hold(surf_field(2))
+            && !surf_field_joined(surf_field(2));
+    ok = ok && surf_field_is_list(surf_field(3)) && !(surf_field(3)->flags & EMP_FIELD_TRUNCATED);
+    ok = ok && surf_field_is_estop(surf_field(0)) && !surf_field_joined(surf_field(0))
+            && surf_field_disabled(surf_field(5)) && !diag_seen(EMP_DIAG_STYLE_UNSUPPORTED, 0, 0);
+    check("1.8 joined, disabled and list decode at minor 8", ok);
+
+    /* LIST on anything but a ReadOnly, and DISABLED on anything but an Action: refused. */
+    static const sfield_t bad[] = {
+        { 0, EMP_KIND_ACTION,   "List action", 0,   0.0, 1, EMP_STYLE_LIST, 0, 0, 0, 0 },
+        { 1, EMP_KIND_NUMBER,   "List number", 0,   0.5, 1, EMP_STYLE_LIST, 0, 0, 0, 0 },
+        { 2, EMP_KIND_READONLY, "Inert text",  "x", 0.0, 0, 0, 0, 0, 0, EMP_FIELD_DISABLED },
+        { 3, EMP_KIND_ACTION,   "Style 4",     0,   0.0, 1, 4u, 0, 0, 0, 0 },
+    };
+    load_styled(401, bad, 4);
+    emp_diag_tick();
+    uint32_t ctx = 0, count = 0;
+    ok = surf_applied_revision() == 401;
+    ok = ok && !surf_field_is_list(surf_field(0)) && surf_field(0)->style == EMP_STYLE_NORMAL
+            && (surf_field(0)->flags & EMP_FIELD_TRUNCATED);
+    ok = ok && !surf_field_is_list(surf_field(1)) && (surf_field(1)->flags & EMP_FIELD_TRUNCATED);
+    ok = ok && !surf_field_disabled(surf_field(2)) && !(surf_field(2)->flags & EMP_FIELD_DISABLED);
+    ok = ok && surf_field(3)->style == EMP_STYLE_NORMAL;
+    ok = ok && diag_seen(EMP_DIAG_STYLE_UNSUPPORTED, &ctx, &count) && count == 3
+            && ctx == ((0u << 8) | EMP_STYLE_LIST);
+    check("list off a ReadOnly, disabled off an Action, style 4: refused", ok);
+
+    /* A minor 7 peer never sends them; if one did, this device answers as a 1.7 device. */
+    sim_wire_set_peer_minor(7);
+    load_styled(402, panel_page, PANEL_FIELDS);
+    emp_diag_tick();
+    ok = !surf_field_joined(surf_field(1)) && !surf_field_disabled(surf_field(2))
+      && surf_field_is_hold(surf_field(2)) && !surf_field_is_list(surf_field(3))
+      && surf_field(3)->style == EMP_STYLE_NORMAL && (surf_field(3)->flags & EMP_FIELD_TRUNCATED)
+      && diag_seen(EMP_DIAG_STYLE_UNSUPPORTED, &ctx, 0) && ctx == ((3u << 8) | EMP_STYLE_LIST);
+    check("minor 7 peer: 1.8 flags cleared and LIST unknown", ok);
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+}
+
+static void test_disabled_action_is_inert(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(410, panel_page, PANEL_FIELDS);
+    ui_state_tick(100);
+    sim_wire_reset();
+    ui_state_push(2, 1, 100);                                  /* ARM, disabled HOLD */
+    ui_state_tick(120);
+    int ok = ui_state()->hold_slot < 0 && ui_state_hold_permille(2) == 0;
+    ui_state_tick(2000);
+    ok = ok && activations() == 0;
+    ui_state_push(2, 0, 2010);
+    ui_state_push(5, 1, 2020); ui_state_push(5, 0, 2030);      /* disabled plain Action */
+    surf_activate(2); surf_activate(5);                        /* and asked for directly */
+    ok = ok && activations() == 0 && ui_state()->focused < 0;
+    check("a disabled Action neither holds nor fires", ok);
+
+    /* The joined one is live: it holds and fires as EMP/1.7 says. */
+    ui_state_push(1, 1, 3000);
+    ui_state_tick(3000 + EMP_HOLD_MS + 20);
+    const sim_wire_msg_t *m = sim_wire_last(EMP_OP_ACTIVATE);
+    ok = activations() == 1 && m && m->payload[12] == 1;
+    ui_state_push(1, 0, 4700);
+    /* The stop is untouched by all of it: it fires on its press. */
+    ui_state_push(0, 1, 4800); ui_state_push(0, 0, 4810);
+    m = sim_wire_last(EMP_OP_ACTIVATE);
+    ok = ok && activations() == 2 && m && m->payload[12] == 0;
+    check("a joined HOLD fires after the hold; the stop on its press", ok);
+}
+
+static void list_values(uint64_t revision, const char *text)
+{
+    buf_t b;
+    b_init(&b); b64(&b, revision); b16(&b, 1);
+    toned_text(&b, 3, 0, EMP_TONE_NEUTRAL, text);
+    surf_handle(EMP_OP_TONED_VALUES, b.b, b.n);
+}
+
+static void test_list_scrolls_locally(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(420, panel_page, PANEL_FIELDS);
+    int ok = ui_list_count(surf_field(3)) == 3 && ui_state_list_top(3) == 0;
+    sim_wire_reset();
+    ui_state_rotate(3, UI_LIST_STEP - 1, 10);                  /* not yet a step */
+    ok = ok && ui_state_list_top(3) == 0;
+    ui_state_rotate(3, 1, 11);
+    ok = ok && ui_state_list_top(3) == 1;
+    ui_state_rotate(3, UI_LIST_STEP * 20, 12);                 /* clamps at the last entry */
+    ok = ok && ui_state_list_top(3) == 2;
+    ok = ok && sim_wire_count() == 0;                           /* nothing on the wire */
+    check("a list scrolls by entries, clamped, and sends nothing", ok);
+
+    /* A value update keeps the place, clamped to the new length. */
+    list_values(420, "Fleet\tARMED\nNodes\t2/2\nWatches\t1 on duty\nLease\tnone\n");
+    ok = ui_list_count(surf_field(3)) == 4 && ui_state_list_top(3) == 2;
+    list_values(420, "Fleet\tARMED\nNodes\t1/2");
+    ok = ok && ui_list_count(surf_field(3)) == 2 && ui_state_list_top(3) == 1;
+    ui_state_rotate(3, -UI_LIST_STEP * 9, 13);
+    ok = ok && ui_state_list_top(3) == 0;
+    ui_state_rotate(3, UI_LIST_STEP, 14);
+    ok = ok && ui_state_list_top(3) == 1;
+    /* Its press goes back to the top and drills into nothing. */
+    ui_state_push(3, 1, 20); ui_state_push(3, 0, 21);
+    ok = ok && ui_state_list_top(3) == 0 && ui_state()->focused < 0;
+    check("values keep the place; press returns to the top, never drills", ok);
+
+    ui_state_rotate(3, UI_LIST_STEP, 30);
+    load_styled(421, panel_page, PANEL_FIELDS);
+    check("a descriptor replacement starts the list at the top", ui_state_list_top(3) == 0);
+}
+
+static void test_long_text_is_kept(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(430, panel_page, PANEL_FIELDS);
+    char text[241];
+    for (unsigned i = 0; i < 240u; i++) text[i] = (char)('a' + i % 26u);
+    text[240] = 0;
+    list_values(430, text);
+    int ok = strlen(surf_field(3)->text) == 240u && memcmp(surf_field(3)->text, text, 240u) == 0;
+    char longer[301];
+    for (unsigned i = 0; i < 300u; i++) longer[i] = 'z';
+    longer[300] = 0;
+    list_values(430, longer);
+    ok = ok && strlen(surf_field(3)->text) == SURF_TEXT_MAX - 1u;
+    check("text values keep up to 255 bytes, then cut", ok);
+}
+
 int desc_run_selftests(desc_report_fn report)
 {
     failures  = 0;
@@ -1550,6 +1706,11 @@ int desc_run_selftests(desc_report_fn report)
     test_hold_fires_once();
     test_hold_cancels();
     test_hold_leaves_others_alone();
+
+    test_panel_decodes();
+    test_disabled_action_is_inert();
+    test_list_scrolls_locally();
+    test_long_text_is_kept();
     sim_wire_set_peer_minor(EMP_VERSION_MINOR);
 
     report_fn = 0;

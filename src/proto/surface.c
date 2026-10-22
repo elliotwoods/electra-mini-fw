@@ -204,7 +204,7 @@ static int rd_value(rd_t *r, uint8_t tag, uint8_t *b_out, double *n_out, uint32_
         uint16_t n = rd16(r);
         if (!rd_avail(r, n)) { r->bad = 1; return RDV_UNDECODABLE; }
         if (text_out) {
-            uint16_t copy = n < 95u ? n : 95u;
+            uint16_t copy = n < SURF_TEXT_MAX - 1u ? n : (uint16_t)(SURF_TEXT_MAX - 1u);
             while (copy < n && copy && (r->p[r->off + copy] & 0xc0u) == 0x80u) --copy;
             memcpy(text_out, r->p + r->off, copy); text_out[copy] = 0;
             if (copy < n) emp_diag(EMP_SEV_WARN, EMP_DIAG_STRING_TRUNCATED, 0, "text readout truncated");
@@ -374,8 +374,11 @@ static uint8_t checked_tone(uint16_t id, uint8_t tone)
  * exactly as it is to a 1.6 device. */
 static void apply_style(surf_field_t *f, uint8_t style, uint8_t tone)
 {
-    uint8_t max = emp_session_peer_minor() >= 7u ? EMP_STYLE_HOLD : EMP_STYLE_ESTOP;
-    if (style > max || (style != EMP_STYLE_NORMAL && f->kind != EMP_KIND_ACTION)) {
+    uint8_t minor = emp_session_peer_minor();
+    uint8_t max = minor >= 8u ? EMP_STYLE_LIST : minor >= 7u ? EMP_STYLE_HOLD : EMP_STYLE_ESTOP;
+    /* EMP/1.8 LIST belongs on a ReadOnly field only: a knob that scrolls must not also edit. */
+    uint8_t wants = style == EMP_STYLE_LIST ? EMP_KIND_READONLY : EMP_KIND_ACTION;
+    if (style > max || (style != EMP_STYLE_NORMAL && f->kind != wants)) {
         emp_diag(EMP_SEV_WARN, EMP_DIAG_STYLE_UNSUPPORTED, ((uint32_t)f->id << 8) | style,
                  "field style refused; drawn as normal");
         f->flags = (uint8_t)(f->flags | EMP_FIELD_TRUNCATED);
@@ -472,6 +475,11 @@ static void desc_field(const uint8_t *msg, uint32_t len)
         staging_open = 0; send_desc_request(EMP_REQ_SEQUENCE_BROKEN); return;
     }
     f->flags        = rd8(&r);
+    /* EMP/1.8 flags mean nothing to an older peer, which would never send them; and DISABLED
+     * only ever makes an Action inert, so it is dropped from anything that is not one. */
+    if (emp_session_peer_minor() < 8u)
+        f->flags = (uint8_t)(f->flags & ~(EMP_FIELD_JOINED | EMP_FIELD_DISABLED));
+    if (f->kind != EMP_KIND_ACTION) f->flags = (uint8_t)(f->flags & ~EMP_FIELD_DISABLED);
     f->present      = rd16(&r);
     f->min          = rdf64(&r);
     f->max          = rdf64(&r);
@@ -740,7 +748,7 @@ static void handle_values(const uint8_t *msg, uint32_t len, int toned)
         /* A tag we can step over costs one control its update, not the batch. A tag we cannot
          * costs the batch, because every value after it would be read from the wrong offset --
          * which is worse than dropping them, since they would be applied to real controls. */
-        char text[96] = {0};
+        char text[SURF_TEXT_MAX] = {0};
         int got = rd_value(&r, tag, &boolean, &number, &choice, &color_count, color, text);
         if (got == RDV_UNDECODABLE) break;
         if (r.bad) break;
@@ -1202,6 +1210,7 @@ void surf_activate(uint16_t slot)
     static uint32_t activation_seq;
     const surf_field_t *field = surf_field(slot);
     if (!field || field->kind != EMP_KIND_ACTION || emp_session_peer_minor() < 2u) return;
+    if (surf_field_disabled(field)) return;           /* EMP/1.8: shown, never sent */
     uint8_t buf[14]; wr_t w; wr_init(&w, buf, sizeof(buf));
     wr64(&w, LIVE->revision); wr32(&w, ++activation_seq); wr16(&w, slot);
     emp_send(EMP_CH_INPUT, EMP_OP_ACTIVATE, buf, w.len);
@@ -1269,6 +1278,21 @@ int surf_field_is_estop(const surf_field_t *f)
 int surf_field_is_hold(const surf_field_t *f)
 {
     return f && f->kind == EMP_KIND_ACTION && f->style == EMP_STYLE_HOLD;
+}
+
+int surf_field_is_list(const surf_field_t *f)
+{
+    return f && f->kind == EMP_KIND_READONLY && f->style == EMP_STYLE_LIST;
+}
+
+int surf_field_disabled(const surf_field_t *f)
+{
+    return f && f->kind == EMP_KIND_ACTION && (f->flags & EMP_FIELD_DISABLED) != 0;
+}
+
+int surf_field_joined(const surf_field_t *f)
+{
+    return f && (f->flags & EMP_FIELD_JOINED) != 0;
 }
 
 void surf_demo_operator(void)

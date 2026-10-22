@@ -294,6 +294,9 @@ typedef struct {
     float    color[4];
     int16_t  bar_px;
     int16_t  hold_px;        /* EMP/1.7 fill extent, HOLD_SENT once fired */
+    uint8_t  flags;          /* EMP/1.8 JOINED / DISABLED */
+    uint8_t  list_top;       /* EMP/1.8 first LIST entry shown */
+    uint8_t  panel;          /* EMP/1.8: 0 a cell of its own, 1 a panel's left half, 2 its right */
 } cell_cache_t;
 
 static cell_cache_t last_cell[UI_FIELDS_PER_PAGE];
@@ -303,7 +306,7 @@ static uint16_t     last_page = 0xFFFF;
 static double       last_value;
 static uint32_t     last_choice;
 static uint8_t      last_boolean, last_value_tag, last_tone;
-static char         last_drill_text[96];
+static char         last_drill_text[SURF_TEXT_MAX];
 static uint8_t      last_color_count;
 static float        last_color[4];
 static int8_t       last_ws, last_held, last_zoom;
@@ -549,8 +552,221 @@ static void hold_meter(gfx_rect_t r, int16_t extent, uint16_t colour)
 /* The label above as usual; under it a caption, and across the foot of the cell a fill that
  * grows while the knob is held. Plain ink at rest, amber while holding, green "DONE" once the
  * ACTIVATE has gone, until the knob is released. Nothing here is a stop plate. */
+/* ------------------------------------------------------------------ EMP/1.8 status buttons */
+
+/* A HOLD Action carrying a Text value (EMP/1.8) is a status button: its status across the top of
+ * the cell, and under it a button face named by the field's label. Joined to the cell on its left
+ * (EMP_FIELD_JOINED) the status heads both cells and each knob keeps its own face beneath. */
+#define PANEL_HEAD_H 80
+static int status_button(const surf_field_t *f)
+{
+    return surf_field_is_hold(f) && f->value_tag == EMP_VAL_TEXT;
+}
+
+/* The face under a knob, inside its own cell column, below the status. */
+static gfx_rect_t face_rect(unsigned knob)
+{
+    int16_t x, y;
+    cell_geometry(knob, &x, &y);
+    return (gfx_rect_t){(int16_t)(x + SP), (int16_t)(y + PANEL_HEAD_H),
+                        (int16_t)(CELL_W - 2 * SP), (int16_t)(ROW_H - PANEL_HEAD_H - SP)};
+}
+
+/* The status line split at its first newline; the detail stops at the next one. */
+static void split_status(const surf_field_t *f, char *head, uint32_t hcap, char *detail, uint32_t dcap)
+{
+    head[0] = detail[0] = 0;
+    if (!f || f->value_tag != EMP_VAL_TEXT) return;
+    const char *nl = strchr(f->text, '\n');
+    uint32_t n = nl ? (uint32_t)(nl - f->text) : (uint32_t)strlen(f->text);
+    if (n >= hcap) n = hcap - 1u;
+    memcpy(head, f->text, n); head[n] = 0;
+    if (!nl) return;
+    const char *d = nl + 1, *end = strchr(d, '\n');
+    n = end ? (uint32_t)(end - d) : (uint32_t)strlen(d);
+    if (n >= dcap) n = dcap - 1u;
+    memcpy(detail, d, n); detail[n] = 0;
+}
+
+static uint16_t tone_or(uint8_t tone, uint16_t fallback)
+{
+    uint16_t c = ui_tone_color(tone);
+    return c ? c : fallback;
+}
+
+/* The status across `a` (the top PANEL_HEAD_H of one cell, or of a panel's two). With 2..4
+ * choice labels declared, they are the states the status moves between: a strip of them, the
+ * one the headline names lit in the field's tone and the rest drawn as outlines, so the whole
+ * machine is visible and where it stands is read at a glance. A headline that names none of them
+ * (or a field with no choices) is written out instead, in the tone; the detail line follows. */
+static void draw_status_header(gfx_rect_t a, const surf_field_t *f)
+{
+    char head[48], detail[SURF_TEXT_MAX];
+    split_status(f, head, sizeof(head), detail, sizeof(detail));
+    uint16_t ink = tone_or(f->tone, C_VALUE);
+    const int16_t pad = 2 * SP, top = (int16_t)(a.y + 2 * SP), pill_h = 34;
+    const int16_t inner = (int16_t)(a.w - 2 * pad);
+    int lit = 0, strip = 0;
+    uint16_t n = f->choice_count;
+    if (n >= 2u && n <= 4u) {
+        int16_t pw = (int16_t)((inner - (int16_t)(n - 1u) * SP) / (int16_t)n);
+        strip = 1;
+        for (uint16_t i = 0; i < n && strip; i++) {
+            uint16_t len = 0;
+            const char *l = surf_choice_label(f, i, &len);
+            char label[24];
+            if (!l || len >= sizeof(label)) { strip = 0; break; }
+            memcpy(label, l, len); label[len] = 0;
+            if (text_width(&font_small, label) > pw - 8) strip = 0;
+        }
+        for (uint16_t i = 0; i < n && strip; i++) {
+            uint16_t len = 0;
+            const char *l = surf_choice_label(f, i, &len);
+            char label[24];
+            memcpy(label, l, len); label[len] = 0;
+            gfx_rect_t r = {(int16_t)(a.x + pad + (int16_t)i * (pw + SP)), top, pw, pill_h};
+            int on = strcmp(label, head) == 0;
+            int16_t ty = (int16_t)(r.y + (r.h - text_height(&font_small)) / 2);
+            if (on) {
+                uint16_t fill = gfx_blend(C_CELL, ink, 64);
+                lit = 1;
+                gfx_paint(r, gfx_solid(fill, r), 6);
+                gfx_border(r, 6, 2, ink);
+                text_draw_centred(&font_small, (int16_t)(r.x + r.w / 2), ty, label, ink, fill);
+            } else {
+                gfx_border(r, 6, 1, C_OUTLINE);
+                text_draw_centred(&font_small, (int16_t)(r.x + r.w / 2), ty, label, C_DISABLED, C_CELL);
+            }
+        }
+    }
+    if (!strip && head[0]) {
+        /* Large where it fits; a longer word steps down a size before it is ever cut. */
+        char big[48];
+        memcpy(big, head, sizeof(big));
+        const font_t *hf = text_width(&font_ui, big) <= inner ? &font_ui : &font_small;
+        fit_text(hf, big, inner);
+        text_draw(hf, (int16_t)(a.x + pad), (int16_t)(top + (pill_h - text_height(hf)) / 2),
+                  big, ink, C_CELL);
+        lit = 1;
+    }
+    /* The detail line; a headline the strip could not show leads it, in its tone. */
+    int16_t dx = (int16_t)(a.x + pad), dy = (int16_t)(top + pill_h + SP);
+    if (!lit && head[0]) {
+        char lead[48];
+        memcpy(lead, head, sizeof(lead));
+        fit_text(&font_small, lead, inner);
+        dx = (int16_t)(dx + text_draw(&font_small, dx, dy, lead, ink, C_CELL) + SP);
+    }
+    if (detail[0] && dx < a.x + a.w - pad) {
+        /* A detail too long for the line loses whole trailing clauses (after its last ": ")
+         * before it is cut mid-word: "tool, 3 s ago" reads better than "tool, 3 s ago: idn-te~". */
+        int16_t room = (int16_t)(a.x + a.w - pad - dx);
+        char *cut;
+        while (text_width(&font_small, detail) > room && (cut = strrchr(detail, ':')) != 0
+               && cut > detail && cut[1] == ' ')
+            *cut = 0;
+        fit_text(&font_small, detail, room);
+        text_draw(&font_small, dx, dy, detail, C_TITLE, C_CELL);
+    }
+}
+
+/* Text across a face whose left part is filled: the same string twice, each pass clipped to its
+ * side, so the ink stays readable on the fill (dark on amber or green) and off it. */
+static void split_text(const font_t *fnt, int16_t cx, int16_t y, const char *s, gfx_rect_t r,
+                       int16_t split, uint16_t on_fill, uint16_t fill, uint16_t ink, uint16_t bg)
+{
+    if (split > r.x) {
+        gfx_clip((gfx_rect_t){r.x, r.y, (int16_t)(split - r.x), r.h});
+        text_draw_centred(fnt, cx, y, s, on_fill, fill);
+    }
+    if (split < r.x + r.w) {
+        gfx_clip((gfx_rect_t){split, r.y, (int16_t)(r.x + r.w - split), r.h});
+        text_draw_centred(fnt, cx, y, s, ink, bg);
+    }
+    gfx_unclip();
+}
+
+/* A HOLD Action's face: its label, and under it what holding does now. The fill is the hold
+ * itself: amber growing left to right while the knob is held, the whole face green once the
+ * ACTIVATE has gone. A DISABLED face is flat, outlined and greyed, with nothing to fill. */
+static void draw_hold_button(gfx_rect_t r, const surf_field_t *f)
+{
+    int disabled = surf_field_disabled(f);
+    int16_t ext = disabled ? 0 : hold_extent(f->id, r.w);
+    int sent = ext == HOLD_SENT;
+    if (sent) ext = r.w;
+    uint16_t face = disabled ? C_CELL : C_CELL_HOT;
+    uint16_t fill = sent ? C_OK : C_WARN;
+    gfx_paint(r, gfx_solid(face, r), 6);
+    if (ext > 0) {
+        gfx_rect_t done = {r.x, r.y, ext < 12 ? 12 : ext, r.h};
+        gfx_paint(done, gfx_solid(fill, done), 6);
+    }
+    /* An enabled face is outlined in its field's tone, which ties it to the status above it. */
+    uint16_t edge = disabled ? C_OUTLINE : ext > 0 ? fill : tone_or(f->tone, C_INDICATOR);
+    gfx_border(r, 6, disabled ? 1 : 2, edge);
+
+    char label[48];
+    str_of(label, sizeof(label), f->label_off, f->label_len);
+    const font_t *lf = text_width(&font_ui, label) <= r.w - 2 * SP ? &font_ui : &font_small;
+    fit_text(lf, label, (int16_t)(r.w - 2 * SP));
+    const char *caption = disabled ? "hold 1.5 s" : sent ? "SENT" : ext > 0 ? "keep holding" : "hold 1.5 s";
+    int16_t block = (int16_t)(text_height(lf) + text_height(&font_small));
+    int16_t ly = (int16_t)(r.y + (r.h - block) / 2), cy = (int16_t)(ly + text_height(lf));
+    int16_t cx = (int16_t)(r.x + r.w / 2), split = (int16_t)(r.x + (ext > 0 ? ext : 0));
+    uint16_t ink = disabled ? C_DISABLED : C_VALUE, sub = disabled ? C_DISABLED : C_TITLE;
+    split_text(lf, cx, ly, label, r, split, C_BG, fill, ink, face);
+    split_text(&font_small, cx, cy, caption, r, split, C_BG, fill, sub, face);
+}
+
+/* The pressed and touched affordances of a face, which in a panel stand for the knob's cell. */
+static void face_chrome(gfx_rect_t r, int touched, int pressed, int active, int remote)
+{
+    gfx_rect_t ring = {(int16_t)(r.x - 3), (int16_t)(r.y - 3), (int16_t)(r.w + 6), (int16_t)(r.h + 6)};
+    gfx_border(ring, 8, 2, C_CELL);                       /* clear the previous ring */
+    if (pressed) gfx_border(ring, 8, 2, C_NAV);
+    else if (touched || active) gfx_border(ring, 8, 2, C_ACCENT);
+    else if (remote) activity_outline(ring.x, ring.y, ring.w, ring.h, 0, 1);
+}
+
+/* The left knob's face in a panel: the stop plate, a hold button, or a plain Action. */
+static void draw_face(unsigned knob, const surf_field_t *f)
+{
+    gfx_rect_t r = face_rect(knob);
+    gfx_restore((gfx_rect_t){(int16_t)(r.x - 3), (int16_t)(r.y - 3), (int16_t)(r.w + 6), (int16_t)(r.h + 6)}, C_CELL);
+    if (!f) return;
+    if (surf_field_is_hold(f)) { draw_hold_button(r, f); return; }
+    char label[48];
+    str_of(label, sizeof(label), f->label_off, f->label_len);
+    int stop = surf_field_is_estop(f);
+    uint16_t face = stop ? C_STOP : C_CELL_HOT;
+    if (stop) gfx_card(r, C_STOP); else gfx_paint(r, gfx_solid(face, r), 6);
+    if (!stop) gfx_border(r, 6, 2, C_INDICATOR);
+    if (!label[0]) memcpy(label, stop ? "STOP" : "ACTION", 7u);
+    fit_text(&font_ui, label, (int16_t)(r.w - 2 * SP));
+    int16_t block = (int16_t)(text_height(&font_ui) + text_height(&font_small));
+    int16_t ly = (int16_t)(r.y + (r.h - block) / 2);
+    text_draw_centred(&font_ui, (int16_t)(r.x + r.w / 2), ly, label, C_VALUE, face);
+    text_draw_centred(&font_small, (int16_t)(r.x + r.w / 2), (int16_t)(ly + text_height(&font_ui)),
+                      "PRESS", stop ? C_VALUE : C_TITLE, face);
+}
+
+/* A status button in a cell of its own: the status above, the face below. */
+static void draw_status_cell(unsigned knob, const surf_field_t *f)
+{
+    int16_t x, y;
+    cell_geometry(knob, &x, &y);
+    gfx_restore((gfx_rect_t){(int16_t)(x + SP), (int16_t)(y + SP), (int16_t)(CELL_W - 2 * SP), (int16_t)(ROW_H - 2 * SP)}, C_CELL);
+    draw_status_header((gfx_rect_t){x, y, CELL_W, PANEL_HEAD_H}, f);
+    draw_hold_button(face_rect(knob), f);
+}
+
+/* The label above as usual; under it a caption, and across the foot of the cell a fill that
+ * grows while the knob is held. Plain ink at rest, amber while holding, green "DONE" once the
+ * ACTIVATE has gone, until the knob is released. Nothing here is a stop plate. */
 static void draw_hold_face(unsigned knob, const surf_field_t *f)
 {
+    if (status_button(f)) { draw_status_cell(knob, f); return; }
     int16_t x, y;
     cell_geometry(knob, &x, &y);
     const uint16_t bg = C_CELL;
@@ -559,13 +775,138 @@ static void draw_hold_face(unsigned knob, const surf_field_t *f)
 
     const int16_t bx = (int16_t)(x + 2 * SP), bw = (int16_t)(CELL_W - 4 * SP), bh = 16;
     const int16_t by = (int16_t)(y + ROW_H - 2 * SP - bh);
-    int16_t ext = hold_extent(f->id, (int16_t)(bw - 4));
+    int disabled = surf_field_disabled(f);
+    int16_t ext = disabled ? 0 : hold_extent(f->id, (int16_t)(bw - 4));
     int sent = ext == HOLD_SENT;
     const char *caption = sent ? "DONE" : "HOLD";
-    uint16_t ink = sent ? C_OK : ext > 0 ? C_WARN : C_VALUE;
+    uint16_t ink = disabled ? C_DISABLED : sent ? C_OK : ext > 0 ? C_WARN : C_VALUE;
     int16_t vy = (int16_t)(y + 14 + ROW_H / 2 - text_height(&font_value) / 2);
     text_draw(&font_value, bx, vy, caption, ink, bg);
     hold_meter((gfx_rect_t){bx, by, bw, bh}, sent ? (int16_t)(bw - 4) : ext, sent ? C_OK : C_WARN);
+}
+
+/* ------------------------------------------------------------------ EMP/1.8 LIST readout */
+
+/* One entry of a LIST value: an optional leading tone byte, a key, a TAB, a value. */
+typedef struct { const char *key; uint32_t key_len; const char *val; uint32_t val_len; uint8_t tone; } list_entry_t;
+
+static const char *list_entry(const char *p, list_entry_t *e)
+{
+    e->tone = 0;
+    if (*p >= 1 && *p <= 3) e->tone = (uint8_t)*p++;
+    const char *end = strchr(p, '\n');
+    if (!end) end = p + strlen(p);
+    const char *tab = memchr(p, '\t', (size_t)(end - p));
+    if (tab) { e->key = p; e->key_len = (uint32_t)(tab - p); e->val = tab + 1; e->val_len = (uint32_t)(end - tab - 1); }
+    else     { e->key = p; e->key_len = 0; e->val = p; e->val_len = (uint32_t)(end - p); }
+    return *end ? end + 1 : end;
+}
+
+/* Fit the next run of `s` (length n) into `w` pixels, breaking at a space where one falls; the
+ * run is copied to `out` and its length in source bytes returned. */
+static uint32_t wrap_run(const font_t *fnt, const char *s, uint32_t n, int16_t w, char *out, uint32_t cap)
+{
+    uint32_t take = 0, last_space = 0;
+    while (take < n && take + 1u < cap) {
+        out[take] = s[take]; out[take + 1u] = 0;
+        if (text_width(fnt, out) > w) break;
+        if (s[take] == ' ') last_space = take;
+        take++;
+    }
+    if (take < n && last_space > 0) take = last_space + 1u;     /* break after the space */
+    if (take == 0) take = 1;
+    uint32_t keep = take;
+    while (keep && s[keep - 1u] == ' ') keep--;
+    memcpy(out, s, keep); out[keep] = 0;
+    return take;
+}
+
+/* Lines of the readout under the label, from the entry the knob has scrolled to. A key and its
+ * value share a row when both fit (the key muted on the left, the value right-aligned in its
+ * tone); a longer value wraps onto rows of its own beneath the key. Rules separate entries. The
+ * dial scrolls by whole entries, so on its right a thin bar says where in the list the rows are,
+ * and above it "n/N" -- shown only when there is more than fits. */
+static void draw_list_face(unsigned knob, const surf_field_t *f)
+{
+    int16_t x, y;
+    cell_geometry(knob, &x, &y);
+    const int16_t top = (int16_t)(y + 40), bottom = (int16_t)(y + ROW_H - SP);
+    gfx_restore((gfx_rect_t){(int16_t)(x + SP), (int16_t)(y + SP), (int16_t)(CELL_W - 2 * SP), (int16_t)(ROW_H - 2 * SP)}, C_CELL);
+    char label[48];
+    str_of(label, sizeof(label), f->label_off, f->label_len);
+    unsigned count = ui_list_count(f), first = ui_state_list_top(f->id);
+    const int16_t left = (int16_t)(x + 2 * SP), right = (int16_t)(x + CELL_W - 2 * SP - 6);
+    const int16_t width = (int16_t)(right - left), row = text_height(&font_small);
+
+    const char *p = f->value_tag == EMP_VAL_TEXT ? f->text : "";
+    list_entry_t e;
+    for (unsigned i = 0; i < first && *p; i++) p = list_entry(p, &e);
+    int16_t ry = top;
+    unsigned shown = 0;
+    while (*p && ry + row <= bottom) {
+        p = list_entry(p, &e);
+        char key[32], val[SURF_TEXT_MAX];
+        uint32_t kn = e.key_len < sizeof(key) - 1u ? e.key_len : (uint32_t)sizeof(key) - 1u;
+        memcpy(key, e.key, kn); key[kn] = 0;
+        uint32_t vn = e.val_len < sizeof(val) - 1u ? e.val_len : (uint32_t)sizeof(val) - 1u;
+        memcpy(val, e.val, vn); val[vn] = 0;
+        uint16_t ink = tone_or(e.tone, C_VALUE);
+        if (shown) { gfx_set_fg(C_CELL_DOWN); gfx_fill_rect(left, (int16_t)(ry - 2), width, 1); }
+        int16_t kw = key[0] ? text_width(&font_small, key) : 0;
+        if (!key[0] || kw + 2 * SP + text_width(&font_small, val) <= width) {
+            if (key[0]) text_draw(&font_small, left, ry, key, C_LINK, C_CELL);
+            if (key[0]) text_draw_right(&font_small, right, ry, val, ink, C_CELL);
+            else { fit_text(&font_small, val, width); text_draw(&font_small, left, ry, val, ink, C_CELL); }
+            ry = (int16_t)(ry + row + 3);
+        } else {
+            /* The key, then the value wrapped beneath it; a value cut by the foot of the cell ends
+             * its last row with "~" (scrolling brings the rest up). Never a key without a row of
+             * its value. */
+            if (ry + 2 * row > bottom) break;
+            fit_text(&font_small, key, width);
+            text_draw(&font_small, left, ry, key, C_LINK, C_CELL);
+            ry = (int16_t)(ry + row);
+            const char *v = val;
+            uint32_t left_n = (uint32_t)strlen(val);
+            while (left_n && ry + row <= bottom) {
+                char run[64];
+                uint32_t used = wrap_run(&font_small, v, left_n, (int16_t)(width - SP), run, sizeof(run));
+                v += used; left_n -= used;
+                if (left_n && ry + 2 * row > bottom) {          /* the last row that fits */
+                    size_t k = strlen(run);
+                    while (k && text_width(&font_small, run) + text_width(&font_small, "~") > width - SP) run[--k] = 0;
+                    run[k] = '~'; run[k + 1] = 0;
+                }
+                text_draw(&font_small, (int16_t)(left + SP), ry, run, ink, C_CELL);
+                ry = (int16_t)(ry + row);
+            }
+            ry = (int16_t)(ry + 3);
+        }
+        shown++;
+    }
+
+    /* Label, and the position when the list is longer than one view. */
+    int more = count > 1u && (first > 0u || *p);
+    char pos[12] = {0};
+    if (more) {
+        unsigned k = 0, a = first + 1u;
+        if (a >= 10u) pos[k++] = (char)('0' + a / 10u);
+        pos[k++] = (char)('0' + a % 10u); pos[k++] = '/';
+        if (count >= 10u) pos[k++] = (char)('0' + count / 10u % 10u);
+        pos[k++] = (char)('0' + count % 10u); pos[k] = 0;
+    }
+    int16_t lw = (int16_t)(CELL_W - 4 * SP - (more ? text_width(&font_small, pos) + SP : 0));
+    fit_text(&font_ui, label, lw);
+    text_draw(&font_ui, left, (int16_t)(y + SP), label, C_TITLE, C_CELL);
+    if (more) {
+        text_draw_right(&font_small, (int16_t)(x + CELL_W - 2 * SP), (int16_t)(y + SP + 6), pos, C_LINK, C_CELL);
+        const int16_t tx = (int16_t)(x + CELL_W - SP - 4), th = (int16_t)(bottom - top);
+        gfx_set_fg(C_TRACK); gfx_fill_rect(tx, top, 3, th);
+        int16_t knob_h = (int16_t)(th * (int32_t)(shown ? shown : 1u) / (int32_t)count);
+        if (knob_h < 12) knob_h = 12;
+        int16_t ky = (int16_t)(top + (int32_t)(th - knob_h) * (int32_t)first / (int32_t)(count > 1u ? count - 1u : 1u));
+        gfx_set_fg(C_INDICATOR); gfx_fill_rect(tx, ky, 3, knob_h);
+    }
 }
 
 /* A value away from its default carries the screen's reset glyph in the cell's free bottom-left
@@ -590,6 +931,7 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
 
     if (surf_field_is_estop(f)) { draw_estop_face(knob, f); return; }
     if (surf_field_is_hold(f))  { draw_hold_face(knob, f);  return; }
+    if (surf_field_is_list(f))  { draw_list_face(knob, f);  return; }
 
     gfx_set_fg(bg);
     gfx_fill_rect((int16_t)(x + 2), (int16_t)(y + 70),
@@ -604,7 +946,14 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
     char buf[48];
     int16_t bw = 12;
     int16_t bx = (int16_t)(x + CELL_W - 2 * SP - bw);
-    int16_t avail = (int16_t)(bx - SP - (x + 2 * SP));
+    /* The side fader is a range: a level within min..max, or a centred pip for a number with no
+     * bounds that the knob still turns. A read-only text or unbounded readout, and an Action, have
+     * no range and nothing to turn, so they get no fader -- it read as a scrollbar beside them --
+     * and their text has the full width. */
+    int fader = f->kind != EMP_KIND_ACTION
+             && !(f->kind == EMP_KIND_READONLY
+                  && (f->value_tag == EMP_VAL_TEXT || bar_extent(f, 1) < 0));
+    int16_t avail = fader ? (int16_t)(bx - SP - (x + 2 * SP)) : (int16_t)(CELL_W - 4 * SP);
 
     /* The value on the cell's centre line, left-aligned: a column of numbers sharing a left edge
      * is far easier to compare down the panel than one that shifts with every digit count. */
@@ -644,6 +993,15 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
     }
     text_draw(vf, (int16_t)(x + 2 * SP), vy, buf, vc, bg);
 
+    /* EMP/1.8: an Action's Text value is its status, drawn under PRESS in its tone. */
+    if (f->kind == EMP_KIND_ACTION && f->value_tag == EMP_VAL_TEXT && f->text[0]) {
+        memcpy(buf, f->text, sizeof(buf) - 1u); buf[sizeof(buf) - 1u] = 0;
+        char *nl = strchr(buf, '\n'); if (nl) *nl = 0;
+        fit_text(&font_small, buf, avail);
+        text_draw(&font_small, (int16_t)(x + 2 * SP), (int16_t)(vy + text_height(vf)), buf,
+                  ui_value_color(f, 0), bg);
+    }
+
     if (f->present & EMP_PRESENT_UNIT) {
         str_of(buf, sizeof(buf), f->unit_off, f->unit_len);
         fit_text(&font_small, buf, avail);
@@ -653,6 +1011,7 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
 
     /* A fader down the cell's right edge: it uses the height, four of them side by side read as
      * a set, and it matches the range bar in the drilled view. */
+    if (!fader) return;
     int16_t by = (int16_t)(y + 70);
     int16_t bh = (int16_t)(h - 70 - 2 * SP);
     int16_t ext = bar_extent(f, bh);
@@ -711,7 +1070,8 @@ static void draw_cell(unsigned knob, const surf_field_t *f,
         gfx_fill_rect(x, y, CELL_W, ROW_H);
     }
 
-    if (f && !surf_field_is_estop(f)) {          /* a stop carries its label on its face */
+    /* A stop carries its label on its face; EMP/1.8 status buttons and lists draw their own. */
+    if (f && !surf_field_is_estop(f) && !status_button(f) && !surf_field_is_list(f)) {
         char label[48];
         str_of(label, sizeof(label), f->label_off, f->label_len);
         draw_cell_label((int16_t)(x + 2 * SP), (int16_t)(y + SP), label);
@@ -720,65 +1080,140 @@ static void draw_cell(unsigned knob, const surf_field_t *f,
     draw_cell_frame(knob, bg, touched, pressed, drilled, active, remote);
 }
 
+/* EMP/1.8: knob k's field is JOINED to the knob on its left, on the same row, and that knob has
+ * a field of its own which is not itself the right half of a panel (no chains). Operator layouts
+ * keep their own geometry. 0 none, 1 k is a panel's left half, 2 its right half. */
+static uint8_t panel_role(unsigned k)
+{
+    if (surf_operator_layout()) return 0;
+    int32_t me = ui_state_field_for(k);
+    if (me < 0) return 0;
+    const surf_field_t *f = surf_field((uint16_t)me);
+    if (k % UI_ROW_SPLIT != 0u && surf_field_joined(f)) {
+        int32_t left = ui_state_field_for(k - 1u);
+        if (left >= 0 && !surf_field_joined(surf_field((uint16_t)left))) return 2;
+    }
+    if ((k + 1u) % UI_ROW_SPLIT != 0u && !surf_field_joined(f)) {
+        int32_t right = ui_state_field_for(k + 1u);
+        if (right >= 0 && surf_field_joined(surf_field((uint16_t)right))) return 1;
+    }
+    return 0;
+}
+
+/* The whole panel: one card across both cells, the right field's status across its top, and a
+ * face under each knob. Nothing in it is a cell frame; each face carries its own knob's chrome. */
+static void draw_panel(unsigned kl, const surf_field_t *fl, const surf_field_t *fr)
+{
+    int16_t x, y;
+    cell_geometry(kl, &x, &y);
+    gfx_rect_t card = {x, y, (int16_t)(2 * CELL_W + SP), ROW_H};
+    gfx_card(card, C_CELL);
+    gfx_border(card, 5, 2, C_OUTLINE);
+    draw_status_header((gfx_rect_t){x, y, card.w, PANEL_HEAD_H}, fr);
+    draw_face(kl, fl);
+    draw_face(kl + 1u, fr);
+}
+
 /* Draw the cells in [first, last). The overview draws all eight; a drilled view draws the row
- * that still owns ordinary fields while the opposite row edits the focused value. */
+ * that still owns ordinary fields while the opposite row edits the focused value.
+ *
+ * Two passes: what changed in every cell first, then the drawing, because a panel (EMP/1.8)
+ * spans two knobs and must know about both before it repaints either. */
 static void render_cells(int full, unsigned first, unsigned last)
 {
-    static char last_text[8][96];
+    static char last_text[8][SURF_TEXT_MAX];
     const ui_state_t *st = ui_state();
+    int32_t idx[8];
+    const surf_field_t *fld[8];
+    uint8_t touched[8], pressed[8], active[8], remote[8], drilled[8], role[8];
+    uint8_t s_dirty[8], c_dirty[8], v_dirty[8];
+    int16_t bh = (int16_t)(ROW_H - 48 - 2 * SP);
 
     for (unsigned k = first; k < last; k++) {
-        int32_t idx = ui_state_field_for(k);
-        const surf_field_t *f = (idx >= 0) ? surf_field((uint16_t)idx) : 0;
-        int touched = (st->touch_mask & (1u << k)) != 0;
-        int pressed = (st->press_mask & (1u << k)) != 0;
-        int active = st->active_pot == (int8_t)k;
-        int remote = idx >= 0 && (st->remote_highlights & (UINT64_C(1) << idx)) != 0;
-
-        uint8_t drilled = (uint8_t)(idx >= 0 && idx == st->focused);
-        int static_dirty = full || !last_cell[k].valid
-                        || last_cell[k].id != (f ? f->id : 0xFFFFu)
-                        || last_cell[k].tag != (f ? f->value_tag : 0u)
-                        || last_cell[k].style != (f ? f->style : 0u);
-        int chrome_dirty = static_dirty
-                        || last_cell[k].touched != (uint8_t)touched
-                        || last_cell[k].pressed != (uint8_t)pressed
-                        || last_cell[k].drilled != drilled
-                        || last_cell[k].active != (uint8_t)active
-                        || last_cell[k].remote != (uint8_t)remote;
-
-        int16_t bh = (int16_t)(ROW_H - 48 - 2 * SP);
-        int value_dirty = static_dirty;
-        if (f && !value_dirty) {
-            value_dirty = strcmp(last_text[k], f->text) != 0 || last_cell[k].boolean != f->boolean
-                       || last_cell[k].choice  != f->choice
-                       || last_cell[k].number  != f->number
-                       || last_cell[k].color_count != f->color_count
-                       || last_cell[k].modified != (uint8_t)surf_field_modified(f)
-                       || last_cell[k].tone != f->tone
-                       || memcmp(last_cell[k].color, f->color, sizeof(f->color)) != 0
-                       || last_cell[k].bar_px  != bar_extent(f, bh)
-                       || last_cell[k].hold_px != hold_extent(idx, CELL_W - 4 * SP - 4);
+        idx[k] = ui_state_field_for(k);
+        const surf_field_t *f = fld[k] = (idx[k] >= 0) ? surf_field((uint16_t)idx[k]) : 0;
+        touched[k] = (st->touch_mask & (1u << k)) != 0;
+        pressed[k] = (st->press_mask & (1u << k)) != 0;
+        active[k]  = st->active_pot == (int8_t)k;
+        remote[k]  = idx[k] >= 0 && (st->remote_highlights & (UINT64_C(1) << idx[k])) != 0;
+        drilled[k] = (uint8_t)(idx[k] >= 0 && idx[k] == st->focused);
+        role[k]    = panel_role(k);
+        if ((role[k] == 1 && k + 1u >= last) || (role[k] == 2 && k == first)) role[k] = 0;
+        s_dirty[k] = full || !last_cell[k].valid
+                  || last_cell[k].id != (f ? f->id : 0xFFFFu)
+                  || last_cell[k].tag != (f ? f->value_tag : 0u)
+                  || last_cell[k].style != (f ? f->style : 0u)
+                  || last_cell[k].flags != (f ? f->flags : 0u)
+                  || last_cell[k].panel != role[k];
+        c_dirty[k] = s_dirty[k]
+                  || last_cell[k].touched != touched[k]
+                  || last_cell[k].pressed != pressed[k]
+                  || last_cell[k].drilled != drilled[k]
+                  || last_cell[k].active != active[k]
+                  || last_cell[k].remote != remote[k];
+        v_dirty[k] = s_dirty[k];
+        if (f && !v_dirty[k]) {
+            v_dirty[k] = strcmp(last_text[k], f->text) != 0 || last_cell[k].boolean != f->boolean
+                      || last_cell[k].choice  != f->choice
+                      || last_cell[k].number  != f->number
+                      || last_cell[k].color_count != f->color_count
+                      || last_cell[k].modified != (uint8_t)surf_field_modified(f)
+                      || last_cell[k].tone != f->tone
+                      || memcmp(last_cell[k].color, f->color, sizeof(f->color)) != 0
+                      || last_cell[k].bar_px  != bar_extent(f, bh)
+                      || last_cell[k].hold_px != hold_extent(idx[k], CELL_W - 4 * SP - 4)
+                      || last_cell[k].list_top != (uint8_t)ui_state_list_top(idx[k]);
         }
-        if (!static_dirty && !chrome_dirty && !value_dirty) continue;
+    }
+
+    for (unsigned k = first; k < last; k++) {
+        const surf_field_t *f = fld[k];
+        if (role[k] == 1) {
+            /* A panel, left knob k and right knob k + 1, drawn as one. */
+            unsigned r = k + 1u;
+            if (s_dirty[k] || s_dirty[r]) {
+                draw_panel(k, f, fld[r]);
+                c_dirty[k] = c_dirty[r] = 1;
+            } else {
+                if (v_dirty[r]) {
+                    int16_t x, y;
+                    cell_geometry(k, &x, &y);
+                    /* Inside the card's border and corners, down to the faces' rings. */
+                    gfx_restore((gfx_rect_t){(int16_t)(x + 2 * SP), (int16_t)(y + SP),
+                                             (int16_t)(2 * CELL_W + SP - 4 * SP), (int16_t)(PANEL_HEAD_H - SP - 4)}, C_CELL);
+                    draw_status_header((gfx_rect_t){x, y, (int16_t)(2 * CELL_W + SP), PANEL_HEAD_H}, fld[r]);
+                    draw_face(r, fld[r]);
+                    c_dirty[r] = 1;
+                }
+                if (v_dirty[k]) { draw_face(k, f); c_dirty[k] = 1; }
+            }
+            for (unsigned q = k; q <= r; q++)
+                if (c_dirty[q]) face_chrome(face_rect(q), touched[q], pressed[q], active[q], remote[q]);
+            continue;
+        }
+        if (role[k] == 2) continue;                        /* drawn with its left half */
+        if (!s_dirty[k] && !c_dirty[k] && !v_dirty[k]) continue;
         /* A HOLD face repaints while its knob is down, and its value region runs under the pressed
          * inset; put the chrome back over it. */
-        if (value_dirty && surf_field_is_hold(f)) chrome_dirty = 1;
+        if (v_dirty[k] && (surf_field_is_hold(f) || surf_field_is_list(f))) c_dirty[k] = 1;
 
-        if (static_dirty)
-            draw_cell(k, f, touched, pressed, drilled, active, remote);
+        if (s_dirty[k])
+            draw_cell(k, f, touched[k], pressed[k], drilled[k], active[k], remote[k]);
         else {
-            if (value_dirty) draw_cell_dynamic(k, f);
-            if (chrome_dirty) draw_cell_frame(k, ui_cell_background(f), touched, pressed, drilled,
-                                              active, remote);
+            if (v_dirty[k]) draw_cell_dynamic(k, f);
+            if (c_dirty[k]) draw_cell_frame(k, ui_cell_background(f), touched[k], pressed[k],
+                                            drilled[k], active[k], remote[k]);
         }
+    }
 
+    for (unsigned k = first; k < last; k++) {
+        const surf_field_t *f = fld[k];
         last_cell[k].valid   = 1;
-        last_cell[k].touched = (uint8_t)touched;
-        last_cell[k].pressed = (uint8_t)pressed;
-        last_cell[k].drilled = drilled;
-        last_cell[k].active  = (uint8_t)active;
-        last_cell[k].remote  = (uint8_t)remote;
+        last_cell[k].touched = touched[k];
+        last_cell[k].pressed = pressed[k];
+        last_cell[k].drilled = drilled[k];
+        last_cell[k].active  = active[k];
+        last_cell[k].remote  = remote[k];
         last_cell[k].id      = f ? f->id : 0xFFFF;
         if (f) memcpy(last_text[k], f->text, sizeof(f->text)); else last_text[k][0] = 0;
         last_cell[k].tag     = f ? f->value_tag : 0;
@@ -789,10 +1224,13 @@ static void render_cells(int full, unsigned first, unsigned last)
         last_cell[k].modified = (uint8_t)(f ? surf_field_modified(f) : 0);
         last_cell[k].style   = f ? f->style : 0;
         last_cell[k].tone    = f ? f->tone : 0;
+        last_cell[k].flags   = f ? f->flags : 0;
+        last_cell[k].panel   = role[k];
+        last_cell[k].list_top = (uint8_t)ui_state_list_top(idx[k]);
         if (f) memcpy(last_cell[k].color, f->color, sizeof(f->color));
         else memset(last_cell[k].color, 0, sizeof(last_cell[k].color));
         last_cell[k].bar_px  = f ? bar_extent(f, bh) : 0;
-        last_cell[k].hold_px = hold_extent(idx, CELL_W - 4 * SP - 4);
+        last_cell[k].hold_px = hold_extent(idx[k], CELL_W - 4 * SP - 4);
     }
 }
 

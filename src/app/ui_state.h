@@ -134,6 +134,9 @@ typedef struct {
     uint8_t  hold_done;
     uint32_t hold_start_ms;
     uint64_t hold_revision;
+    /* EMP/1.8 LIST readouts: the first entry shown, per absolute slot. Device-local; a value
+     * update keeps it (clamped to the new entry count), a descriptor replacement resets it. */
+    uint8_t  list_top[SURF_MAX_FIELDS];
 
     uint16_t touch_mask;     /* live, 8 bits, panel order -- highlighting only */
     uint16_t press_mask;     /* live pot-switch state, for the pressed affordance */
@@ -183,6 +186,11 @@ void ui_state_tick(uint32_t now_ms);
 /* EMP/1.7: how far a hold on `slot` has run, 0..1000 per mille (1000 once fired). 0 for any
  * slot not being held. Uses the time of the last tick, so the renderer needs no clock. */
 uint16_t ui_state_hold_permille(int32_t slot);
+/* EMP/1.8 LIST: entries in the field's text (one per '\n'-separated line, a trailing newline
+ * adds none) and the first one to show, already clamped to the current count. */
+#define UI_LIST_STEP 3                         /* detents per entry */
+unsigned ui_list_count(const surf_field_t *f);
+unsigned ui_state_list_top(int32_t slot);
 
 /* Logical descriptor IDs stay stable; these are the authoritative layout mappings.
  * Generic pages with 1..4 occupied controls use bottom knobs 4..7, in ID order. */

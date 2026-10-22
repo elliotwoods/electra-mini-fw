@@ -1,4 +1,4 @@
-# EMP/1 — Electra Mini Protocol v1.7
+# EMP/1 — Electra Mini Protocol v1.8
 
 Normative wire spec for `electra-mini-fw` ↔ `av-frameworks`. MUST / MUST NOT / SHOULD / MAY
 per RFC 2119. Both codecs (C in `src/proto/`, Rust in the host crate) are written against
@@ -240,7 +240,7 @@ string: the field index for a truncated label, the tag for an unknown value tag,
 | `19` | `E_GRAPHICS_TIMEOUT` — bounded accelerator completion wait expired |
 | `20` | `E_GRAPHICS_FAULT` — accelerator initialization, command, memory, or bus failure |
 | `21` | `E_INPUT_QUEUE_OVERFLOW` — deferred input queue exhausted during rendering |
-| `22` | `E_STYLE_UNSUPPORTED` — EMP/1.6/1.7 style or tone refused and drawn as normal/neutral; context `(id << 8) \| value` |
+| `22` | `E_STYLE_UNSUPPORTED` — EMP/1.6/1.7/1.8 style or tone refused and drawn as normal/neutral; context `(id << 8) \| value` |
 
 A device MUST NOT send `DIAG` from inside a decoder. Framing an outbound message part-way
 through an inbound one means building it from state the inbound parse is still walking, and on
@@ -490,9 +490,9 @@ all existing descriptor, input and grid behaviour.
 - The reserved u16 in DESC_BEGIN is now layout flags. Bit 0 opts into the operator
   layout for minor >=2. Zero retains the established grid. Hosts must send zero
   to older peers and omit Action fields when actions are unsupported.
-- Text values are retained in a bounded 96-byte field buffer and repainted on
-  VALUES updates. Long UTF-8 values truncate at a character boundary and emit
-  STRING_TRUNCATED diagnostics.
+- Text values are retained in a bounded field buffer (96 bytes until EMP/1.8; 256, so 255 bytes
+  of text, from the firmware that speaks it) and repainted on VALUES updates. Long UTF-8 values
+  truncate at a character boundary and emit STRING_TRUNCATED diagnostics.
 
 The operator layout is an explicit slot contract, not automatic schema styling.
 This opt-in layout retains its original descriptor slot contract: slots 0–3 correspond
@@ -729,3 +729,120 @@ fleet to Disarmed, never to Armed); the device only decides *when* it is sent.
   green (`--ok` #34d399), until the knob is released; release returns the cell to rest.
 - Operator layout: the action-row card shows the label, `HOLD` / `DONE` beneath it in the same
   colours, and the same fill along the bottom of the card.
+
+
+## EMP/1.8: panels, disabled Actions, Action status and list readouts
+
+Four additions, all inside what EMP/1.6 already put on the wire: two bits of the field record's
+`flags` u8, one more `style` value, and a meaning for a Text value on an Action. No new opcode,
+message or DIAG code; `ACTIVATE` is the EMP/1.2 14 bytes. They exist for the daemon's system
+page, where the fleet's E-STOP and its clear must read as one control with the fleet's state, the
+fleet's ARM must be a hold that is visibly unavailable when it would be refused, and a read-only
+summary of the fleet must fit one cell (`docs/graphics-evidence/system-page/`).
+
+| Member | Value | Name | Valid on |
+|---|---|---|---|
+| `flags` bit 2 | `0x04` | `JOINED` | any field; drawn on the generic grid only |
+| `flags` bit 3 | `0x08` | `DISABLED` | Action (kind 5) only |
+| `style` | 3 | `LIST` | ReadOnly (kind 3) with a Text value |
+
+### Negotiation
+
+- A host sets `JOINED` or `DISABLED`, sends `style = 3`, or gives an Action a Text value only when
+  HELLO negotiation selected minor 8 or newer. To an older peer it sends the EMP/1.7 page it would
+  have sent before (the av-frameworks system page keeps its EMP/1.7 layout there), and an Action it
+  would have sent `DISABLED` is sent as a ReadOnly field, so no older device can fire it.
+- A device whose negotiated minor is below 8 clears both flag bits on receipt (as a 1.7 device,
+  which never reads them) and treats `style = 3` as EMP/1.7 says: unknown, drawn `NORMAL`,
+  `TRUNCATED`, `DIAG{E_STYLE_UNSUPPORTED}`.
+- A minor 8 device applies the EMP/1.6 rule with the limit raised to 3: `style` > 3; `ESTOP` or
+  `HOLD` on anything but an Action; or `LIST` on anything but a ReadOnly field, loads the field drawn
+  `NORMAL` with `TRUNCATED` and `DIAG{E_STYLE_UNSUPPORTED}` (context `(id << 8) | style`).
+  `DISABLED` on anything but an Action is cleared without a diagnostic: it can only ever make an
+  Action inert, and nothing else fires.
+- Enabling or disabling an Action is a descriptor change (a new revision). A hold in progress is
+  therefore cancelled when its Action is disabled, by the EMP/1.7 rule, and a host must not expect
+  an `ACTIVATE` from a field it has disabled.
+
+### Text values
+
+The device keeps up to 255 bytes of a Text value (256 with its terminator; it was 95). Longer
+text is cut on a character boundary with `DIAG{E_STRING_TRUNCATED}`, as before. The panel fonts
+cover printable ASCII; other characters are drawn as `?`, so hosts writing for this panel use
+ASCII separators (`-`, `,`, `:`), not `·` or `…`.
+
+### `DISABLED`
+
+- A `DISABLED` Action does nothing: its press starts no hold and sends no `ACTIVATE`, plain, HOLD or
+  ESTOP style alike. A host must therefore never disable a stop: the device would honour it.
+- It is drawn present but inert: a flat face with a one-pixel outline and its label and caption in
+  `--text-faint`, and no fill while its knob is held. Its status (below) is drawn as usual, which is
+  where a host says why it is disabled.
+
+### Action status
+
+An Action whose value is Text (tag `0x03`) carries a **status**: the first line (to the first
+`\n`) is its headline, the second its detail. `VALUES` / `TONED_VALUES` change it in place like any
+readout, with its tone, so a status changes without a descriptor replacement and without cancelling
+a hold. An Action's value is never edited and never sent back; it is presentation only.
+
+- A plain Action draws `PRESS` as before with the headline under it, in its tone.
+- A `HOLD` Action with a status is a **status button**: across the top of its cell the status, and
+  below it a button face showing the field's label with `hold 1.5 s` under it. While held the face
+  fills amber (`--warn-soft-text`) from the left in proportion to the time held, with the text over
+  the fill in the panel's ground colour, and the caption reads `keep holding`; once `ACTIVATE` has
+  gone the whole face is green (`--ok`) and reads `SENT` until the knob is released. An enabled face
+  is outlined in its field's tone. A `HOLD` Action without a status keeps the EMP/1.7 drawing.
+- **The status strip.** If the Action declares 2 to 4 choice labels (the field record's choices,
+  otherwise unused on an Action), they are the states its status moves between. The header draws
+  them as a strip of pills, left to right in declaration order; the one whose label equals the
+  headline exactly is filled and outlined in the field's tone, the others are outlines in faint
+  ink. A headline matching none of them (the host's "NO ORCH", say) lights none and is written at
+  the start of the detail line in the tone. Without choices, or with labels too wide for their
+  pills, the headline is written large in the tone instead (stepping down one font size before it
+  is cut). The detail line is cut with `~` to the header's width.
+
+### `JOINED`: panels
+
+A field with `JOINED` set, on the generic grid, joins its cell to the cell of the knob on its left
+**on the same row** into one panel, when that knob has a field and that field is not itself
+`JOINED` (panels are pairs; there are no chains). The physical mapping is unchanged: each knob
+still addresses its own field, and the page's knob order (EMP/1.6 "Which knob is top-left")
+decides who is on the left. A `JOINED` field in a row's first position, or beside an empty knob,
+is drawn as an ordinary cell. The operator layout ignores the bit.
+
+- The panel is one card spanning both cells. The joining (right-hand) field's status heads it,
+  across both cells, as above. Under the header each knob has a face in its own column: an
+  `ESTOP` Action keeps the red stop plate with its label and `PRESS`; a `HOLD` Action is the status
+  button's face; a plain Action is a raised face with `PRESS`.
+- Touch, press, local activity and host highlight are drawn as a ring around the knob's face rather
+  than around the cell. Nothing about either field's behaviour changes: the stop fires on its press
+  edge, including its EMP/1.6 drilled-field exception; a `HOLD` holds as EMP/1.7 says.
+
+### `LIST`
+
+A ReadOnly field with `style = 3` and a Text value is a **list**: one entry per `\n`-separated
+line (a trailing newline adds none). An entry is `key<TAB>value`, or a value alone; it may start
+with one byte `0x01`, `0x02` or `0x03` that draws that entry's value in the `OK`, `WARN` or `ALERT`
+tone (the field's own tone is not used).
+
+- Drawn under the field's label: a key and its value share a row when both fit, the key muted on
+  the left and the value right-aligned; a longer value wraps at spaces onto rows of its own under
+  its key, and one cut by the foot of the cell ends with `~` (scrolling brings the rest up).
+  Thin rules separate entries. When the list is longer than the cell, the label row shows
+  `n/N` (the first entry shown, of the total) and a 3-pixel position bar runs down the right edge;
+  a list that fits shows neither.
+- **Its knob scrolls it**, `UI_LIST_STEP` (3) detents per entry, clamped to the first and last
+  entries. Nothing is sent: no `EDIT`, no `EDIT_DELTA`, no `FOCUS` change beyond touch. The place is
+  kept across value updates (clamped to the new number of entries) and across page changes, and
+  reset by a descriptor replacement. Pressing the knob returns to the first entry; a list is never
+  drilled into.
+
+### Read-only values have no fader
+
+Not a wire change, but a rendering one shipped with 1.8: the generic cell's side fader is a range,
+and is drawn only for a value that has one. A ReadOnly field showing text, a ReadOnly number
+without both bounds, and an Action have no fader (it was drawn with a centred pip and read as a
+scrollbar beside a value that cannot scroll), and their text takes the full width of the cell. A
+bounded ReadOnly number keeps its level fader.
+

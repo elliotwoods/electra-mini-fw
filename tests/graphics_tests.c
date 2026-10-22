@@ -10,6 +10,7 @@
 #include "ui_state.h"
 #include "surface.h"
 #include "fixtures.h"
+#include "sim_wire.h"
 static uint16_t reference[LCD_WIDTH*LCD_HEIGHT];
 static unsigned checks;
 #define CHECK(x) do { checks++; if(!(x)) {fprintf(stderr,"FAIL line %d: %s\n",__LINE__,#x);exit(1);} } while(0)
@@ -242,8 +243,78 @@ static void hold_tests(void)
     CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
     puts("  hold fill grows amber, turns green once sent, clears on release, matches clean repaints");
 }
+/* Read-only readouts used to carry the side fader with a centred pip, which read as a small
+ * scrollbar beside a value that cannot scroll or turn. Only a ranged value has a fader now. */
+static void readout_tests(void)
+{
+    const int16_t cw=(LCD_WIDTH-24-18)/4, ch=184, top=6, bottom=(int16_t)(6+184+6+88+6);
+    clean();sim_wire_set_peer_minor(7);fixture_system_page_17(0);ui_render();
+    for(unsigned k=1;k<8;k++) {
+        const surf_field_t *f=surf_field((uint16_t)ui_state_field_for(k));
+        int16_t x=(int16_t)(12+(k%4)*(cw+6)), y=k<4?top:bottom;
+        int16_t bx=(int16_t)(x+cw-12-12), by=(int16_t)(y+70), bh=(int16_t)(ch-70-12);
+        unsigned track=count_colour(bx,by,12,bh,C_TRACK);
+        if(f->kind==EMP_KIND_READONLY) CHECK(track==0);             /* Fleet, Nodes, Watches, Dictation */
+        if(f->kind==EMP_KIND_NUMBER) CHECK(track>100);              /* Volume, Brightness keep theirs */
+    }
+    /* Nothing of the old fader under READ ONLY either: the caption is whole. */
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    puts("  read-only text and unbounded readouts have no fader; ranged values keep theirs");
+}
+/* EMP/1.8: the fleet panel and the System list. Every step matches a clean repaint, the stop
+ * keeps its red plate, the clear's fill grows across its face, and a scroll repaints the list. */
+static void panel_tests(void)
+{
+    const int16_t cw=(LCD_WIDTH-24-18)/4, y0=6, x0=12, x1=(int16_t)(12+cw+6), x3=(int16_t)(12+3*(cw+6));
+    const int16_t fy=(int16_t)(y0+80), fh=(int16_t)(184-80-6);
+    static const char *const list="Fleet\tE-STOPPED\nStop by\tcontrol surface\nReason\tcontrol surface E-STOP\n"
+                                  "Stopped\t12 s ago\nNodes\t2/2\nWatches\t1 on duty";
+    clean();fixture_system_page("E-STOPPED\ncontrol surface, 12 s ago",EMP_TONE_WARN,1,
+                                "STOPPED\nclear E-stop first",EMP_TONE_WARN,0,list);
+    ui_state_tick(100);ui_render();
+    CHECK(count_colour(x0,fy,cw,fh,C_STOP)>2000);                /* the stop is still the stop */
+    CHECK(count_colour(x1,fy,cw,fh,C_WARN)>40&&count_colour(x1,fy,cw,fh,C_WARN)<2000); /* edge only */
+    CHECK(count_colour(x0,y0,2*cw+6,80,C_WARN)>40);               /* the lit E-STOPPED pill */
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    ui_state_push(1,1,100);ui_state_tick(100+EMP_HOLD_MS/2);ui_render();
+    unsigned half=count_colour(x1,fy,cw,fh,C_WARN);
+    CHECK(half>3000);
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    ui_state_tick(100+EMP_HOLD_MS);ui_render();
+    CHECK(count_colour(x1,fy,cw,fh,C_OK)>half);
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    ui_state_push(1,0,2000);ui_state_tick(2000);ui_render();
+    CHECK(count_colour(x1,fy,cw,fh,C_OK)==0);
+    /* The status changes as a value: header and face repaint in place, as a clean repaint would. */
+    fixture_toned_text(1,EMP_TONE_WARN,"E-STOPPED\nclearing...");ui_render();
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    /* Scrolling the list repaints it, and only it. */
+    memcpy(reference,sim_framebuffer(),sizeof(reference));
+    ui_state_rotate(3,UI_LIST_STEP*2,2100);ui_render();
+    CHECK(ui_state_list_top(3)==2);
+    unsigned changed=0;
+    for(int y=0;y<LCD_HEIGHT;y++)for(int x=0;x<LCD_WIDTH;x++)
+        if(sim_framebuffer()[y*LCD_WIDTH+x]!=reference[y*LCD_WIDTH+x]) {
+            changed++; CHECK(x>=x3&&x<x3+cw&&y>=y0&&y<y0+184);
+        }
+    CHECK(changed>100);
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    /* Leaving the stop: the clear is disabled and has no fill to give, and the panel stays one. */
+    fixture_system_page("DISARMED\nlasers dark",EMP_TONE_OK,0,"READY\narm checks met",EMP_TONE_OK,1,list);
+    ui_state_tick(3000);ui_state_push(1,1,3000);ui_state_tick(3000+EMP_HOLD_MS);ui_render();
+    CHECK(count_colour(x1,fy,cw,fh,C_WARN)==0&&count_colour(x1,fy,cw,fh,C_OK)==0);
+    CHECK(count_colour(x0,y0,2*cw+6,80,C_OK)>40);                 /* the lit DISARMED pill */
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    puts("  fleet panel and list: stop plate kept, hold fill on the face, clean-repaint parity");
+}
 int main(void)
 {
-    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();status_tests();hold_tests();
+    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();status_tests();hold_tests();readout_tests();panel_tests();
     printf("%u graphics checks passed\n",checks);return 0;
 }

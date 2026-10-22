@@ -5,7 +5,7 @@
 #include "frame.h"
 #include "ui_state.h"
 #include <string.h>
-typedef struct { uint8_t bytes[512];unsigned n; } fixture_buf;
+typedef struct { uint8_t bytes[1024];unsigned n; } fixture_buf;
 static void fixture_int(fixture_buf*b,uint64_t v,unsigned bytes){while(bytes--){b->bytes[b->n++]=(uint8_t)v;v>>=8;}}
 static void fixture_string(fixture_buf*b,const char*s){unsigned n=(unsigned)strlen(s);fixture_int(b,n,2);memcpy(b->bytes+b->n,s,n);b->n+=n;}
 static void fixture_double(fixture_buf*b,double v){memcpy(b->bytes+b->n,&v,8);b->n+=8;}
@@ -76,6 +76,77 @@ static void fixture_status_hold(void)
         {EMP_KIND_READONLY,0,EMP_TONE_ALERT,"Orchestrator","STOPPED"},{EMP_KIND_READONLY,0,EMP_TONE_WARN,"Beacon","late"},
         {EMP_KIND_READONLY,0,EMP_TONE_ALERT,"Last stop","control surface"},{EMP_KIND_ACTION,0,0,"Identify",0}};
     fixture_styled(f,6);
+}
+/* EMP/1.8: any field, flags and choices included -- enough to build the av-frameworks daemon's
+ * system page exactly as its router sends it. `text` set means a Text value; otherwise Bool for
+ * Actions and toggles, Number for the rest. */
+typedef struct {
+    uint8_t kind,flags,style,tone; const char*label,*text,*unit; double number,min,max;
+    const char*const*choices; uint16_t choice_count;
+} fixture_field;
+static void fixture_fields(const fixture_field*f,unsigned n)
+{
+    static uint64_t revision=0x1800000000ULL;revision++;
+    fixture_buf b={{0},0};fixture_int(&b,revision,8);fixture_int(&b,n,2);fixture_int(&b,0,2);fixture_int(&b,0,4);
+    surf_handle(EMP_OP_DESC_BEGIN,b.bytes,b.n);uint32_t crc=0xffffffff;
+    for(unsigned i=0;i<n;i++) {
+        const fixture_field*x=&f[i];
+        if(!x->label) continue;
+        b.n=0;fixture_int(&b,i,2);unsigned body=b.n;
+        unsigned present=(x->style||x->tone)?EMP_PRESENT_STYLE:0u;
+        if(x->unit) present|=EMP_PRESENT_UNIT;
+        if(x->max>x->min) present|=EMP_PRESENT_MIN|EMP_PRESENT_MAX|EMP_PRESENT_STEP|EMP_PRESENT_PRECISION;
+        if(x->choice_count) present|=EMP_PRESENT_CHOICES;
+        fixture_int(&b,0,2);fixture_int(&b,i,2);fixture_int(&b,x->kind,1);
+        fixture_int(&b,(x->kind==EMP_KIND_READONLY?EMP_FIELD_READONLY:0u)|x->flags,1);fixture_int(&b,present,2);
+        fixture_double(&b,x->min);fixture_double(&b,x->max);fixture_double(&b,1);
+        fixture_int(&b,0,1);fixture_int(&b,0,1);fixture_int(&b,x->choice_count,2);
+        if(x->text){fixture_int(&b,EMP_VAL_TEXT,1);fixture_string(&b,x->text);}
+        else if(x->kind==EMP_KIND_ACTION||x->kind==EMP_KIND_TOGGLE){fixture_int(&b,EMP_VAL_BOOL,1);fixture_int(&b,x->number!=0,1);}
+        else {fixture_int(&b,EMP_VAL_NUMBER,1);fixture_double(&b,x->number);}
+        fixture_string(&b,x->label);
+        if(x->unit) fixture_string(&b,x->unit);
+        for(unsigned c=0;c<x->choice_count;c++) fixture_string(&b,x->choices[c]);
+        if(present&EMP_PRESENT_STYLE){fixture_int(&b,x->style,1);fixture_int(&b,x->tone,1);}
+        crc=emp_crc32c_update(crc,b.bytes+body,b.n-body);surf_handle(EMP_OP_DESC_FIELD,b.bytes,b.n);
+    }
+    unsigned count=0; for(unsigned i=0;i<n;i++) if(f[i].label) count++;
+    (void)count;
+    b.n=0;fixture_int(&b,revision,8);fixture_int(&b,n,2);fixture_int(&b,~crc,4);surf_handle(EMP_OP_DESC_END,b.bytes,b.n);ui_state_init();ui_reset();
+}
+/* The daemon's system page on an EMP/1.8 device: the fleet panel (E-STOP + CLEAR E-STOP), ARM,
+ * the System readout, then Volume, Brightness, Dictate and Dictation. `stopped` enables the
+ * clear; `armable` the arm. Strings are what control-surface-router's system page sends. */
+static const char*const fixture_fleet_states[3]={"DISARMED","ARMED","E-STOPPED"};
+static void fixture_system_page(const char*fleet,uint8_t fleet_tone,int stopped,
+                                const char*arm,uint8_t arm_tone,int armable,const char*readout)
+{
+    fixture_field f[8]={
+        {EMP_KIND_ACTION,0,EMP_STYLE_ESTOP,0,"E-STOP",0,0,0,0,0,0,0},
+        {EMP_KIND_ACTION,(uint8_t)(EMP_FIELD_JOINED|(stopped?0u:EMP_FIELD_DISABLED)),EMP_STYLE_HOLD,fleet_tone,
+         "CLEAR E-STOP",fleet,0,0,0,0,fixture_fleet_states,3},
+        {EMP_KIND_ACTION,(uint8_t)(armable?0u:EMP_FIELD_DISABLED),EMP_STYLE_HOLD,arm_tone,"ARM",arm,0,0,0,0,0,0},
+        {EMP_KIND_READONLY,0,EMP_STYLE_LIST,0,"System",readout,0,0,0,0,0,0},
+        {EMP_KIND_NUMBER,0,0,0,"Volume",0,"%",40,0,100,0,0},
+        {EMP_KIND_NUMBER,0,0,0,"Brightness",0,"%",75,0,100,0,0},
+        {EMP_KIND_ACTION,0,0,0,"Dictate",0,0,0,0,0,0,0},
+        {EMP_KIND_READONLY,0,0,0,"Dictation","Ready",0,0,0,0,0,0}};
+    fixture_fields(f,8);
+}
+/* The same page as an EMP/1.7 device is sent it today (the fallback below minor 8). */
+static void fixture_system_page_17(int stopped)
+{
+    fixture_field f[8]={
+        {EMP_KIND_ACTION,0,EMP_STYLE_ESTOP,0,"E-STOP",0,0,0,0,0,0,0},
+        stopped ? (fixture_field){EMP_KIND_ACTION,0,EMP_STYLE_HOLD,EMP_TONE_WARN,"CLEAR E-STOP",0,0,0,0,0,0,0}
+                : (fixture_field){EMP_KIND_READONLY,0,0,EMP_TONE_OK,"Fleet","DISARMED",0,0,0,0,0,0},
+        {EMP_KIND_READONLY,0,0,EMP_TONE_OK,"Nodes","2/2",0,0,0,0,0,0},
+        {EMP_KIND_READONLY,0,0,EMP_TONE_OK,"Watches","1 on duty",0,0,0,0,0,0},
+        {EMP_KIND_NUMBER,0,0,0,"Volume",0,"%",40,0,100,0,0},
+        {EMP_KIND_NUMBER,0,0,0,"Brightness",0,"%",75,0,100,0,0},
+        {EMP_KIND_ACTION,0,0,0,"Dictate",0,0,0,0,0,0,0},
+        {EMP_KIND_READONLY,0,0,0,"Dictation","Ready",0,0,0,0,0,0}};
+    fixture_fields(f,8);
 }
 /* EMP/1.6 TONED_VALUES for one text field at the live revision. */
 static void fixture_toned_text(uint16_t id,uint8_t tone,const char*text)

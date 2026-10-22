@@ -64,7 +64,14 @@ The integration currently provides:
   with the value.
 - Hold-to-fire Actions (EMP/1.7): an Action can require a 1.5-second hold before it is sent, with a
   fill that grows across the cell while the knob is held; releasing or turning early cancels it.
-  The fleet's "HOLD TO CLEAR" E-stop reset uses it.
+  The fleet's E-stop clear uses it.
+- Panels, status buttons and list readouts (EMP/1.8): a field can join the cell on its left into
+  one panel headed by its status (a strip of its states with the current one lit), an Action can be
+  shown disabled, a hold-to-fire Action with a status becomes a button face that fills while held,
+  and a read-only list scrolls under its knob. The av-frameworks daemon's system page puts the
+  fleet's E-STOP and CLEAR E-STOP in one panel with DISARMED / ARMED / E-STOPPED above them, a held
+  ARM beside it and a scrolling System readout
+  ([renders](docs/graphics-evidence/system-page/)). Read-only text no longer carries a fader.
 - Transactional descriptor replacement. A failed or partial update never replaces the live
   surface, and session IDs make device resets visible to the host.
 - Device and link diagnostics through EMP/1 heartbeats, counters, and structured diagnostic
@@ -253,7 +260,10 @@ Install Python `pyserial` and `Pillow`; Xcode command-line tools provide `cc`.
 `python3 tools/host.py test` runs the portable C suites;
 `python3 tools/host.py sim operator` renders the actual operator UI code to PNG
 (`sim status` and `sim status-stopped` show the EMP/1.6 stop button and status tones;
-`sim status-hold`, `status-holding` and `status-held` show the EMP/1.7 hold at rest, part way and sent);
+`sim status-hold`, `status-holding` and `status-held` show the EMP/1.7 hold at rest, part way and sent;
+`sim sys-disarmed`, `sys-unmet`, `sys-armed`, `sys-stopped-mini`, `sys-stopped-tool`, `sys-clearing`,
+`sys-cleared`, `sys-arming`, `sys-unavailable`, `sys-no-orch`, `sys-readout-N` and `sys-legacy`
+show the daemon's EMP/1.8 system page and its EMP/1.7 fallback);
 `python3 tools/deploy/emp.py --selftest` checks the reference host encoders without a device.
 The existing `tools/deploy/flash_usb.py build/app.srec` and `screenshot.py`
 commands select IOKit on macOS and WinUSB on Windows. The updater releases the

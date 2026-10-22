@@ -23,6 +23,7 @@
 #include "ui.h"       /* UI_BOOT_FRAMES: the scene list must not carry its own copy */
 
 #include "sim_hal.h"
+#include "sim_wire.h"
 #include "fixtures.h"
 
 static void write_ppm(const char *path)
@@ -95,6 +96,72 @@ static void scene_specimen(void)
               "if the two rows above are the same width, digits will not jitter", DIM, BG);
 }
 
+/* EMP/1.8: the daemon's system page in each state it can show (docs/graphics-evidence/system-page). */
+#define T_OK    "\x01"
+#define T_WARN  "\x02"
+#define T_ALERT "\x03"
+static const char *const READOUT_DISARMED =
+    T_OK "Fleet\tDISARMED\n" "Last stop\tcontrol surface\n" "Reason\tcontrol surface E-STOP\n"
+    "Stopped\t4 min ago\n" "Orch\tlab-orch\n" T_OK "Nodes\t2/2\n" T_OK "Watches\t1 on duty\n"
+    "Lease\tidn-test, direct\n" "Boards\t2 Run, 0 Standby";
+static const char *const READOUT_UNMET =
+    T_OK "Fleet\tDISARMED\n" "Last stop\tnone\n" "Orch\tlab-orch\n" T_WARN "Nodes\t0/2\n"
+    T_WARN "Watches\t0 on duty\n" "Boards\t0 Run, 0 Standby";
+static const char *const READOUT_ARMED =
+    T_ALERT "Fleet\tARMED\n" "Last stop\tcontrol surface\n" "Reason\tcontrol surface E-STOP\n"
+    "Stopped\t6 min ago\n" "Orch\tlab-orch\n" T_OK "Nodes\t2/2\n" T_OK "Watches\t1 on duty\n"
+    "Lease\tidn-test, direct\n" "Boards\t2 Run, 0 Standby";
+static const char *const READOUT_STOPPED_MINI =
+    T_WARN "Fleet\tE-STOPPED\n" "Stop by\tcontrol surface\n" "Reason\tcontrol surface E-STOP\n"
+    "Stopped\t12 s ago\n" "Orch\tlab-orch\n" T_OK "Nodes\t2/2\n" T_OK "Watches\t1 on duty\n"
+    "Lease\tidn-test, direct\n" "Boards\t0 Run, 2 Standby";
+static const char *const READOUT_STOPPED_TOOL =
+    T_WARN "Fleet\tE-STOPPED\n" "Stop by\ttool\n"
+    "Reason\tidn-test: point buffer underrun on CUBE_0008 while armed, stopping the fleet\n"
+    "Stopped\t3 s ago\n" "Orch\tlab-orch\n" T_WARN "Nodes\t1/2\n" T_OK "Watches\t1 on duty\n"
+    "Lease\tidn-test, direct\n" "Boards\t0 Run, 2 Standby";
+static void scene_system_page(const char *which)
+{
+    uint32_t t = 100;
+    if (strcmp(which, "legacy") == 0 || strcmp(which, "legacy-stopped") == 0) {
+        sim_wire_set_peer_minor(7);
+        fixture_system_page_17(strcmp(which, "legacy-stopped") == 0);
+        ui_render();
+        return;
+    }
+    if (strcmp(which, "disarmed") == 0 || strncmp(which, "readout-", 8) == 0 || strcmp(which, "arming") == 0)
+        fixture_system_page("DISARMED\nlasers dark", EMP_TONE_OK, 0,
+                            "READY\narm checks met", EMP_TONE_OK, 1, READOUT_DISARMED);
+    else if (strcmp(which, "unmet") == 0)
+        fixture_system_page("DISARMED\nlasers dark", EMP_TONE_OK, 0,
+                            "NOT READY\nno node", EMP_TONE_WARN, 0, READOUT_UNMET);
+    else if (strcmp(which, "unavailable") == 0)
+        fixture_system_page("DISARMED\nlasers dark", EMP_TONE_OK, 0,
+                            "UNAVAILABLE\nnot mapped", EMP_TONE_NEUTRAL, 0, READOUT_DISARMED);
+    else if (strcmp(which, "armed") == 0)
+        fixture_system_page("ARMED\nlasers may emit", EMP_TONE_ALERT, 0,
+                            "ARMED\nalready armed", EMP_TONE_ALERT, 0, READOUT_ARMED);
+    else if (strcmp(which, "stopped-mini") == 0 || strcmp(which, "clearing") == 0 || strcmp(which, "cleared") == 0)
+        fixture_system_page("E-STOPPED\ncontrol surface, 12 s ago: control surface E-STOP", EMP_TONE_WARN, 1,
+                            "STOPPED\nclear E-stop first", EMP_TONE_WARN, 0, READOUT_STOPPED_MINI);
+    else if (strcmp(which, "stopped-tool") == 0)
+        fixture_system_page("E-STOPPED\ntool, 3 s ago: idn-test: point buffer underrun on CUBE_0008 while armed, stopping the fleet",
+                            EMP_TONE_WARN, 1, "STOPPED\nclear E-stop first", EMP_TONE_WARN, 0,
+                            READOUT_STOPPED_TOOL);
+    else if (strcmp(which, "no-orch") == 0)
+        fixture_system_page("NO ORCH\nno orchestrator beacon", EMP_TONE_NEUTRAL, 0,
+                            "UNAVAILABLE\nno orchestrator", EMP_TONE_NEUTRAL, 0,
+                            "Fleet\tNO ORCH\n" "Nodes\t--\n" "Watches\t--");
+    else { fprintf(stderr, "unknown system scene %s\n", which); exit(2); }
+
+    ui_state_tick(t);
+    if (strcmp(which, "clearing") == 0) { ui_state_push(1, 1, t); ui_state_tick(t + 750); }
+    if (strcmp(which, "cleared") == 0)  { ui_state_push(1, 1, t); ui_state_tick(t + 1600); }
+    if (strcmp(which, "arming") == 0)   { ui_state_push(2, 1, t); ui_state_tick(t + 750); }
+    if (strncmp(which, "readout-", 8) == 0) ui_state_rotate(3, UI_LIST_STEP * atoi(which + 8), t);
+    ui_render();
+}
+
 int main(int argc, char **argv)
 {
     const char *scene = (argc > 1) ? argv[1] : "ui";
@@ -113,6 +180,7 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    if (strncmp(scene, "sys-", 4) == 0) { scene_system_page(scene + 4); write_ppm(out); return 0; }
     if      (strncmp(scene,"sparse-",7)==0) {fixture_sparse((unsigned)atoi(scene+7),0);ui_render();}
     else if (strncmp(scene,"toggle",6)==0) {
         fixture_toggles();

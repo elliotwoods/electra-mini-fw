@@ -25,6 +25,9 @@
  * field reserving forty slots it will never use. */
 #define SURF_MAX_CHOICES  256u
 #define SURF_POTS         8u          /* physical knobs, i.e. fields visible at once */
+/* A field's retained Text value, NUL included. 96 until EMP/1.8, whose LIST readouts carry
+ * several lines in one value; longer text is cut on a character boundary and reported. */
+#define SURF_TEXT_MAX     256u
 
 typedef struct {
     uint16_t id;
@@ -37,7 +40,7 @@ typedef struct {
 
     double   min, max, step;
 
-    char text[96]; /* bounded UTF-8 readout, independent of descriptor label pool */
+    char text[SURF_TEXT_MAX]; /* bounded UTF-8 readout, independent of descriptor label pool */
     uint8_t  value_tag;
     double   number;
     uint32_t choice;
@@ -72,6 +75,12 @@ int surf_operator_layout(void);
 int surf_field_is_estop(const surf_field_t *f);
 /* EMP/1.7: an Action declared with the hold style (fires after EMP_HOLD_MS held, not on press). */
 int surf_field_is_hold(const surf_field_t *f);
+/* EMP/1.8: a ReadOnly field drawn as a scrolling key/value list. */
+int surf_field_is_list(const surf_field_t *f);
+/* EMP/1.8: an Action declared DISABLED (neither fires nor holds). */
+int surf_field_disabled(const surf_field_t *f);
+/* EMP/1.8: declared JOINED to the cell on its left (the renderer decides whether it can be). */
+int surf_field_joined(const surf_field_t *f);
 
 /* Handle one surface-channel message. Returns nothing: per the design rule, protocol problems
  * become DIAG and DESC_REQUEST on the wire, never an error returned to a caller. */
