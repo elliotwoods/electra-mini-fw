@@ -118,20 +118,33 @@ static void fixture_fields(const fixture_field*f,unsigned n)
  * the System readout, then Volume, Brightness, Dictate and Dictation. `stopped` enables the
  * clear; `armable` the arm. Strings are what control-surface-router's system page sends. */
 static const char*const fixture_fleet_states[3]={"DISARMED","ARMED","E-STOPPED"};
-static void fixture_system_page(const char*fleet,uint8_t fleet_tone,int stopped,
-                                const char*arm,uint8_t arm_tone,int armable,const char*readout)
+/* EMP/1.9: `detail` set adds the fleet's detail page, as the daemon's detail.rs composes it: the
+ * E-STOP panel PINNED at IDs 0..1, System OPENS, and six LIST cells at IDs 10..15 (8p+2+c, p=1)
+ * titled Checks, Lease, Nodes, Boards, Stops, Orch. `opens` alone marks System OPENS. */
+static const char*const fixture_detail_titles[6]={"Checks","Lease","Nodes","Boards","Stops","Orch"};
+static void fixture_system_page_ex(const char*fleet,uint8_t fleet_tone,int stopped,
+                                   const char*arm,uint8_t arm_tone,int armable,const char*readout,
+                                   int opens,const char*const*detail)
 {
-    fixture_field f[8]={
-        {EMP_KIND_ACTION,0,EMP_STYLE_ESTOP,0,"E-STOP",0,0,0,0,0,0,0},
-        {EMP_KIND_ACTION,(uint8_t)(EMP_FIELD_JOINED|(stopped?0u:EMP_FIELD_DISABLED)),EMP_STYLE_HOLD,fleet_tone,
+    uint8_t pin=detail?EMP_FIELD_PINNED:0u;
+    fixture_field f[16]={
+        {EMP_KIND_ACTION,pin,EMP_STYLE_ESTOP,0,"E-STOP",0,0,0,0,0,0,0},
+        {EMP_KIND_ACTION,(uint8_t)(pin|EMP_FIELD_JOINED|(stopped?0u:EMP_FIELD_DISABLED)),EMP_STYLE_HOLD,fleet_tone,
          "CLEAR E-STOP",fleet,0,0,0,0,fixture_fleet_states,3},
         {EMP_KIND_ACTION,(uint8_t)(armable?0u:EMP_FIELD_DISABLED),EMP_STYLE_HOLD,arm_tone,"ARM",arm,0,0,0,0,0,0},
-        {EMP_KIND_READONLY,0,EMP_STYLE_LIST,0,"System",readout,0,0,0,0,0,0},
+        {EMP_KIND_READONLY,(uint8_t)(opens||detail?EMP_FIELD_OPENS:0u),EMP_STYLE_LIST,0,"System",readout,0,0,0,0,0,0},
         {EMP_KIND_NUMBER,0,0,0,"Volume",0,"%",40,0,100,0,0},
         {EMP_KIND_NUMBER,0,0,0,"Brightness",0,"%",75,0,100,0,0},
         {EMP_KIND_ACTION,0,0,0,"Dictate",0,0,0,0,0,0,0},
         {EMP_KIND_READONLY,0,0,0,"Dictation","Ready",0,0,0,0,0,0}};
-    fixture_fields(f,8);
+    if(detail) for(unsigned c=0;c<6;c++)
+        f[10+c]=(fixture_field){EMP_KIND_READONLY,0,EMP_STYLE_LIST,0,fixture_detail_titles[c],detail[c],0,0,0,0,0,0};
+    fixture_fields(f,detail?16u:8u);
+}
+static void fixture_system_page(const char*fleet,uint8_t fleet_tone,int stopped,
+                                const char*arm,uint8_t arm_tone,int armable,const char*readout)
+{
+    fixture_system_page_ex(fleet,fleet_tone,stopped,arm,arm_tone,armable,readout,0,0);
 }
 /* An application's page with the fleet's two slots reserved, as the daemon composes it on an
  * EMP/1.8 device while an orchestrator is known: E-STOP and CLEAR E-STOP PINNED at IDs 0 and 1,

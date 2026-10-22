@@ -73,6 +73,9 @@ The integration currently provides:
   ARM beside it and a scrolling System readout, and pins the E-STOP panel to the first two knobs
   of every application's page while an orchestrator is known
   ([renders](docs/graphics-evidence/system-page/)). Read-only text no longer carries a fader.
+- Lists that open (EMP/1.9): a read-only list can be marked to open something on the host, shown
+  by a `>` beside its title; turning still scrolls it and pressing it sends an activation. The
+  daemon's System summary opens the fleet's detail page this way.
 - Transactional descriptor replacement. A failed or partial update never replaces the live
   surface, and session IDs make device resets visible to the host.
 - Device and link diagnostics through EMP/1 heartbeats, counters, and structured diagnostic
@@ -265,7 +268,8 @@ Install Python `pyserial` and `Pillow`; Xcode command-line tools provide `cc`.
 `sim sys-disarmed`, `sys-unmet`, `sys-armed`, `sys-stopped-mini`, `sys-stopped-tool`, `sys-clearing`,
 `sys-cleared`, `sys-arming`, `sys-unavailable`, `sys-no-orch`, `sys-readout-N` and `sys-legacy`
 show the daemon's EMP/1.8 system page and its EMP/1.7 fallback, and `sys-app`, `sys-app-2`,
-`sys-app-stopped` and `sys-app-clearing` an application's pages with the fleet's two slots pinned);
+`sys-app-stopped` and `sys-app-clearing` an application's pages with the fleet's two slots pinned;
+`sys-opens` and `sys-detail` the EMP/1.9 System list that opens and the detail page it reveals);
 `python3 tools/deploy/emp.py --selftest` checks the reference host encoders without a device.
 The existing `tools/deploy/flash_usb.py build/app.srec` and `screenshot.py`
 commands select IOKit on macOS and WinUSB on Windows. The updater releases the

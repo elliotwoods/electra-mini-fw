@@ -1,4 +1,4 @@
-# EMP/1 — Electra Mini Protocol v1.8
+# EMP/1 — Electra Mini Protocol v1.9
 
 Normative wire spec for `electra-mini-fw` ↔ `av-frameworks`. MUST / MUST NOT / SHOULD / MAY
 per RFC 2119. Both codecs (C in `src/proto/`, Rust in the host crate) are written against
@@ -855,7 +855,7 @@ tone (the field's own tone is not used).
   entries. Nothing is sent: no `EDIT`, no `EDIT_DELTA`, no `FOCUS` change beyond touch. The place is
   kept across value updates (clamped to the new number of entries) and across page changes, and
   reset by a descriptor replacement. Pressing the knob returns to the first entry; a list is never
-  drilled into.
+  drilled into. (An EMP/1.9 `OPENS` list sends `ACTIVATE` on its press instead; see below.)
 
 ### Read-only values have no fader
 
@@ -865,3 +865,50 @@ without both bounds, and an Action have no fader (it was drawn with a centred pi
 scrollbar beside a value that cannot scroll), and their text takes the full width of the cell. A
 bounded ReadOnly number keeps its level fader.
 
+
+## EMP/1.9: lists that open
+
+One more bit of the field record's `flags` u8. No new opcode, message, style or DIAG code;
+`ACTIVATE` is the EMP/1.2 14 bytes. It exists for the daemon's system page, whose System summary
+opens the fleet's detail page on its press (`docs/graphics-evidence/system-page/sys-opens.png`,
+`sys-detail.png`).
+
+| Member | Value | Name | Valid on |
+|---|---|---|---|
+| `flags` bit 5 | `0x20` | `OPENS` | a `LIST`: ReadOnly (kind 3) with `style = 3` |
+
+### Negotiation and validity
+
+- A host sets `OPENS` only when HELLO negotiation selected minor 9 or newer. To a minor 8 peer it
+  sends the same `LIST` without the bit, and must offer another way to what the press would have
+  opened (or none): a minor 8 device's press returns the list to its first entry and sends nothing.
+- A device whose negotiated minor is below 9 clears the bit on receipt, as a 1.8 device, which never
+  reads it, would.
+- A minor 9 device clears `OPENS` on any field that is not a `LIST` (any other kind, or a ReadOnly
+  field of another style, including a `style = 3` refused under the EMP/1.8 rule), silently: no
+  `TRUNCATED`, no `DIAG`, as `DISABLED` off an Action is. The field otherwise loads unchanged; an
+  Action keeps firing as an Action, and nothing that was not a list starts sending `ACTIVATE`.
+
+### Input
+
+- **Turning** the knob scrolls the list exactly as EMP/1.8 says, and sends nothing.
+- The knob's **press edge** sends the ordinary 14-byte `ACTIVATE` (EMP/1.2: `revision u64,
+  activation_sequence u32, field_id u16`) for the list's ID, once per press, with the next
+  activation sequence, exactly as a plain Action's press does. Release, a held knob and the time
+  held send nothing more; there is no hold. The list keeps its scroll position (it does **not**
+  return to the first entry) and is never drilled into.
+- **While another field is drilled** the usual rule applies: if the list's knob is on the row still
+  showing cells, the press leaves the drill (`FOCUS(-1)`) and then sends the `ACTIVATE`; if it is
+  in the digit row, the press only leaves the drill and nothing is sent.
+- A host accepting `ACTIVATE` validates the field kind as before, now allowing a ReadOnly `LIST`
+  that it declared `OPENS` at a negotiated minor of 9 or newer. What it does is the host's
+  business; the av-frameworks daemon reveals the fleet's detail page with `REVEAL`.
+- Operator layout (DESC_BEGIN flag bit 0) has no lists; the bit changes nothing there.
+
+### Rendering
+
+- A `>` in the label face (Inter 26), in the navigation ink (`--accent` #22d3ee, as the choice
+  editor's own `<` / `>`), right-aligned in the label row at the cell's inner edge. When the list
+  shows its position, `n/N` sits immediately to the chevron's left, and the label is cut to the
+  room that is left. Entries, rules and the position bar are drawn as in EMP/1.8.
+- A plain `LIST` (no `OPENS`, or a peer below minor 9) is drawn exactly as EMP/1.8 says: no chevron.

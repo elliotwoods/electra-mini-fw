@@ -898,11 +898,16 @@ static void draw_list_face(unsigned knob, const surf_field_t *f)
         if (count >= 10u) pos[k++] = (char)('0' + count / 10u % 10u);
         pos[k++] = (char)('0' + count % 10u); pos[k] = 0;
     }
-    int16_t lw = (int16_t)(CELL_W - 4 * SP - (more ? text_width(&font_small, pos) + SP : 0));
+    /* EMP/1.9 OPENS: a ">" at the right of the label row says the press opens something, in the
+     * navigation ink the choice editor's own "<" / ">" use; the position moves to its left. */
+    const int opens = surf_field_opens(f);
+    const int16_t chev = opens ? (int16_t)(text_width(&font_ui, ">") + SP) : 0;
+    int16_t lw = (int16_t)(CELL_W - 4 * SP - chev - (more ? text_width(&font_small, pos) + SP : 0));
     fit_text(&font_ui, label, lw);
     text_draw(&font_ui, left, (int16_t)(y + SP), label, C_TITLE, C_CELL);
+    if (opens) text_draw_right(&font_ui, (int16_t)(x + CELL_W - 2 * SP), (int16_t)(y + SP), ">", C_NAV, C_CELL);
     if (more) {
-        text_draw_right(&font_small, (int16_t)(x + CELL_W - 2 * SP), (int16_t)(y + SP + 6), pos, C_LINK, C_CELL);
+        text_draw_right(&font_small, (int16_t)(x + CELL_W - 2 * SP - chev), (int16_t)(y + SP + 6), pos, C_LINK, C_CELL);
         const int16_t tx = (int16_t)(x + CELL_W - SP - 4), th = (int16_t)(bottom - top);
         gfx_set_fg(C_TRACK); gfx_fill_rect(tx, top, 3, th);
         int16_t knob_h = (int16_t)(th * (int32_t)(shown ? shown : 1u) / (int32_t)count);

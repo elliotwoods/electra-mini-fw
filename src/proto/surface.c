@@ -609,6 +609,12 @@ static void desc_field(const uint8_t *msg, uint32_t len)
         }
     }
 
+    /* EMP/1.9 OPENS only means something on a LIST, whose press would otherwise just return to
+     * its first entry; and a peer below minor 9 never sends it. Dropped silently elsewhere, as
+     * DISABLED is: on any other field it could only make a press send what it never sent. */
+    if (emp_session_peer_minor() < 9u || !surf_field_is_list(f))
+        f->flags = (uint8_t)(f->flags & ~EMP_FIELD_OPENS);
+
     if (r.bad) {
         emp_diag(EMP_SEV_ERROR, EMP_DIAG_DESC_SEQUENCE, index, "descriptor field truncated");
         send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
@@ -1212,7 +1218,8 @@ void surf_activate(uint16_t slot)
 {
     static uint32_t activation_seq;
     const surf_field_t *field = surf_field(slot);
-    if (!field || field->kind != EMP_KIND_ACTION || emp_session_peer_minor() < 2u) return;
+    if (!field || emp_session_peer_minor() < 2u) return;
+    if (field->kind != EMP_KIND_ACTION && !surf_field_opens(field)) return;   /* EMP/1.9: or an OPENS list */
     if (surf_field_disabled(field)) return;           /* EMP/1.8: shown, never sent */
     uint8_t buf[14]; wr_t w; wr_init(&w, buf, sizeof(buf));
     wr64(&w, LIVE->revision); wr32(&w, ++activation_seq); wr16(&w, slot);
@@ -1286,6 +1293,11 @@ int surf_field_is_hold(const surf_field_t *f)
 int surf_field_is_list(const surf_field_t *f)
 {
     return f && f->kind == EMP_KIND_READONLY && f->style == EMP_STYLE_LIST;
+}
+
+int surf_field_opens(const surf_field_t *f)
+{
+    return surf_field_is_list(f) && (f->flags & EMP_FIELD_OPENS) != 0;
 }
 
 int surf_field_disabled(const surf_field_t *f)

@@ -77,6 +77,8 @@ int surf_field_is_estop(const surf_field_t *f);
 int surf_field_is_hold(const surf_field_t *f);
 /* EMP/1.8: a ReadOnly field drawn as a scrolling key/value list. */
 int surf_field_is_list(const surf_field_t *f);
+/* EMP/1.9: a LIST declared OPENS (its press sends ACTIVATE instead of returning to the top). */
+int surf_field_opens(const surf_field_t *f);
 /* EMP/1.8: an Action declared DISABLED (neither fires nor holds). */
 int surf_field_disabled(const surf_field_t *f);
 /* EMP/1.8: declared JOINED to the cell on its left (the renderer decides whether it can be). */

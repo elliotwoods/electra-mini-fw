@@ -55,7 +55,7 @@ static int test_constants(void)
     CHECK(EMP_MTU_HID == 56u);
     CHECK(EMP_MTU_BULK == 1016u);
     CHECK(EMP_VERSION_MAJOR == 1u);
-    CHECK(EMP_VERSION_MINOR == 8u);
+    CHECK(EMP_VERSION_MINOR == 9u);
     CHECK(EMP_OP_DEFAULTS == 0x2Au && EMP_OP_SAVE_DEFAULT == 0x5Au);
     /* EMP/1.6, pinned against docs/protocol.md. */
     CHECK(EMP_OP_TONED_VALUES == 0x2Bu && EMP_PRESENT_STYLE == 0x0100u);
@@ -64,6 +64,8 @@ static int test_constants(void)
     CHECK(EMP_STYLE_HOLD == 2u && EMP_HOLD_MS == 1500u);
     CHECK(EMP_STYLE_LIST == 3u && EMP_STYLE_MAX == 3u);
     CHECK(EMP_FIELD_JOINED == 0x04u && EMP_FIELD_DISABLED == 0x08u && SURF_TEXT_MAX == 256u);
+    /* EMP/1.9. */
+    CHECK(EMP_FIELD_PINNED == 0x10u && EMP_FIELD_OPENS == 0x20u);
     CHECK(EMP_TONE_NEUTRAL == 0u && EMP_TONE_OK == 1u && EMP_TONE_WARN == 2u && EMP_TONE_ALERT == 3u);
     CHECK(EMP_FLAG_FIRST == 0x01u && EMP_FLAG_LAST == 0x02u);
     CHECK(EMP_CH_CONTROL == 0u && EMP_CH_SURFACE == 1u && EMP_CH_INPUT == 2u);

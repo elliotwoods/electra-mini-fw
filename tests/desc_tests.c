@@ -1523,7 +1523,7 @@ static void test_panel_decodes(void)
     sim_wire_set_peer_minor(EMP_VERSION_MINOR);
     load_styled(400, panel_page, PANEL_FIELDS);
     emp_diag_tick();
-    int ok = surf_applied_revision() == 400 && EMP_VERSION_MINOR == 8u;
+    int ok = surf_applied_revision() == 400 && EMP_VERSION_MINOR >= 8u;
     ok = ok && surf_field_joined(surf_field(1)) && !surf_field_disabled(surf_field(1))
             && surf_field_is_hold(surf_field(1)) && strcmp(surf_field(1)->text, "E-STOPPED\ncontrol surface") == 0;
     ok = ok && surf_field_disabled(surf_field(2)) && surf_field_is_hold(surf_field(2))
@@ -1711,6 +1711,179 @@ static void test_pinned_slots(void)
     sim_wire_set_peer_minor(EMP_VERSION_MINOR);
 }
 
+/* ------------------------------------------------------------------ EMP/1.9 OPENS
+ *
+ * The daemon's system page with its System list marked OPENS: pressing it asks the host for the
+ * fleet's detail page. Six fields, so the page keeps reading order (knob k shows ID k); a Number
+ * at ID 0 is there to be drilled from the top row, one at ID 4 from the bottom row. */
+
+static const sfield_t opens_page[] = {
+    { 0, EMP_KIND_NUMBER,   "Volume",  0, 0.5, 0, 0, 0, 0, 0, 0 },
+    { 1, EMP_KIND_READONLY, "System",  "Fleet\tDISARMED\nNodes\t2/2\nWatches\t1 on duty",
+         0.0, 1, EMP_STYLE_LIST, 0, 0, 0, EMP_FIELD_OPENS },
+    { 2, EMP_KIND_READONLY, "Plain",   "a\t1\nb\t2\nc\t3", 0.0, 1, EMP_STYLE_LIST, 0, 0, 0, 0 },
+    { 3, EMP_KIND_ACTION,   "Identify", 0, 0.0, 0, 0, 0, 0, 0, 0 },
+    { 4, EMP_KIND_NUMBER,   "Gain",    0, 0.5, 0, 0, 0, 0, 0, 0 },
+    { 5, EMP_KIND_READONLY, "Status",  "ok", 0.0, 0, 0, 0, 0, 0, 0 },
+};
+#define OPENS_FIELDS ((uint16_t)(sizeof(opens_page) / sizeof(opens_page[0])))
+
+static void test_opens_decodes(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(500, opens_page, OPENS_FIELDS);
+    emp_diag_tick();
+    int ok = surf_applied_revision() == 500 && EMP_VERSION_MINOR == 9u;
+    ok = ok && surf_field_opens(surf_field(1)) && surf_field_is_list(surf_field(1))
+            && (surf_field(1)->flags & EMP_FIELD_OPENS) && !(surf_field(1)->flags & EMP_FIELD_TRUNCATED);
+    ok = ok && !surf_field_opens(surf_field(2)) && surf_field_is_list(surf_field(2));
+    check("1.9 OPENS decodes on a LIST at minor 9", ok);
+
+    /* Anywhere but a LIST it is dropped silently, as DISABLED is: no TRUNCATED, no DIAG. */
+    static const sfield_t bad[] = {
+        { 0, EMP_KIND_READONLY, "Text",   "x", 0.0, 0, 0, 0, 0, 0, EMP_FIELD_OPENS },
+        { 1, EMP_KIND_ACTION,   "Action", 0,   0.0, 0, 0, 0, 0, 0, EMP_FIELD_OPENS },
+        { 2, EMP_KIND_NUMBER,   "Number", 0,   0.5, 0, 0, 0, 0, 0, EMP_FIELD_OPENS },
+        { 3, EMP_KIND_ACTION,   "Hold",   0,   0.0, 1, EMP_STYLE_HOLD, 0, 0, 0, EMP_FIELD_OPENS },
+    };
+    load_styled(501, bad, 4);
+    emp_diag_tick();
+    ok = surf_applied_revision() == 501;
+    for (uint16_t id = 0; id < 4u; id++)
+        ok = ok && !surf_field_opens(surf_field(id)) && !(surf_field(id)->flags & EMP_FIELD_OPENS)
+                && !(surf_field(id)->flags & EMP_FIELD_TRUNCATED);
+    ok = ok && !diag_seen(EMP_DIAG_STYLE_UNSUPPORTED, 0, 0);
+    /* And the Action keeps firing as an Action: OPENS changes nothing about it. */
+    sim_wire_reset();
+    ui_state_push(5, 1, 10); ui_state_push(5, 0, 20);         /* four fields: the bottom row */
+    ok = ok && ui_state_field_for(5) == 1 && activations() == 1;
+    check("OPENS off a LIST is cleared silently", ok);
+
+    /* A minor 8 peer never sends it; if one did, this device answers as a 1.8 device: the list is
+     * an ordinary list, and its press returns to the top and sends nothing. */
+    sim_wire_set_peer_minor(8);
+    load_styled(502, opens_page, OPENS_FIELDS);
+    ok = surf_field_is_list(surf_field(1)) && !surf_field_opens(surf_field(1))
+      && !(surf_field(1)->flags & EMP_FIELD_OPENS);
+    ui_state_rotate(1, UI_LIST_STEP, 30);
+    sim_wire_reset();
+    ui_state_push(1, 1, 40); ui_state_push(1, 0, 50);
+    ok = ok && activations() == 0 && ui_state_list_top(1) == 0;
+    surf_activate(1);
+    ok = ok && activations() == 0;
+    check("minor 8 peer: OPENS cleared, the list presses as 1.8", ok);
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+}
+
+static void test_opens_press_activates(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(510, opens_page, OPENS_FIELDS);
+    ui_state_tick(100);
+    sim_wire_reset();
+
+    /* Turning scrolls it and sends nothing. */
+    ui_state_rotate(1, UI_LIST_STEP, 100);
+    int ok = ui_state_list_top(1) == 1 && sim_wire_count() == 0;
+    check("an OPENS list's turn scrolls and sends nothing", ok);
+
+    /* The press edge sends exactly one 14-byte ACTIVATE for it; the release and a held knob
+     * send nothing more, and the list keeps its place and drills into nothing. */
+    ui_state_push(1, 1, 110);
+    ui_state_tick(110 + EMP_HOLD_MS + 100);
+    ui_state_push(1, 0, 2000);
+    const sim_wire_msg_t *m = sim_wire_last(EMP_OP_ACTIVATE);
+    uint64_t rev = 0;
+    for (unsigned i = 0; m && i < 8u; i++) rev |= (uint64_t)m->payload[i] << (8u * i);
+    ok = activations() == 1 && m && m->channel == EMP_CH_INPUT && m->len == 14u && rev == 510u
+      && m->payload[12] == 1 && m->payload[13] == 0;
+    ok = ok && ui_state()->focused < 0 && ui_state_list_top(1) == 1;
+    for (unsigned i = 0; i < sim_wire_count(); i++)
+        ok = ok && sim_wire_at(i)->opcode != EMP_OP_EDIT && sim_wire_at(i)->opcode != EMP_OP_EDIT_DELTA;
+    check("an OPENS list's press sends exactly one ACTIVATE", ok);
+
+    /* A second press is a second activation, with the next sequence. */
+    uint32_t first = m ? activation_seq(m) : 0;
+    ui_state_push(1, 1, 2100); ui_state_push(1, 0, 2110);
+    m = sim_wire_last(EMP_OP_ACTIVATE);
+    check("each press is one more activation", activations() == 2 && m && activation_seq(m) == first + 1u);
+
+    /* A plain LIST keeps 1.8: its press returns to the top and sends nothing. */
+    ui_state_rotate(2, UI_LIST_STEP * 2, 2200);
+    sim_wire_reset();
+    ui_state_push(2, 1, 2300); ui_state_push(2, 0, 2310);
+    ok = ui_state_list_top(2) == 0 && activations() == 0 && ui_state()->focused < 0;
+    check("a plain LIST's press returns to the top", ok);
+}
+
+static void test_opens_while_drilled(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(520, opens_page, OPENS_FIELDS);
+    ui_state_tick(100);
+
+    /* Drilled into Volume (top row): the bottom row is the digit editor, so the top row still
+     * addresses its fields. Pressing System leaves the drill and then opens. */
+    ui_state_push(0, 1, 100); ui_state_push(0, 0, 110);
+    int ok = ui_state()->focused == 0 && ui_digit_row_first() == UI_ROW_SPLIT;
+    sim_wire_reset();
+    ui_state_push(1, 1, 200); ui_state_push(1, 0, 210);
+    const sim_wire_msg_t *m = sim_wire_last(EMP_OP_ACTIVATE);
+    ok = ok && ui_state()->focused < 0 && activations() == 1 && m && m->payload[12] == 1;
+    /* The drill is left first: FOCUS(-1) goes out before the ACTIVATE. */
+    int focus_at = -1, activate_at = -1;
+    for (unsigned i = 0; i < sim_wire_count(); i++) {
+        if (sim_wire_at(i)->opcode == EMP_OP_FOCUS && focus_at < 0) focus_at = (int)i;
+        if (sim_wire_at(i)->opcode == EMP_OP_ACTIVATE) activate_at = (int)i;
+    }
+    ok = ok && focus_at >= 0 && focus_at < activate_at;
+    check("drilled on the top row: System's press leaves, then opens", ok);
+
+    /* Drilled into Gain (bottom row): the top row is the digit editor, and its knobs only leave. */
+    ui_state_push(4, 1, 300); ui_state_push(4, 0, 310);
+    ok = ui_state()->focused == 4 && ui_digit_row_first() == 0u;
+    sim_wire_reset();
+    ui_state_push(1, 1, 400); ui_state_push(1, 0, 410);
+    ok = ok && ui_state()->focused < 0 && activations() == 0;
+    check("drilled on the bottom row: System's knob is a digit, its press only leaves", ok);
+}
+
+/* What the daemon's REVEAL(10) shows on the system descriptor with the detail page: IDs 0..1
+ * pinned, the system page at 2..7, the detail cells at 10..15 (8 and 9 empty). */
+static void test_reveal_detail_page(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    static const sfield_t page[] = {
+        { 0,  EMP_KIND_ACTION,   "E-STOP",       0, 0.0, 1, EMP_STYLE_ESTOP, 0, 0, 0, EMP_FIELD_PINNED },
+        { 1,  EMP_KIND_ACTION,   "CLEAR E-STOP", "DISARMED\nlasers dark", 0.0, 1, EMP_STYLE_HOLD,
+              EMP_TONE_OK, 0, 0, EMP_FIELD_PINNED | EMP_FIELD_JOINED | EMP_FIELD_DISABLED },
+        { 2,  EMP_KIND_ACTION,   "ARM",     "READY\nchecks met", 0.0, 1, EMP_STYLE_HOLD, EMP_TONE_OK, 0, 0, 0 },
+        { 3,  EMP_KIND_READONLY, "System",  "Fleet\tDISARMED", 0.0, 1, EMP_STYLE_LIST, 0, 0, 0, EMP_FIELD_OPENS },
+        { 4,  EMP_KIND_NUMBER,   "Volume",  0, 0.4, 0, 0, 0, 0, 0, 0 },
+        { 5,  EMP_KIND_NUMBER,   "Brightness", 0, 0.75, 0, 0, 0, 0, 0, 0 },
+        { 6,  EMP_KIND_ACTION,   "Dictate", 0, 0.0, 0, 0, 0, 0, 0, 0 },
+        { 7,  EMP_KIND_READONLY, "Dictation", "Ready", 0.0, 0, 0, 0, 0, 0, 0 },
+        { 10, EMP_KIND_READONLY, "Checks",  "Beacon\tok", 0.0, 1, EMP_STYLE_LIST, 0, 0, 0, 0 },
+        { 11, EMP_KIND_READONLY, "Lease",   "Mode\tdirect", 0.0, 1, EMP_STYLE_LIST, 0, 0, 0, 0 },
+        { 12, EMP_KIND_READONLY, "Nodes",   "Node-1\tup", 0.0, 1, EMP_STYLE_LIST, 0, 0, 0, 0 },
+        { 13, EMP_KIND_READONLY, "Boards",  "0007\tStandby", 0.0, 1, EMP_STYLE_LIST, 0, 0, 0, 0 },
+        { 14, EMP_KIND_READONLY, "Stops",   "Last\tMini", 0.0, 1, EMP_STYLE_LIST, 0, 0, 0, 0 },
+        { 15, EMP_KIND_READONLY, "Orch",    "Host\tlab-orch", 0.0, 1, EMP_STYLE_LIST, 0, 0, 0, 0 },
+    };
+    load_styled(530, page, 14);
+    ui_state_tick(100);
+    int ok = surf_pinned_mask() == 0x03u && ui_state()->page == 0;
+    sim_wire_reset();
+    ui_state_push(3, 1, 100); ui_state_push(3, 0, 110);       /* System opens */
+    const sim_wire_msg_t *m = sim_wire_last(EMP_OP_ACTIVATE);
+    ok = ok && activations() == 1 && m && m->payload[12] == 3;
+    /* The host answers with REVEAL(10). */
+    ok = ok && ui_state_reveal(10) && ui_state()->page == 8;
+    static const int32_t want[8] = { 0, 1, 10, 11, 12, 13, 14, 15 };
+    for (unsigned k = 0; k < 8u; k++) ok = ok && ui_state_field_for(k) == want[k];
+    check("REVEAL(10) shows the pinned panel and detail cells 10..15", ok);
+}
+
 int desc_run_selftests(desc_report_fn report)
 {
     failures  = 0;
@@ -1769,6 +1942,11 @@ int desc_run_selftests(desc_report_fn report)
     test_list_scrolls_locally();
     test_long_text_is_kept();
     test_pinned_slots();
+
+    test_opens_decodes();
+    test_opens_press_activates();
+    test_opens_while_drilled();
+    test_reveal_detail_page();
     sim_wire_set_peer_minor(EMP_VERSION_MINOR);
 
     report_fn = 0;

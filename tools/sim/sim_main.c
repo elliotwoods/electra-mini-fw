@@ -120,9 +120,31 @@ static const char *const READOUT_STOPPED_TOOL =
     "Reason\tidn-test: point buffer underrun on CUBE_0008 while armed, stopping the fleet\n"
     "Stopped\t3 s ago\n" "Orch\tlab-orch\n" T_WARN "Nodes\t1/2\n" T_OK "Watches\t1 on duty\n"
     "Lease\tidn-test, direct\n" "Boards\t0 Run, 2 Standby";
+/* EMP/1.9: the fleet's detail page, cells 10..15 (Checks, Lease, Nodes, Boards, Stops, Orch). */
+static const char *const DETAIL[6] = {
+    T_OK "Beacon\tok\n" T_OK "Nodes\t2/2\n" T_OK "Watches\t1\n" T_OK "Lease\theld\n"
+    T_OK "Boards\tready\n" T_OK "E-stop\tclear",
+    "Holder\tidn-test\n" "Mode\tdirect\n" "Since\t14 min\n" T_OK "Renew\t2 s ago\n" "Expires\t28 s",
+    T_OK "Node-1\tup 3 d\n" T_OK "Node-2\tup 3 d\n" "Ping\t0.3 ms\n" "Lasers\t2",
+    "0007\tStandby\n" "0008\tStandby\n" "FW\t2.4.1\n" T_OK "Temp\t41, 43 C",
+    "Last\tMini\n" "When\t4 min ago\n" "Why\tE-STOP\n" "Cleared\t3 min\n" "Today\t3",
+    "Host\tlab-orch\n" "Rev\t09e7853\n" T_OK "Beacon\t0.4 s\n" "Up\t2 h 14 min\n" "Addr\t10.0.1.10",
+};
+
 static void scene_system_page(const char *which)
 {
     uint32_t t = 100;
+    if (strcmp(which, "opens") == 0 || strcmp(which, "detail") == 0) {
+        /* "opens": the system page with System marked OPENS. "detail": the page its press reveals
+         * (REVEAL 10): the pinned E-STOP panel and the six detail lists. */
+        int detail = strcmp(which, "detail") == 0;
+        fixture_system_page_ex("DISARMED\nlasers dark", EMP_TONE_OK, 0, "READY\narm checks met", EMP_TONE_OK, 1,
+                               READOUT_DISARMED, 1, detail ? DETAIL : 0);
+        ui_state_tick(t);
+        if (detail) ui_state_reveal(10);
+        ui_render();
+        return;
+    }
     if (strcmp(which, "legacy") == 0 || strcmp(which, "legacy-stopped") == 0) {
         sim_wire_set_peer_minor(7);
         fixture_system_page_17(strcmp(which, "legacy-stopped") == 0);

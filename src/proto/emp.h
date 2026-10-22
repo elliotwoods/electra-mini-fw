@@ -21,7 +21,7 @@
 /* Minor may only ADD: opcodes, flag bits, trailing members inside field_len, or 0x80+ value
  * tags (docs/protocol.md 6). Both ends agree on min(host, device), so neither can send the
  * other something it has never heard of. */
-#define EMP_VERSION_MINOR    8u
+#define EMP_VERSION_MINOR    9u
 #define EMP_HEADER_BYTES     8u
 #define EMP_PREFIX_BYTES     8u          /* total_len u32 + crc32c u32, on FIRST && !LAST */
 
@@ -146,6 +146,11 @@
  * daemon above every application's page). A descriptor with a pinned field keeps reading order on
  * every page, and a field another page puts under a pinned knob is never shown. */
 #define EMP_FIELD_PINNED      0x10u
+/* EMP/1.9 OPENS: a LIST (ReadOnly, style 3) whose knob press opens something on the host -- it sends
+ * the ordinary 14-byte ACTIVATE, as an Action's press does, instead of returning the list to its
+ * first entry. Turning still scrolls and sends nothing. Cleared on any other field and below minor 9
+ * (docs/protocol.md "EMP/1.9"). Drawn as a chevron at the right of the label row. */
+#define EMP_FIELD_OPENS       0x20u
 
 /* Why an edit happened, on EDIT. Diagnostics for the host, not semantics. */
 #define EMP_CAUSE_ROTATE      0u

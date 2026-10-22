@@ -159,8 +159,12 @@ static int scroll_list(unsigned pot, int32_t slot, int32_t detents)
 static void enter_focus(int32_t idx)
 {
     if (idx < 0) return;
+    const surf_field_t *f = surf_field((uint16_t)idx);
+    /* EMP/1.9: an OPENS list's press opens what it summarises on the host, with the ordinary
+     * ACTIVATE an Action sends; it keeps its place, since the host may well bring it back. */
+    if (surf_field_opens(f)) { surf_activate((uint16_t)idx); return; }
     /* EMP/1.8: a LIST readout has nothing to drill into; its press goes back to the top. */
-    if (surf_field_is_list(surf_field((uint16_t)idx))) { st.list_top[idx] = 0; return; }
+    if (surf_field_is_list(f)) { st.list_top[idx] = 0; return; }
     st.focused = idx;
 
     /* The digit editor is the OTHER row. See ui_state.h: this is what makes drilling symmetric,

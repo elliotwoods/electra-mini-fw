@@ -329,8 +329,58 @@ static void pinned_tests(void)
     CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
     puts("  pinned fleet slots stay put across a page change; each page matches a clean repaint");
 }
+/* EMP/1.9 OPENS: the System list carries a ">" at the right of its label row, in the navigation
+ * ink, with its "n/N" moved to the chevron's left; a plain list has neither. The detail page the
+ * press reveals keeps the pinned panel in place, and every step matches a clean repaint. */
+static void opens_tests(void)
+{
+    const int16_t cw=(LCD_WIDTH-24-18)/4, y0=6, x3=(int16_t)(12+3*(cw+6)), panel_w=(int16_t)(2*cw+6);
+    const int16_t row=36, tail=40;   /* the label row, and its right-hand 40 px */
+    static const char *const list="Fleet\tDISARMED\nLast stop\tnone\nOrch\tlab-orch\nNodes\t2/2\n"
+                                  "Watches\t1 on duty\nLease\tidn-test, direct\nBoards\t2 Run";
+    clean();fixture_system_page("DISARMED\nlasers dark",EMP_TONE_OK,0,"READY\narm checks met",EMP_TONE_OK,1,list);
+    ui_state_tick(100);ui_render();
+    CHECK(count_colour(x3,y0,cw,row,C_NAV)==0);
+    unsigned plain_pos=count_colour((int16_t)(x3+cw-tail),y0,tail,row,C_LINK);
+    CHECK(plain_pos>10);                                          /* "1/7" sits at the right */
+    fixture_system_page_ex("DISARMED\nlasers dark",EMP_TONE_OK,0,"READY\narm checks met",EMP_TONE_OK,1,list,1,0);
+    ui_state_tick(200);ui_render();
+    CHECK(surf_field_opens(surf_field(3)));
+    unsigned chevron=count_colour((int16_t)(x3+cw-tail),y0,tail,row,C_NAV);
+    CHECK(chevron>15);                                            /* the ">" is there, at the right */
+    CHECK(count_colour(x3,y0,(int16_t)(cw-tail),row,C_NAV)==0);   /* and nowhere else in the row */
+    CHECK(count_colour(x3,(int16_t)(y0+row),cw,(int16_t)(184-row),C_NAV)==0);
+    CHECK(count_colour((int16_t)(x3+cw-26),y0,26,row,C_LINK)==0); /* "n/N" moved off the edge... */
+    CHECK(count_colour(x3,y0,cw,row,C_LINK)>10);                  /* ...and is still shown */
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    /* A scroll repaints the counter beside the chevron, as a clean repaint would draw it. */
+    ui_state_rotate(3,UI_LIST_STEP*3,300);ui_render();
+    CHECK(ui_state_list_top(3)==3&&count_colour((int16_t)(x3+cw-tail),y0,tail,row,C_NAV)==chevron);
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    /* Below minor 9 the same descriptor draws the 1.8 list: no chevron. */
+    sim_wire_set_peer_minor(8);
+    fixture_system_page_ex("DISARMED\nlasers dark",EMP_TONE_OK,0,"READY\narm checks met",EMP_TONE_OK,1,list,1,0);
+    ui_state_tick(400);ui_render();
+    CHECK(count_colour(x3,y0,cw,row,C_NAV)==0&&count_colour((int16_t)(x3+cw-tail),y0,tail,row,C_LINK)==plain_pos);
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    /* The detail page: REVEAL(10) from the system page leaves the pinned panel's pixels alone. */
+    static const char *const detail[6]={"Beacon\tok\nNodes\t2/2","Mode\tdirect","Node-1\tup",
+                                         "0007\tStandby","Last\tMini","Host\tlab-orch"};
+    fixture_system_page_ex("DISARMED\nlasers dark",EMP_TONE_OK,0,"READY\narm checks met",EMP_TONE_OK,1,list,1,detail);
+    ui_state_tick(500);ui_render();
+    memcpy(reference,sim_framebuffer(),sizeof(reference));
+    CHECK(ui_state_reveal(10)&&ui_state()->page==8);ui_render();
+    for(int y=6;y<6+184;y++)for(int x=12;x<12+panel_w;x++)
+        CHECK(sim_framebuffer()[y*LCD_WIDTH+x]==reference[y*LCD_WIDTH+x]);
+    CHECK(count_colour(x3,y0,cw,row,C_NAV)==0);                   /* Lease: a plain list */
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    puts("  OPENS chevron at the label row's right, counter beside it; detail page keeps the pins");
+}
 int main(void)
 {
-    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();status_tests();hold_tests();readout_tests();panel_tests();pinned_tests();
+    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();status_tests();hold_tests();readout_tests();panel_tests();pinned_tests();opens_tests();
     printf("%u graphics checks passed\n",checks);return 0;
 }
