@@ -165,6 +165,52 @@ static void fixture_reserved_app_page(const char*fleet,uint8_t fleet_tone,int st
     }
     fixture_fields(f,16);
 }
+/* The fleet's top row as av-frameworks' daemon sends it since av.daemon-extension minor 1
+ * (control-surface-router/src/system/top.rs), every field PINNED: E-STOP; the state button (ARM or
+ * CLEAR E-STOP a HOLD, DISARM a plain Action; DISABLED when not offered; its Text value the
+ * status); POWER, a 0-100 % number; Fleet, a LIST that OPENS. `power` < 0 leaves ID 2 empty. */
+typedef struct {
+    const char*label; uint8_t style,tone; int enabled; const char*status;
+} fixture_state_button;
+static void fixture_top_row(fixture_field*f,const fixture_state_button*button,double power,
+                            const char*fleet)
+{
+    f[0]=(fixture_field){EMP_KIND_ACTION,EMP_FIELD_PINNED,EMP_STYLE_ESTOP,0,"E-STOP",0,0,0,0,0,0,0};
+    f[1]=(fixture_field){EMP_KIND_ACTION,(uint8_t)(EMP_FIELD_PINNED|(button->enabled?0u:EMP_FIELD_DISABLED)),
+                         button->style,button->tone,button->label,button->status,0,0,0,0,0,0};
+    if(power>=0)
+        f[2]=(fixture_field){EMP_KIND_NUMBER,EMP_FIELD_PINNED,0,0,"POWER",0,"%",power,0,100,0,0};
+    f[3]=(fixture_field){EMP_KIND_READONLY,(uint8_t)(EMP_FIELD_PINNED|EMP_FIELD_OPENS),EMP_STYLE_LIST,0,
+                         "Fleet",fleet,0,0,0,0,0,0};
+}
+/* The daemon's system page with that top row; the bottom row as ever. */
+static void fixture_top_page(const fixture_state_button*button,double power,const char*fleet)
+{
+    fixture_field f[8];
+    memset(f,0,sizeof(f));
+    fixture_top_row(f,button,power,fleet);
+    f[4]=(fixture_field){EMP_KIND_NUMBER,0,0,0,"Volume",0,"%",40,0,100,0,0};
+    f[5]=(fixture_field){EMP_KIND_NUMBER,0,0,0,"Brightness",0,"%",75,0,100,0,0};
+    f[6]=(fixture_field){EMP_KIND_ACTION,0,0,0,"Dictate",0,0,0,0,0,0,0};
+    f[7]=(fixture_field){EMP_KIND_READONLY,0,0,0,"Dictation","Ready",0,0,0,0,0,0};
+    fixture_fields(f,8);
+}
+/* An application's page with the top row reserved while the fleet plugin is active: the
+ * application's controls four to a page in the bottom row, IDs 4..7, 12..15 (8..11 stay empty). */
+static void fixture_top_app_page(const fixture_state_button*button,double power,const char*fleet)
+{
+    static const char*const labels[8]={"Cutoff","Resonance","Drive","Mix","Attack","Release",
+                                       "Rate","Bypass"};
+    fixture_field f[16];
+    memset(f,0,sizeof(f));
+    fixture_top_row(f,button,power,fleet);
+    for(unsigned i=0;i<8;i++) {
+        unsigned id=i<4?4+i:12+(i-4);
+        f[id]=(fixture_field){i==7?EMP_KIND_TOGGLE:EMP_KIND_NUMBER,0,0,0,labels[i],0,i<4?"%":0,
+                              10.0+7.0*i,0,i==7?1:100,0,0};
+    }
+    fixture_fields(f,16);
+}
 /* The same page as an EMP/1.7 device is sent it today (the fallback below minor 8). */
 static void fixture_system_page_17(int stopped)
 {

@@ -131,6 +131,32 @@ static const char *const DETAIL[6] = {
     "Host\tlab-orch\n" "Rev\t09e7853\n" T_OK "Beacon\t0.4 s\n" "Up\t2 h 14 min\n" "Addr\t10.0.1.10",
 };
 
+/* The top row since av.daemon-extension minor 1 (docs/graphics-evidence/top-row): strings as
+ * control-surface-router/src/system/top.rs and arm.rs write them. */
+#define FLEET_LINES T_OK "Nodes\t4/4\n" T_OK "Projectors\t3/3"
+static void scene_top_row(const char *which)
+{
+    fixture_state_button arm_ready = {"ARM", EMP_STYLE_HOLD, EMP_TONE_OK, 1, "DISARMED\narm checks met"};
+    fixture_state_button arm_unmet = {"ARM", EMP_STYLE_HOLD, EMP_TONE_WARN, 0, "NOT READY\nno watch"};
+    fixture_state_button arm_power = {"ARM", EMP_STYLE_HOLD, EMP_TONE_WARN, 0, "NOT READY\nlaser power"};
+    fixture_state_button disarm    = {"DISARM", EMP_STYLE_NORMAL, EMP_TONE_ALERT, 1, "ARMED\npress to disarm"};
+    fixture_state_button clear     = {"CLEAR E-STOP", EMP_STYLE_HOLD, EMP_TONE_WARN, 1,
+                                      "E-STOPPED\ncontrol surface, 12 s ago: control surface E-STOP"};
+    const char *applied = T_OK "Power\tapplied\n" FLEET_LINES;
+    if      (strcmp(which, "disarmed") == 0)    fixture_top_page(&arm_ready, 60, applied);
+    else if (strcmp(which, "unmet") == 0)       fixture_top_page(&arm_unmet, 60, applied);
+    else if (strcmp(which, "armed") == 0)       fixture_top_page(&disarm, 60, applied);
+    else if (strcmp(which, "stopped") == 0)     fixture_top_page(&clear, 60, applied);
+    else if (strcmp(which, "ramping") == 0)
+        fixture_top_page(&arm_ready, 60, "Power\tramping 34->60 %\n" FLEET_LINES);
+    else if (strcmp(which, "unconfirmed") == 0)
+        fixture_top_page(&arm_power, 60, T_WARN "Power\tunconfirmed: 2/3 boards\n" FLEET_LINES);
+    else if (strcmp(which, "app") == 0)         fixture_top_app_page(&arm_ready, 60, applied);
+    else { fprintf(stderr, "unknown top-row scene %s\n", which); exit(2); }
+    ui_state_tick(100);
+    ui_render();
+}
+
 static void scene_system_page(const char *which)
 {
     uint32_t t = 100;
@@ -217,6 +243,7 @@ int main(int argc, char **argv)
     }
 
     if (strncmp(scene, "sys-", 4) == 0) { scene_system_page(scene + 4); write_ppm(out); return 0; }
+    if (strncmp(scene, "top-", 4) == 0) { scene_top_row(scene + 4); write_ppm(out); return 0; }
     if      (strncmp(scene,"sparse-",7)==0) {fixture_sparse((unsigned)atoi(scene+7),0);ui_render();}
     else if (strncmp(scene,"toggle",6)==0) {
         fixture_toggles();

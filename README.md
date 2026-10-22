@@ -269,7 +269,11 @@ Install Python `pyserial` and `Pillow`; Xcode command-line tools provide `cc`.
 `sys-cleared`, `sys-arming`, `sys-unavailable`, `sys-no-orch`, `sys-readout-N` and `sys-legacy`
 show the daemon's EMP/1.8 system page and its EMP/1.7 fallback, and `sys-app`, `sys-app-2`,
 `sys-app-stopped` and `sys-app-clearing` an application's pages with the fleet's two slots pinned;
-`sys-opens` and `sys-detail` the EMP/1.9 System list that opens and the detail page it reveals);
+`sys-opens` and `sys-detail` the EMP/1.9 System list that opens and the detail page it reveals;
+`top-disarmed`, `top-unmet`, `top-armed`, `top-stopped`, `top-ramping`, `top-unconfirmed` and
+`top-app` the daemon's top row since av.daemon-extension minor 1, E-STOP, the state button, POWER
+and Fleet, on its system page and over an application's page, in
+`docs/graphics-evidence/top-row/`; no firmware change was needed for it);
 `python3 tools/deploy/emp.py --selftest` checks the reference host encoders without a device.
 The existing `tools/deploy/flash_usb.py build/app.srec` and `screenshot.py`
 commands select IOKit on macOS and WinUSB on Windows. The updater releases the
