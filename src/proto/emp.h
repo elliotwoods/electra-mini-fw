@@ -21,7 +21,7 @@
 /* Minor may only ADD: opcodes, flag bits, trailing members inside field_len, or 0x80+ value
  * tags (docs/protocol.md 6). Both ends agree on min(host, device), so neither can send the
  * other something it has never heard of. */
-#define EMP_VERSION_MINOR    9u
+#define EMP_VERSION_MINOR    10u
 #define EMP_HEADER_BYTES     8u
 #define EMP_PREFIX_BYTES     8u          /* total_len u32 + crc32c u32, on FIRST && !LAST */
 
@@ -122,7 +122,14 @@
  * Its knob scrolls the list on the device; nothing is sent. A line may start with one byte
  * 0x01..0x03 (EMP_TONE_OK..ALERT) that colours that line's value. Refused below minor 8. */
 #define EMP_STYLE_LIST        3u
-#define EMP_STYLE_MAX         EMP_STYLE_LIST
+/* EMP/1.10: media transport. An Action with one of these styles takes no knob: it is bound to a
+ * physical button on the surface overview (TRACK_PREV to button 2, PLAY_PAUSE to 3, TRACK_NEXT
+ * to 4, the three that act only while a field is drilled), drawn as that button's glyph, and its
+ * press sends the ordinary ACTIVATE. Refused below minor 10 and on anything but an Action. */
+#define EMP_STYLE_TRACK_PREV  4u
+#define EMP_STYLE_PLAY_PAUSE  5u
+#define EMP_STYLE_TRACK_NEXT  6u
+#define EMP_STYLE_MAX         EMP_STYLE_TRACK_NEXT
 #define EMP_HOLD_MS           1500u
 
 /* EMP/1.6 status tone, rendered on ReadOnly fields and on fields showing a Text value. */

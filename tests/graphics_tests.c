@@ -379,8 +379,39 @@ static void opens_tests(void)
     CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
     puts("  OPENS chevron at the label row's right, counter beside it; detail page keeps the pins");
 }
+/* EMP/1.10: on the overview the transport Actions are drawn over buttons 2-4 (the glyphs, in the
+ * icon ink); drilled, those buttons are Undo, Redo and Store again; a page without them leaves
+ * the three blank. Every state matches a clean repaint. */
+static void transport_tests(void)
+{
+    const int16_t bw=(LCD_WIDTH-24-5*6)/6, ly=196+36, lh=88-36;
+    static const fixture_state_button arm={"ARM",EMP_STYLE_HOLD,EMP_TONE_OK,1,"DISARMED\narm checks met"};
+    unsigned ink[3];
+    clean();fixture_top_page(&arm,60,"Nodes\t2/2");ui_state_tick(100);ui_render();
+    for(unsigned k=0;k<3;k++) CHECK(count_colour((int16_t)(12+(k+1)*(bw+6)),ly,bw,lh,C_ICON)==0);
+    fixture_transport_page(&arm,60,"Nodes\t2/2");ui_state_tick(200);ui_render();
+    for(unsigned k=0;k<3;k++) {
+        ink[k]=count_colour((int16_t)(12+(k+1)*(bw+6)),ly,bw,lh,C_ICON);
+        CHECK(ink[k]>100);                                        /* a glyph, not a speck */
+    }
+    CHECK(ink[1]>ink[2]&&ink[2]>0);                               /* play/pause has two bars */
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    /* Drilled into Volume: nothing to undo yet, so the three are blank, then back on leaving. */
+    ui_state_push(4,1,300);ui_state_push(4,0,310);ui_render();
+    CHECK(ui_state()->focused==4);
+    for(unsigned k=0;k<3;k++) CHECK(count_colour((int16_t)(12+(k+1)*(bw+6)),ly,bw,lh,C_ICON)==0);
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    ui_state_button(UI_BTN_BACK,1,400);ui_state_button(UI_BTN_BACK,0,410);ui_render();
+    CHECK(ui_state()->focused<0);
+    for(unsigned k=0;k<3;k++) CHECK(count_colour((int16_t)(12+(k+1)*(bw+6)),ly,bw,lh,C_ICON)==ink[k]);
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    puts("  transport glyphs over buttons 2-4 on the overview, gone while drilled");
+}
 int main(void)
 {
-    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();status_tests();hold_tests();readout_tests();panel_tests();pinned_tests();opens_tests();
+    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();status_tests();hold_tests();readout_tests();panel_tests();pinned_tests();opens_tests();transport_tests();
     printf("%u graphics checks passed\n",checks);return 0;
 }

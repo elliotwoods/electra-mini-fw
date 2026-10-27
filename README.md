@@ -76,6 +76,10 @@ The integration currently provides:
 - Lists that open (EMP/1.9): a read-only list can be marked to open something on the host, shown
   by a `>` beside its title; turning still scrolls it and pressing it sends an activation. The
   daemon's System summary opens the fleet's detail page this way.
+- Media transport (EMP/1.10): an Action styled previous, play/pause or next takes no knob and is
+  bound to button 2, 3 or 4, which do nothing on the overview otherwise; the legend shows its
+  glyph and a press sends an activation. The daemon's system page uses it for the operating
+  system's media keys ([render](docs/graphics-evidence/top-row/top-transport.png)).
 - Transactional descriptor replacement. A failed or partial update never replaces the live
   surface, and session IDs make device resets visible to the host.
 - Device and link diagnostics through EMP/1 heartbeats, counters, and structured diagnostic
@@ -270,6 +274,7 @@ Install Python `pyserial` and `Pillow`; Xcode command-line tools provide `cc`.
 show the daemon's EMP/1.8 system page and its EMP/1.7 fallback, and `sys-app`, `sys-app-2`,
 `sys-app-stopped` and `sys-app-clearing` an application's pages with the fleet's two slots pinned;
 `sys-opens` and `sys-detail` the EMP/1.9 System list that opens and the detail page it reveals;
+`top-transport` the EMP/1.10 previous / play-pause / next glyphs over buttons 2-4;
 `top-disarmed`, `top-unmet`, `top-armed`, `top-stopped`, `top-ramping`, `top-unconfirmed` and
 `top-app` the daemon's top row since av.daemon-extension minor 1, E-STOP, the state button, POWER
 and Fleet, on its system page and over an application's page, in

@@ -23,5 +23,9 @@
 #define ICON_SETTINGS "\x26"  /* U+2699 GEAR                        */
 #define ICON_STORE  "\x27"    /* U+21A7 DOWNWARDS ARROW FROM BAR, as on screen */
 #define ICON_ZOOM   "\x28"    /* U+2194 LEFT RIGHT ARROW            */
+/* Composed from the triangles and U+275A HEAVY VERTICAL BAR (DejaVu has no U+23ED..23EF). */
+#define ICON_TRACK_PREV  "\x29"  /* bar, left triangle               */
+#define ICON_PLAY_PAUSE  "\x2a"  /* right triangle, two bars         */
+#define ICON_TRACK_NEXT  "\x2b"  /* right triangle, bar              */
 
 #endif /* ELECTRA_ICONS_H */

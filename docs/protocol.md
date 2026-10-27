@@ -912,3 +912,59 @@ opens the fleet's detail page on its press (`docs/graphics-evidence/system-page/
   shows its position, `n/N` sits immediately to the chevron's left, and the label is cut to the
   room that is left. Entries, rules and the position bar are drawn as in EMP/1.8.
 - A plain `LIST` (no `OPENS`, or a peer below minor 9) is drawn exactly as EMP/1.8 says: no chevron.
+
+
+## EMP/1.10: media transport on the physical buttons
+
+Three more `style` values. No new opcode, message, flag or DIAG code; `ACTIVATE` is the EMP/1.2 14
+bytes. It exists for the daemon's system page, which offers the operating system's previous track,
+play/pause and next track (`docs/graphics-evidence/top-row/top-transport.png`).
+
+| `style` | Name | Valid on | Button |
+|---|---|---|---|
+| 4 | `TRACK_PREV` | Action (kind 5) | 2 (`UI_BTN_UNDO`) |
+| 5 | `PLAY_PAUSE` | Action (kind 5) | 3 (`UI_BTN_REDO`) |
+| 6 | `TRACK_NEXT` | Action (kind 5) | 4 (`UI_BTN_AUX`) |
+
+Buttons are numbered 1–6 left to right, as the rest of this document numbers them. On the surface
+overview (no field drilled), buttons 2–4 do nothing without these: Undo, Redo and Store act only on
+a drilled field.
+
+### Negotiation and validity
+
+- A host sends styles 4–6 only when HELLO negotiation selected minor 10 or newer. To an older peer
+  it leaves those fields out: they are not knob controls, and an older device would put them on
+  knobs.
+- A device whose negotiated minor is below 10 treats them as EMP/1.9 says: unknown, drawn
+  `NORMAL` on their knob, `TRUNCATED`, `DIAG{E_STYLE_UNSUPPORTED}`.
+- A minor 10 device applies the EMP/1.6 rule with the limit raised to 6: `style` > 6, or styles
+  4–6 on anything but an Action, load the field drawn `NORMAL` with `TRUNCATED` and the DIAG.
+- One field per button. A second field with the same style is refused the same way (drawn
+  `NORMAL` on its knob, `TRUNCATED`, DIAG, context `(id << 8) | style`), and the first keeps the
+  button.
+
+### Placement
+
+A field bound to a button **takes no knob**. Its ID is still unique and in `0..max_fields` (a
+duplicate ID, bound or not, breaks the transaction as before), but the field is in no slot: the
+grid, the page count (`slot_span`, and so `SCREEN`), the EMP/1.6 1–4-field bottom-row rule and
+`REVEAL` all step over it, and `VALUES` / `TONED_VALUES` entries for its ID are skipped silently.
+So a host may put the three at IDs above every knob field (the daemon uses 8, 9 and 10 under a
+five-field page) without adding a page.
+
+### Input
+
+- On the overview, the bound button's **press edge** sends the ordinary `ACTIVATE` for the field's
+  ID, with the next activation sequence. The release sends nothing; there is no hold.
+- While a field is drilled, buttons 2–4 are Undo, Redo and Store exactly as before, and nothing is
+  sent for the transport fields.
+- A `DISABLED` transport Action (EMP/1.8) is absent: its button is not live and sends nothing.
+- `BUTTON` diagnostics are reported as before, for every press.
+
+### Rendering
+
+Each live button's legend cell carries its glyph in the icon face: a bar and a left triangle, a
+right triangle and two bars, a right triangle and a bar. DejaVu Sans has no U+23ED–U+23EF, so
+`tools/font/make-font.py` composes them from U+25C0 / U+25B6 and U+275A HEAVY VERTICAL BAR, cut to
+the triangle's height (`ICON_TRACK_PREV`, `ICON_PLAY_PAUSE`, `ICON_TRACK_NEXT`). Drilled, the
+cells show Undo, Redo and Store when those apply, as before.

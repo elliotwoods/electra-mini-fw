@@ -48,6 +48,11 @@ typedef struct {
     uint16_t      field_count;
     uint16_t      slot_span;
     uint64_t      occupied;
+    /* EMP/1.10: the fields bound to the overview's transport buttons, by style - TRACK_PREV
+     * (slot + 1, 0 = none), and their slots. A bound field is stored like any other but is not
+     * in `occupied`, so the grid, the pages and every slot lookup step over it. */
+    uint16_t      transport[3];
+    uint64_t      transport_slots;
     uint16_t      pool_used;
     uint16_t      choices_used;
     uint64_t      revision;
@@ -375,8 +380,10 @@ static uint8_t checked_tone(uint16_t id, uint8_t tone)
 static void apply_style(surf_field_t *f, uint8_t style, uint8_t tone)
 {
     uint8_t minor = emp_session_peer_minor();
-    uint8_t max = minor >= 8u ? EMP_STYLE_LIST : minor >= 7u ? EMP_STYLE_HOLD : EMP_STYLE_ESTOP;
-    /* EMP/1.8 LIST belongs on a ReadOnly field only: a knob that scrolls must not also edit. */
+    uint8_t max = minor >= 10u ? EMP_STYLE_TRACK_NEXT
+                : minor >= 8u ? EMP_STYLE_LIST : minor >= 7u ? EMP_STYLE_HOLD : EMP_STYLE_ESTOP;
+    /* EMP/1.8 LIST belongs on a ReadOnly field only: a knob that scrolls must not also edit. The
+     * EMP/1.10 transport styles, like the stop and the hold, belong on an Action. */
     uint8_t wants = style == EMP_STYLE_LIST ? EMP_KIND_READONLY : EMP_KIND_ACTION;
     if (style > max || (style != EMP_STYLE_NORMAL && f->kind != wants)) {
         emp_diag(EMP_SEV_WARN, EMP_DIAG_STYLE_UNSUPPORTED, ((uint32_t)f->id << 8) | style,
@@ -427,6 +434,8 @@ static void desc_begin(const uint8_t *msg, uint32_t len)
     STAGE->field_count  = 0;
     STAGE->slot_span    = 0;
     STAGE->occupied     = 0;
+    STAGE->transport[0] = STAGE->transport[1] = STAGE->transport[2] = 0;
+    STAGE->transport_slots = 0;
 }
 
 static void desc_field(const uint8_t *msg, uint32_t len)
@@ -460,7 +469,7 @@ static void desc_field(const uint8_t *msg, uint32_t len)
         send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
         return;
     }
-    if (STAGE->occupied & slot_bit(slot)) {
+    if ((STAGE->occupied | STAGE->transport_slots) & slot_bit(slot)) {
         staging_open = 0;
         send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
         return;
@@ -615,6 +624,23 @@ static void desc_field(const uint8_t *msg, uint32_t len)
     if (emp_session_peer_minor() < 9u || !surf_field_is_list(f))
         f->flags = (uint8_t)(f->flags & ~EMP_FIELD_OPENS);
 
+    /* EMP/1.10: a transport Action leaves the knob grid for its button. A second field with the
+     * same style is refused as an unknown style is, so it stays visible on a knob rather than
+     * vanishing, and the first keeps the button. */
+    if (!r.bad && f->style >= EMP_STYLE_TRACK_PREV && f->style <= EMP_STYLE_TRACK_NEXT) {
+        unsigned which = (unsigned)(f->style - EMP_STYLE_TRACK_PREV);
+        if (STAGE->transport[which]) {
+            emp_diag(EMP_SEV_WARN, EMP_DIAG_STYLE_UNSUPPORTED, ((uint32_t)slot << 8) | f->style,
+                     "second field for one transport button; drawn as normal");
+            f->flags = (uint8_t)(f->flags | EMP_FIELD_TRUNCATED);
+            f->style = EMP_STYLE_NORMAL;
+        } else {
+            STAGE->transport[which] = (uint16_t)(slot + 1u);
+            STAGE->transport_slots |= slot_bit(slot);
+            STAGE->occupied &= ~slot_bit(slot);
+        }
+    }
+
     if (r.bad) {
         emp_diag(EMP_SEV_ERROR, EMP_DIAG_DESC_SEQUENCE, index, "descriptor field truncated");
         send_desc_request(EMP_REQ_SEQUENCE_BROKEN);
@@ -653,6 +679,12 @@ static void desc_end(const uint8_t *msg, uint32_t len)
         send_desc_request(EMP_REQ_CRC_MISMATCH);
         return;
     }
+
+    /* The span covers the knob grid only: a transport field above every other ID (EMP/1.10)
+     * must not add a page of holes. */
+    STAGE->slot_span = 0;
+    for (uint16_t slot = 0; slot < SURF_MAX_FIELDS; slot++)
+        if (STAGE->occupied & slot_bit(slot)) STAGE->slot_span = (uint16_t)(slot + 1u);
 
     /* Verified. PUBLISH by swapping, which is a single store -- there is no instant at which
      * the panel can read a half-built descriptor, and the arena that was live becomes the
@@ -1214,17 +1246,26 @@ void surf_demo_choice_descriptor(uint16_t slot, const char *field_label,
 }
 
 /* EMP/1.2 action presses are events, never a locally edited persistent value. */
-void surf_activate(uint16_t slot)
+static void send_activate(const surf_field_t *field)
 {
     static uint32_t activation_seq;
-    const surf_field_t *field = surf_field(slot);
     if (!field || emp_session_peer_minor() < 2u) return;
     if (field->kind != EMP_KIND_ACTION && !surf_field_opens(field)) return;   /* EMP/1.9: or an OPENS list */
     if (surf_field_disabled(field)) return;           /* EMP/1.8: shown, never sent */
     uint8_t buf[14]; wr_t w; wr_init(&w, buf, sizeof(buf));
-    wr64(&w, LIVE->revision); wr32(&w, ++activation_seq); wr16(&w, slot);
+    wr64(&w, LIVE->revision); wr32(&w, ++activation_seq); wr16(&w, field->id);
     emp_send(EMP_CH_INPUT, EMP_OP_ACTIVATE, buf, w.len);
 }
+
+void surf_activate(uint16_t slot) { send_activate(surf_field(slot)); }
+
+const surf_field_t *surf_transport(unsigned which)
+{
+    if (which >= 3u || !LIVE->transport[which]) return 0;
+    return &LIVE->fields[LIVE->transport[which] - 1u];
+}
+
+void surf_activate_transport(unsigned which) { send_activate(surf_transport(which)); }
 
 int surf_field_modified(const surf_field_t *f)
 {

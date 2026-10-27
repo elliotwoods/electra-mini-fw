@@ -195,6 +195,20 @@ static void fixture_top_page(const fixture_state_button*button,double power,cons
     f[7]=(fixture_field){EMP_KIND_READONLY,0,0,0,"Dictation","Ready",0,0,0,0,0,0};
     fixture_fields(f,8);
 }
+/* EMP/1.10: the daemon's system page since 2026-10-27: that top row, Volume and Brightness (IDs 6
+ * and 7 empty), and previous / play-pause / next at IDs 8-10, bound to buttons 2-4. */
+static void fixture_transport_page(const fixture_state_button*button,double power,const char*fleet)
+{
+    fixture_field f[11];
+    memset(f,0,sizeof(f));
+    fixture_top_row(f,button,power,fleet);
+    f[4]=(fixture_field){EMP_KIND_NUMBER,0,0,0,"Volume",0,"%",40,0,100,0,0};
+    f[5]=(fixture_field){EMP_KIND_NUMBER,0,0,0,"Brightness",0,"%",75,0,100,0,0};
+    f[8]=(fixture_field){EMP_KIND_ACTION,0,EMP_STYLE_TRACK_PREV,0,"Previous",0,0,0,0,0,0,0};
+    f[9]=(fixture_field){EMP_KIND_ACTION,0,EMP_STYLE_PLAY_PAUSE,0,"Play",0,0,0,0,0,0,0};
+    f[10]=(fixture_field){EMP_KIND_ACTION,0,EMP_STYLE_TRACK_NEXT,0,"Next",0,0,0,0,0,0,0};
+    fixture_fields(f,11);
+}
 /* An application's page with the top row reserved while the fleet plugin is active: the
  * application's controls four to a page in the bottom row, IDs 4..7, 12..15 (8..11 stay empty). */
 static void fixture_top_app_page(const fixture_state_button*button,double power,const char*fleet)

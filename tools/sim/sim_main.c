@@ -152,6 +152,7 @@ static void scene_top_row(const char *which)
     else if (strcmp(which, "unconfirmed") == 0)
         fixture_top_page(&arm_power, 60, T_WARN "Power\tunconfirmed: 2/3 boards\n" FLEET_LINES);
     else if (strcmp(which, "app") == 0)         fixture_top_app_page(&arm_ready, 60, applied);
+    else if (strcmp(which, "transport") == 0)   fixture_transport_page(&arm_ready, 60, applied);
     else { fprintf(stderr, "unknown top-row scene %s\n", which); exit(2); }
     ui_state_tick(100);
     ui_render();

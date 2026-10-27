@@ -1538,7 +1538,7 @@ static void test_panel_decodes(void)
         { 0, EMP_KIND_ACTION,   "List action", 0,   0.0, 1, EMP_STYLE_LIST, 0, 0, 0, 0 },
         { 1, EMP_KIND_NUMBER,   "List number", 0,   0.5, 1, EMP_STYLE_LIST, 0, 0, 0, 0 },
         { 2, EMP_KIND_READONLY, "Inert text",  "x", 0.0, 0, 0, 0, 0, 0, EMP_FIELD_DISABLED },
-        { 3, EMP_KIND_ACTION,   "Style 4",     0,   0.0, 1, 4u, 0, 0, 0, 0 },
+        { 3, EMP_KIND_ACTION,   "Style 7",     0,   0.0, 1, 7u, 0, 0, 0, 0 },
     };
     load_styled(401, bad, 4);
     emp_diag_tick();
@@ -1551,7 +1551,7 @@ static void test_panel_decodes(void)
     ok = ok && surf_field(3)->style == EMP_STYLE_NORMAL;
     ok = ok && diag_seen(EMP_DIAG_STYLE_UNSUPPORTED, &ctx, &count) && count == 3
             && ctx == ((0u << 8) | EMP_STYLE_LIST);
-    check("list off a ReadOnly, disabled off an Action, style 4: refused", ok);
+    check("list off a ReadOnly, disabled off an Action, style 7: refused", ok);
 
     /* A minor 7 peer never sends them; if one did, this device answers as a 1.7 device. */
     sim_wire_set_peer_minor(7);
@@ -1733,7 +1733,7 @@ static void test_opens_decodes(void)
     sim_wire_set_peer_minor(EMP_VERSION_MINOR);
     load_styled(500, opens_page, OPENS_FIELDS);
     emp_diag_tick();
-    int ok = surf_applied_revision() == 500 && EMP_VERSION_MINOR == 9u;
+    int ok = surf_applied_revision() == 500 && EMP_VERSION_MINOR >= 9u;
     ok = ok && surf_field_opens(surf_field(1)) && surf_field_is_list(surf_field(1))
             && (surf_field(1)->flags & EMP_FIELD_OPENS) && !(surf_field(1)->flags & EMP_FIELD_TRUNCATED);
     ok = ok && !surf_field_opens(surf_field(2)) && surf_field_is_list(surf_field(2));
@@ -1884,6 +1884,150 @@ static void test_reveal_detail_page(void)
     check("REVEAL(10) shows the pinned panel and detail cells 10..15", ok);
 }
 
+/* ------------------------------------------------------------------ EMP/1.10 transport
+ *
+ * The daemon's system page with media transport: E-STOP, three readouts and Volume on the knobs,
+ * and previous / play-pause / next bound to buttons 2-4 at IDs 8-10, above the knob grid. */
+
+static const sfield_t transport_page[] = {
+    { 0,  EMP_KIND_ACTION,   "E-STOP",  0,    0.0, 1, EMP_STYLE_ESTOP, 0, 0, 0, 0 },
+    { 1,  EMP_KIND_READONLY, "Fleet",   "NO ORCH", 0.0, 0, 0, 0, 0, 0, 0 },
+    { 2,  EMP_KIND_READONLY, "Nodes",   "--", 0.0, 0, 0, 0, 0, 0, 0 },
+    { 3,  EMP_KIND_READONLY, "Watches", "--", 0.0, 0, 0, 0, 0, 0, 0 },
+    { 4,  EMP_KIND_NUMBER,   "Volume",  0,    0.5, 0, 0, 0, 0, 0, 0 },
+    { 8,  EMP_KIND_ACTION,   "Previous", 0,   0.0, 1, EMP_STYLE_TRACK_PREV, 0, 0, 0, 0 },
+    { 9,  EMP_KIND_ACTION,   "Play",    0,    0.0, 1, EMP_STYLE_PLAY_PAUSE, 0, 0, 0, 0 },
+    { 10, EMP_KIND_ACTION,   "Next",    0,    0.0, 1, EMP_STYLE_TRACK_NEXT, 0, 0, 0, 0 },
+};
+#define TRANSPORT_FIELDS ((uint16_t)(sizeof(transport_page) / sizeof(transport_page[0])))
+
+static uint16_t activated_id(const sim_wire_msg_t *m)
+{
+    return m ? (uint16_t)(m->payload[12] | (m->payload[13] << 8)) : 0xFFFFu;
+}
+
+static void test_transport_decodes(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(600, transport_page, TRANSPORT_FIELDS);
+    emp_diag_tick();
+    int ok = surf_applied_revision() == 600 && EMP_VERSION_MINOR >= 10u;
+    for (unsigned which = 0; which < 3u; which++)
+        ok = ok && surf_transport(which) && surf_transport(which)->id == 8u + which
+                && surf_field((uint16_t)(8u + which)) == 0;
+    ok = ok && !diag_seen(EMP_DIAG_STYLE_UNSUPPORTED, 0, 0);
+    check("1.10 transport binds IDs 8-10 to buttons, out of every slot", ok);
+
+    /* Out of the grid: the span ends at Volume, so there is no second page of holes, and the five
+     * knob fields keep reading order (E-STOP top-left). */
+    ok = surf_slot_span() == 5u && !ui_state_button_enabled(UI_BTN_PAGE_NEXT)
+      && ui_state_field_for(0) == 0 && ui_state_field_for(4) == 4 && !ui_state_reveal(9);
+    check("transport fields add no page, take no knob and cannot be revealed", ok);
+
+    /* With only four knob fields the bottom-row rule counts the knobs alone. */
+    static const sfield_t four[] = {
+        { 0, EMP_KIND_ACTION,   "E-STOP", 0,  0.0, 1, EMP_STYLE_ESTOP, 0, 0, 0, 0 },
+        { 1, EMP_KIND_READONLY, "Fleet", "x", 0.0, 0, 0, 0, 0, 0, 0 },
+        { 2, EMP_KIND_READONLY, "Nodes", "x", 0.0, 0, 0, 0, 0, 0, 0 },
+        { 3, EMP_KIND_READONLY, "Watch", "x", 0.0, 0, 0, 0, 0, 0, 0 },
+        { 5, EMP_KIND_ACTION,   "Play",  0,   0.0, 1, EMP_STYLE_PLAY_PAUSE, 0, 0, 0, 0 },
+    };
+    load_styled(601, four, 5);
+    check("transport is not counted by the 1-4 field rule",
+          ui_state_field_for(0) < 0 && ui_state_field_for(4) == 0 && surf_transport(1)
+          && surf_slot_span() == 4u);
+}
+
+static void test_transport_buttons(void)
+{
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(610, transport_page, TRANSPORT_FIELDS);
+    ui_state_tick(100);
+    sim_wire_reset();
+
+    /* Overview: buttons 2-4 are live and each press edge sends one ACTIVATE for its field. */
+    int ok = ui_state_button_enabled(UI_BTN_UNDO) && ui_state_button_enabled(UI_BTN_REDO)
+          && ui_state_button_enabled(UI_BTN_AUX);
+    static const unsigned buttons[3] = { UI_BTN_UNDO, UI_BTN_REDO, UI_BTN_AUX };
+    for (unsigned k = 0; k < 3u; k++) {
+        ui_state_button(buttons[k], 1, 200 + 20 * k);
+        const sim_wire_msg_t *m = sim_wire_last(EMP_OP_ACTIVATE);
+        uint64_t rev = 0;
+        for (unsigned i = 0; m && i < 8u; i++) rev |= (uint64_t)m->payload[i] << (8u * i);
+        ok = ok && activations() == k + 1u && m->len == 14u && rev == 610u
+                && activated_id(m) == 8u + k;
+        ui_state_button(buttons[k], 0, 210 + 20 * k);
+        ok = ok && activations() == k + 1u;                 /* the release sends nothing */
+    }
+    ok = ok && ui_state()->focused < 0 && ui_state()->page == 0;
+    check("buttons 2-4 send previous, play/pause and next on the overview", ok);
+
+    /* Drilled into Volume they are Undo, Redo and Store again, and send nothing. */
+    ui_state_push(4, 1, 400); ui_state_push(4, 0, 410);
+    ok = ui_state()->focused == 4;
+    sim_wire_reset();
+    for (unsigned k = 0; k < 3u; k++) {
+        ui_state_button(buttons[k], 1, 500 + 20 * k);
+        ui_state_button(buttons[k], 0, 510 + 20 * k);
+    }
+    ok = ok && activations() == 0 && ui_state()->focused == 4;
+    check("drilled, buttons 2-4 stay Undo, Redo and Store", ok);
+}
+
+static void test_transport_refused(void)
+{
+    /* DISABLED: the button is absent and its press sends nothing. */
+    static const sfield_t disabled[] = {
+        { 0, EMP_KIND_NUMBER, "Volume", 0,  0.5, 0, 0, 0, 0, 0, 0 },
+        { 9, EMP_KIND_ACTION, "Play",   0,  0.0, 1, EMP_STYLE_PLAY_PAUSE, 0, 0, 0, EMP_FIELD_DISABLED },
+    };
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+    load_styled(620, disabled, 2);
+    sim_wire_reset();
+    ui_state_button(UI_BTN_REDO, 1, 100); ui_state_button(UI_BTN_REDO, 0, 110);
+    surf_activate_transport(1);
+    check("a DISABLED transport Action is absent and sends nothing",
+          surf_transport(1) && !ui_state_button_enabled(UI_BTN_REDO) && activations() == 0);
+
+    /* A second field for one button keeps its knob, drawn normal, and the first keeps the button;
+     * a transport style on a non-Action is refused like any style on the wrong kind. */
+    static const sfield_t clash[] = {
+        { 0, EMP_KIND_ACTION, "Prev A", 0,  0.0, 1, EMP_STYLE_TRACK_PREV, 0, 0, 0, 0 },
+        { 1, EMP_KIND_ACTION, "Prev B", 0,  0.0, 1, EMP_STYLE_TRACK_PREV, 0, 0, 0, 0 },
+        { 2, EMP_KIND_NUMBER, "Next?",  0,  0.5, 1, EMP_STYLE_TRACK_NEXT, 0, 0, 0, 0 },
+    };
+    load_styled(621, clash, 3);
+    emp_diag_tick();
+    uint32_t count = 0;
+    int ok = surf_applied_revision() == 621 && surf_transport(0) && surf_transport(0)->id == 0
+          && surf_field(0) == 0;
+    ok = ok && surf_field(1) && surf_field(1)->style == EMP_STYLE_NORMAL
+            && (surf_field(1)->flags & EMP_FIELD_TRUNCATED);
+    ok = ok && surf_field(2) && surf_field(2)->style == EMP_STYLE_NORMAL && !surf_transport(2);
+    ok = ok && diag_seen(EMP_DIAG_STYLE_UNSUPPORTED, 0, &count) && count == 2;
+    check("a second field for a button, and transport off an Action: refused", ok);
+
+    /* A knob field reusing a bound field's ID breaks the transaction, as any duplicate ID does. */
+    static const sfield_t reused[] = {
+        { 8, EMP_KIND_ACTION, "Previous", 0, 0.0, 1, EMP_STYLE_TRACK_PREV, 0, 0, 0, 0 },
+        { 8, EMP_KIND_NUMBER, "Again",    0, 0.5, 0, 0, 0, 0, 0, 0 },
+    };
+    load_styled(623, reused, 2);
+    check("a knob field on a bound field's ID breaks the transaction", surf_applied_revision() != 623);
+
+    /* A minor 9 peer never sends them; if one did, this device answers as a 1.9 device: an
+     * unknown style, drawn normal on its knob, nothing bound. */
+    sim_wire_set_peer_minor(9);
+    load_styled(622, transport_page, TRANSPORT_FIELDS);
+    emp_diag_tick();
+    ok = !surf_transport(0) && !surf_transport(1) && !surf_transport(2)
+      && surf_field(8) && surf_field(8)->style == EMP_STYLE_NORMAL
+      && (surf_field(8)->flags & EMP_FIELD_TRUNCATED) && surf_slot_span() == 11u
+      && !ui_state_button_enabled(UI_BTN_UNDO);
+    check("minor 9 peer: transport styles unknown, nothing bound", ok);
+    sim_wire_set_peer_minor(EMP_VERSION_MINOR);
+}
+
 int desc_run_selftests(desc_report_fn report)
 {
     failures  = 0;
@@ -1947,6 +2091,10 @@ int desc_run_selftests(desc_report_fn report)
     test_opens_press_activates();
     test_opens_while_drilled();
     test_reveal_detail_page();
+
+    test_transport_decodes();
+    test_transport_buttons();
+    test_transport_refused();
     sim_wire_set_peer_minor(EMP_VERSION_MINOR);
 
     report_fn = 0;

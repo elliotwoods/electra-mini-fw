@@ -47,7 +47,17 @@ ICON_CODEPOINTS = [
     0x2699,   # GEAR                              -> ICON_SETTINGS
     0x21A7,   # DOWNWARDS ARROW FROM BAR          -> ICON_STORE (the inspector's save-as-default)
     0x2194,   # LEFT RIGHT ARROW                  -> ICON_ZOOM (hold, then turn a dial)
+    # Media transport (EMP/1.10 buttons). DejaVu has no U+23ED..23EF, so each is composed from
+    # glyphs it does have: the triangles above and HEAVY VERTICAL BAR (U+275A), with the bars cut
+    # to the triangle's height. A tuple is one glyph; see compose_icon().
+    (0x275A, 0x25C0),          # bar, left triangle          -> ICON_TRACK_PREV
+    (0x25B6, 0x275A, 0x275A),  # right triangle, two bars    -> ICON_PLAY_PAUSE
+    (0x25B6, 0x275A),          # right triangle, bar         -> ICON_TRACK_NEXT
 ]
+
+# Ink between the parts of a composed icon, in pixels at the icon face's size.
+ICON_GAP = 3
+TRIANGLES = (0x25B6, 0x25C0)
 
 FACES = [
     # name       file                 size  codepoints        description
@@ -58,6 +68,32 @@ FACES = [
     ("display", "JetBrainsMono-Regular.woff2", 112,  (0x20, 0x39),     "the focused readout: digits only"),
     ("icons",   "DejaVuSans.ttf",      34,  ICON_CODEPOINTS,  "remapped to bytes; see icons.h"),
 ]
+
+
+def compose_icon(font, px, line_height, parts):
+    """One glyph from several, side by side ICON_GAP apart, on the same canvas and pen position a
+    single glyph gets. Every part is cut to the rows the triangle inks, so a bar is exactly as
+    tall as the triangle beside it (U+275A alone stands taller). Returns the canvas and an advance
+    that keeps the triangle's own side bearings."""
+    pad = px
+
+    def ink(code):
+        img = Image.new("L", (px * 3 + pad, line_height + pad * 2), 0)
+        ImageDraw.Draw(img).text((pad, pad), chr(code), font=font, fill=255)
+        return img, img.getbbox()
+
+    rendered = [ink(code) for code in parts]
+    triangle = next(box for code, (_, box) in zip(parts, rendered) if code in TRIANGLES)
+    top, bottom = triangle[1], triangle[3]
+    width = sum(box[2] - box[0] for _, box in rendered) + ICON_GAP * (len(parts) - 1)
+    out = Image.new("L", (width + pad * 2, line_height + pad * 2), 0)
+    x = pad
+    for img, box in rendered:
+        out.paste(img.crop((box[0], top, box[2], bottom)), (x, top))
+        x += box[2] - box[0] + ICON_GAP
+    tri = next(code for code in parts if code in TRIANGLES)
+    bearings = int(round(font.getlength(chr(tri)))) - (triangle[2] - triangle[0])
+    return out, width + bearings
 
 
 def render_face(name, filename, px, codes, note):
@@ -80,18 +116,20 @@ def render_face(name, filename, px, codes, note):
         sources = list(codes)
 
     for slot, code in enumerate(sources):
-        ch = chr(code)
-
         # Render on a generous canvas, then measure the ink. Storing the ink box plus its
         # offset rather than a fixed cell keeps the atlas small and lets the blitter skip
         # blank rows entirely.
         pad = px
-        img = Image.new("L", (px * 3 + pad, line_height + pad * 2), 0)
-        draw = ImageDraw.Draw(img)
-        draw.text((pad, pad), ch, font=font, fill=255)
+        if isinstance(code, tuple):
+            img, advance = compose_icon(font, px, line_height, code)
+        else:
+            ch = chr(code)
+            img = Image.new("L", (px * 3 + pad, line_height + pad * 2), 0)
+            draw = ImageDraw.Draw(img)
+            draw.text((pad, pad), ch, font=font, fill=255)
+            advance = int(round(font.getlength(ch)))
 
         bbox = img.getbbox()
-        advance = int(round(font.getlength(ch)))
 
         byte_code = first + slot
 

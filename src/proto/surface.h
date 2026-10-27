@@ -85,6 +85,11 @@ int surf_field_disabled(const surf_field_t *f);
 int surf_field_joined(const surf_field_t *f);
 /* EMP/1.8: which of IDs 0..3 are PINNED (bit n for ID n), shown at knob n on every page. */
 uint8_t surf_pinned_mask(void);
+/* EMP/1.10: the Action bound to transport button `which` (0 previous, 1 play/pause, 2 next), or
+ * NULL. Such a field is in no slot: surf_field() never returns it. */
+const surf_field_t *surf_transport(unsigned which);
+/* Its press: the ordinary ACTIVATE for its ID, unless it is DISABLED or absent. */
+void surf_activate_transport(unsigned which);
 
 /* Handle one surface-channel message. Returns nothing: per the design rule, protocol problems
  * become DIAG and DESC_REQUEST on the wire, never an error returned to a caller. */

@@ -435,9 +435,14 @@ static void draw_legend(int full)
             else if (b == UI_BTN_SYSTEM) label = "DONE";
         }
         if (ui_state()->mode == UI_MODE_SURFACE && ui_state()->focused < 0) {
+            /* EMP/1.10: buttons 2-4 are live on the overview only when bound to transport. */
+            static const char *const transport[3] = {
+                ICON_TRACK_PREV, ICON_PLAY_PAUSE, ICON_TRACK_NEXT
+            };
             if (b == UI_BTN_BACK) icon = ICON_PREV;
             else if (b == UI_BTN_SYSTEM) icon = ICON_SETTINGS;
             else if (b == UI_BTN_PAGE_NEXT) icon = ICON_NEXT;
+            else icon = transport[b - UI_BTN_UNDO];
         }
         const font_t *face = label ? &font_small : &font_icons;
         text_draw_centred(face, (int16_t)(x + w / 2),

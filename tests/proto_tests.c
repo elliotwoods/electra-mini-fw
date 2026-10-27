@@ -55,14 +55,16 @@ static int test_constants(void)
     CHECK(EMP_MTU_HID == 56u);
     CHECK(EMP_MTU_BULK == 1016u);
     CHECK(EMP_VERSION_MAJOR == 1u);
-    CHECK(EMP_VERSION_MINOR == 9u);
+    CHECK(EMP_VERSION_MINOR == 10u);
     CHECK(EMP_OP_DEFAULTS == 0x2Au && EMP_OP_SAVE_DEFAULT == 0x5Au);
     /* EMP/1.6, pinned against docs/protocol.md. */
     CHECK(EMP_OP_TONED_VALUES == 0x2Bu && EMP_PRESENT_STYLE == 0x0100u);
     CHECK(EMP_STYLE_NORMAL == 0u && EMP_STYLE_ESTOP == 1u);
     /* EMP/1.7. */
     CHECK(EMP_STYLE_HOLD == 2u && EMP_HOLD_MS == 1500u);
-    CHECK(EMP_STYLE_LIST == 3u && EMP_STYLE_MAX == 3u);
+    CHECK(EMP_STYLE_LIST == 3u);
+    CHECK(EMP_STYLE_TRACK_PREV == 4u && EMP_STYLE_PLAY_PAUSE == 5u && EMP_STYLE_TRACK_NEXT == 6u
+          && EMP_STYLE_MAX == 6u);
     CHECK(EMP_FIELD_JOINED == 0x04u && EMP_FIELD_DISABLED == 0x08u && SURF_TEXT_MAX == 256u);
     /* EMP/1.9. */
     CHECK(EMP_FIELD_PINNED == 0x10u && EMP_FIELD_OPENS == 0x20u);

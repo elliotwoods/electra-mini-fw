@@ -452,6 +452,14 @@ static void apply_value(uint16_t idx, const hist_value_t *v, uint8_t cause)
     }
 }
 
+/* EMP/1.10: on the overview, buttons 2-4 (Undo, Redo, Store while drilled) are the transport
+ * Actions the descriptor bound to them, if any; a DISABLED one is absent, as any inert button is. */
+static int transport_live(unsigned button)
+{
+    const surf_field_t *t = surf_transport(button - UI_BTN_UNDO);
+    return t && !surf_field_disabled(t);
+}
+
 int ui_state_button_enabled(unsigned button)
 {
     if (st.mode == UI_MODE_REBOOT_WAIT) return button == UI_BTN_SYSTEM;
@@ -472,10 +480,15 @@ int ui_state_button_enabled(unsigned button)
     case UI_BTN_BACK:                        /* drilled: Exit; overview: previous page */
         if (f >= 0) return 1;
         return st.page > 0;
-    case UI_BTN_UNDO: return f >= 0 && hist_can_undo((uint16_t)f);
-    case UI_BTN_REDO: return f >= 0 && hist_can_redo((uint16_t)f);
-    case UI_BTN_AUX:                         /* drilled: Store */
-        return f >= 0 && surf_field_modified(fd) && surf_can_save_default();
+    case UI_BTN_UNDO:                        /* overview: previous track (EMP/1.10) */
+        if (f < 0) return transport_live(button);
+        return hist_can_undo((uint16_t)f);
+    case UI_BTN_REDO:                        /* overview: play/pause */
+        if (f < 0) return transport_live(button);
+        return hist_can_redo((uint16_t)f);
+    case UI_BTN_AUX:                         /* drilled: Store; overview: next track */
+        if (f < 0) return transport_live(button);
+        return surf_field_modified(fd) && surf_can_save_default();
     case UI_BTN_SYSTEM:                      /* drilled: Reset; overview: settings */
         if (f < 0) return 1;
         return surf_field_modified(fd);
@@ -548,6 +561,11 @@ void ui_state_button(unsigned button, int pressed, uint32_t now_ms)
                 st.mode = UI_MODE_CAL_SELECT;
             }
         }
+        return;
+    }
+
+    if (st.focused < 0 && button >= UI_BTN_UNDO && button <= UI_BTN_AUX) {
+        surf_activate_transport(button - UI_BTN_UNDO);   /* EMP/1.10, on the press edge */
         return;
     }
 
