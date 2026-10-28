@@ -315,6 +315,34 @@ static void panel_tests(void)
 }
 /* EMP/1.8 PINNED: on an application's page the fleet's slots never repaint on a page change
  * (so the stop is never blanked, even within the frame), and each page matches a clean repaint. */
+/* Armed, at a glance: the state button's Disarm form (the router sends it only while armed) carries
+ * a hazard band in the HOLD meter's slot; the Arm form has none, and each matches a clean repaint. */
+static void hazard_tests(void)
+{
+    const int16_t cw=(LCD_WIDTH-24-18)/4, ch=184, y0=6, x1=(int16_t)(12+cw+6);
+    const int16_t fy=(int16_t)(y0+ch-12-16), fh=16;
+    fixture_state_button arm={"ARM",EMP_STYLE_HOLD,EMP_TONE_OK,1,"DISARMED\narm checks met"};
+    fixture_state_button disarm={"DISARM",EMP_STYLE_NORMAL,EMP_TONE_ALERT,1,"ARMED\npress to disarm"};
+    clean();fixture_top_page(&arm,60,"Nodes\t2/2");ui_state_tick(100);ui_render();
+    CHECK(count_colour(0,0,LCD_WIDTH,LCD_HEIGHT,C_HAZARD)==0);
+    fixture_top_page(&disarm,60,"Nodes\t2/2");ui_state_tick(200);ui_render();
+    unsigned amber=count_colour(x1,fy,cw,fh,C_HAZARD), dark=count_colour(x1,fy,cw,fh,C_TRACK);
+    CHECK(amber>1000&&dark>1000);                                   /* about half each */
+    CHECK(count_colour(0,0,LCD_WIDTH,LCD_HEIGHT,C_HAZARD)==amber);  /* nowhere else */
+    /* Diagonal: a stripe's left edge moves a row's step left per step down. */
+    int16_t first[2]={-1,-1};
+    for(int r=0;r<2;r++)for(int16_t i=(int16_t)(x1+13);i<x1+cw&&first[r]<0;i++)
+        if(sim_framebuffer()[(fy+4*r)*LCD_WIDTH+i]==C_HAZARD&&sim_framebuffer()[(fy+4*r)*LCD_WIDTH+i-1]!=C_HAZARD) first[r]=i;
+    CHECK(first[0]>=0&&first[1]>=0&&first[0]!=first[1]);
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    /* Disarmed again: the band goes with the form. */
+    fixture_top_page(&arm,60,"Nodes\t2/2");ui_state_tick(300);ui_render();
+    CHECK(count_colour(0,0,LCD_WIDTH,LCD_HEIGHT,C_HAZARD)==0);
+    memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
+    CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    puts("  armed: the Disarm form carries a diagonal hazard band, gone again once disarmed");
+}
 static void pinned_tests(void)
 {
     const int16_t cw=(LCD_WIDTH-24-18)/4, panel_w=(int16_t)(2*cw+6);
@@ -412,6 +440,6 @@ static void transport_tests(void)
 }
 int main(void)
 {
-    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();status_tests();hold_tests();readout_tests();panel_tests();pinned_tests();opens_tests();transport_tests();
+    primitive_tests();switch_tests();background_tests();incremental_tests();operator_tests();highlight_tests();eviction_tests();layout_tests();status_tests();hold_tests();readout_tests();panel_tests();pinned_tests();hazard_tests();opens_tests();transport_tests();
     printf("%u graphics checks passed\n",checks);return 0;
 }

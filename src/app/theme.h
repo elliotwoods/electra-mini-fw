@@ -25,4 +25,5 @@
 #define C_INDICATOR    0x9D15u /* --text-muted #9aa0a8 */
 #define C_OK           0x3693u /* --ok #34d399 */
 #define C_WARN         0xFDE4u /* --warn-soft-text #fbbf24 */
+#define C_HAZARD       0xF4E1u /* --warn #f59e0b */
 #endif

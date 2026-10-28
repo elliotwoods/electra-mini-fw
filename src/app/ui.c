@@ -933,6 +933,37 @@ static void draw_modified_badge(int16_t x, int16_t y)
                     ICON_RESET, C_ACCENT, C_CELL);
 }
 
+/* The router's top-row state button in its Disarm form, which it sends only while the fleet is
+ * armed: a pinned plain Action whose Text status is in ALERT tone ("ARMED", "REFUSED"). */
+static int armed_state_button(const surf_field_t *f)
+{
+    return f->kind == EMP_KIND_ACTION && f->style == EMP_STYLE_NORMAL
+        && (f->flags & EMP_FIELD_PINNED) && f->value_tag == EMP_VAL_TEXT
+        && f->tone == EMP_TONE_ALERT;
+}
+
+/* Armed, at a glance: a hazard band, diagonal amber on near-black, in the slot where the Arm
+ * form's HOLD meter sits, so the cell keeps its layout (the operator pages draw the same band;
+ * Elliot, 24 Oct 2026). 2 px rows of 8 px stripes on a 16 px period: about 90 fills, on repaint
+ * only. The value region's clear (draw_cell_dynamic) takes it away again. */
+static void draw_hazard_band(int16_t x, int16_t y)
+{
+    const int16_t bh = 16, period = 16, stripe = 8, step = 2;
+    const gfx_rect_t band = {(int16_t)(x + 2 * SP), (int16_t)(y + ROW_H - 2 * SP - bh),
+                             (int16_t)(CELL_W - 4 * SP), bh};
+    gfx_set_fg(C_TRACK);
+    gfx_fill_rect(band.x, band.y, band.w, band.h);
+    gfx_clip(band);
+    gfx_set_fg(C_HAZARD);
+    for (int16_t r = 0; r < bh; r = (int16_t)(r + step)) {
+        /* Rising to the right: each row down starts its stripes `step` px further left. */
+        for (int16_t sx = (int16_t)(band.x - period + (bh - r) % period); sx < band.x + band.w;
+             sx = (int16_t)(sx + period))
+            gfx_fill_rect(sx, (int16_t)(band.y + r), stripe, step);
+    }
+    gfx_unclip();
+}
+
 /* Clear and repaint only the value region. Keeping the label and cell background untouched is
  * what prevents title strobing while a rotary is producing a fast stream of value updates. */
 static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
@@ -1014,6 +1045,7 @@ static void draw_cell_dynamic(unsigned knob, const surf_field_t *f)
         text_draw(&font_small, (int16_t)(x + 2 * SP), (int16_t)(vy + text_height(vf)), buf,
                   ui_value_color(f, 0), bg);
     }
+    if (armed_state_button(f)) draw_hazard_band(x, y);
 
     if (f->present & EMP_PRESENT_UNIT) {
         str_of(buf, sizeof(buf), f->unit_off, f->unit_len);

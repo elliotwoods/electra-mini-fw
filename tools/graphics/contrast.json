@@ -23,7 +23,8 @@
     "STOP": 24869,
     "INDICATOR": 40213,
     "OK": 13971,
-    "WARN": 64996
+    "WARN": 64996,
+    "HAZARD": 62689
   },
   "checks": [
     {
@@ -265,6 +266,12 @@
       "bg": "CELL_DOWN",
       "minimum": 4.5,
       "ratio": 5.224
+    },
+    {
+      "fg": "HAZARD",
+      "bg": "TRACK",
+      "minimum": 3,
+      "ratio": 9.627
     },
     {
       "fg": "BG",
