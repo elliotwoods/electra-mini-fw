@@ -1676,6 +1676,8 @@ static void test_pinned_slots(void)
     /* Page 0: reading order although only four slots are occupied (no bottom-row packing). */
     ok = ok && ui_state_field_for(0) == 0 && ui_state_field_for(1) == 1 && ui_state_field_for(2) == 2
             && ui_state_field_for(3) == 3 && ui_state_field_for(4) < 0;
+    ok = ok && ui_state_knob_pinned(0) && ui_state_knob_pinned(1) && !ui_state_knob_pinned(2)
+            && !ui_state_knob_pinned(3) && !ui_state_knob_pinned(4);
     check("pinned slots keep reading order and refuse a pin outside the top row", ok);
 
     /* Page 1: the pinned fields stay on knobs 0 and 1; ID 8 under them is never shown. */

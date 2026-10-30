@@ -355,7 +355,18 @@ static void pinned_tests(void)
     CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))!=0);    /* the rest did change */
     memcpy(reference,sim_framebuffer(),sizeof(reference));ui_reset();ui_render();
     CHECK(memcmp(reference,sim_framebuffer(),sizeof(reference))==0);
+    /* The page map: the two pinned squares (10 px each) only in the current page's group, in their
+     * own ink, so they travel with it; the other page's group leaves their places empty. Both
+     * groups are 52 px wide, 10 apart, centred: page 0's starts at x 343, page 1's at 405. */
+    const int16_t sy=196, sh=32, g0=343, g1=405, gw=52;
+    clean();fixture_reserved_app_page("DISARMED\nlasers dark",EMP_TONE_OK,0);ui_state_tick(100);ui_render();
+    CHECK(count_colour(g0,sy,gw,sh,C_INDICATOR)==200&&count_colour(g1,sy,gw,sh,C_INDICATOR)==0);
+    CHECK(count_colour(g0,sy,gw,sh,C_NAV)==600&&count_colour(g1,sy,gw,sh,C_OUTLINE)==600);
+    ui_state_button(UI_BTN_PAGE_NEXT,1,100);ui_state_button(UI_BTN_PAGE_NEXT,0,110);ui_render();
+    CHECK(count_colour(g0,sy,gw,sh,C_INDICATOR)==0&&count_colour(g1,sy,gw,sh,C_INDICATOR)==200);
+    CHECK(count_colour(g0,sy,gw,sh,C_OUTLINE)==600&&count_colour(g1,sy,gw,sh,C_NAV)==600);
     puts("  pinned fleet slots stay put across a page change; each page matches a clean repaint");
+    puts("  page map: pinned squares travel with the current page in their own ink");
 }
 /* EMP/1.9 OPENS: the System list carries a ">" at the right of its label row, in the navigation
  * ink, with its "n/N" moved to the chevron's left; a plain list has neither. The detail page the

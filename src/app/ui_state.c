@@ -203,6 +203,12 @@ const ui_state_t *ui_state(void) { return &st; }
 unsigned ui_digit_row_first(void) { return st.digit_top ? 0u : UI_ROW_SPLIT; }
 unsigned ui_cell_row_first(void)  { return st.digit_top ? UI_ROW_SPLIT : 0u; }
 
+int ui_state_knob_pinned(unsigned knob)
+{
+    uint8_t pinned = surf_operator_layout() ? 0u : surf_pinned_mask();
+    return knob < 4u && (pinned & (1u << knob)) != 0;
+}
+
 int32_t ui_state_field_for_page(uint16_t first, unsigned knob)
 {
     if (knob >= UI_FIELDS_PER_PAGE || first >= SURF_MAX_FIELDS) return -1;
@@ -213,7 +219,7 @@ int32_t ui_state_field_for_page(uint16_t first, unsigned knob)
      * order everywhere: the reserved knobs must not move, and nothing may slide under them. */
     uint8_t pinned = surf_operator_layout() ? 0u : surf_pinned_mask();
     if (pinned) {
-        if (knob < 4u && (pinned & (1u << knob))) return (int32_t)knob;
+        if (ui_state_knob_pinned(knob)) return (int32_t)knob;
         uint16_t slot = (uint16_t)(first + knob);
         return surf_field(slot) ? (int32_t)slot : -1;
     }

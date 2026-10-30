@@ -197,6 +197,8 @@ unsigned ui_state_list_top(int32_t slot);
 int32_t ui_state_field_for(unsigned knob);
 int32_t ui_state_field_for_page(uint16_t first, unsigned knob);
 int32_t ui_state_knob_for(uint16_t slot);
+/* EMP/1.8: whether `knob` shows a PINNED field, the same one on every page. */
+int ui_state_knob_pinned(unsigned knob);
 
 /* EMP/1.6 presentation, decided here rather than in ui.c so the choice is testable without a
  * framebuffer. RGB565 theme colours. */

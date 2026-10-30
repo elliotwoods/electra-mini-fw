@@ -345,7 +345,9 @@ static void draw_page_strip(int16_t y)
     uint16_t page  = ui_state()->page;
     if (!total) return;
 
-    /* One fixed square per occupied slot, arranged in the same two rows of four as the panel. */
+    /* One fixed square per occupied slot, arranged in the same two rows of four as the panel.
+     * EMP/1.8 pinned knobs show the same field on every page, so their squares travel with the
+     * current page in a quieter ink of their own; the other pages leave those places empty. */
     uint16_t pages = (uint16_t)((total + UI_FIELDS_PER_PAGE - 1u) / UI_FIELDS_PER_PAGE);
     if (pages > 1u) {
         const int16_t block = 10;
@@ -360,10 +362,13 @@ static void draw_page_strip(int16_t y)
             uint16_t pg = (uint16_t)(i / UI_FIELDS_PER_PAGE);
             uint16_t lane = (uint16_t)(i % UI_FIELDS_PER_PAGE);
             if (ui_state_field_for_page((uint16_t)(pg * UI_FIELDS_PER_PAGE), lane) < 0) continue;
+            int current = pg == page / UI_FIELDS_PER_PAGE;
+            int pinned = ui_state_knob_pinned(lane);
+            if (pinned && !current) continue;
             int16_t col = (int16_t)(lane % UI_ROW_SPLIT);
             int16_t row = lane < UI_ROW_SPLIT ? 0 : 1;
             int16_t x = (int16_t)(x0 + pg * (group_w + page_gap) + col * (block + gap));
-            gfx_set_fg(pg == page / UI_FIELDS_PER_PAGE ? C_NAV : C_OUTLINE);
+            gfx_set_fg(!current ? C_OUTLINE : pinned ? C_INDICATOR : C_NAV);
             gfx_fill_rect(x, (int16_t)(y0 + row * (block + gap)), block, block);
         }
     }
@@ -1586,8 +1591,12 @@ static void render_system_view(int full)
         for (unsigned i = 0; part[i]; i++) version[k++] = part[i];
         version[k++] = ' '; version[k++] = '/'; version[k++] = ' ';
         version[k++] = 'E'; version[k++] = 'M'; version[k++] = 'P'; version[k++] = ' ';
-        version[k++] = (char)('0' + EMP_VERSION_MAJOR); version[k++] = '.';
-        version[k++] = (char)('0' + EMP_VERSION_MINOR); version[k] = 0;
+        (void)text_format(part, sizeof(part), (double)EMP_VERSION_MAJOR, 0);
+        for (unsigned i = 0; part[i]; i++) version[k++] = part[i];
+        version[k++] = '.';
+        (void)text_format(part, sizeof(part), (double)EMP_VERSION_MINOR, 0);
+        for (unsigned i = 0; part[i]; i++) version[k++] = part[i];
+        version[k] = 0;
 
         text_draw_right(&font_small, 776, 27, emp_device_model(), C_TITLE, C_BG);
         system_fact(24, 84, "FIRMWARE", version, &font_ui);
